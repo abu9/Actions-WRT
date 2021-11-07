@@ -1,0 +1,108 @@
+diff --git a/target/linux/ramips/dts/mt7621_xiaomi_router-ac2100.dtsi b/target/linux/ramips/dts/mt7621_xiaomi_router-ac2100.dtsi
+index 7e6b3afcdf..16e8e9a800 100644
+--- a/target/linux/ramips/dts/mt7621_xiaomi_router-ac2100.dtsi
++++ b/target/linux/ramips/dts/mt7621_xiaomi_router-ac2100.dtsi
+@@ -1,6 +1,15 @@
+ // SPDX-License-Identifier: GPL-2.0-or-later OR MIT
+
+ #include "mt7621_xiaomi_nand_128m.dtsi"
++crypto: crypto@1e004000 {
++       status = "okay";
++
++       compatible = "mediatek,mtk-eip93";
++       reg = <0x1e004000 0x1000>;
++
++       interrupt-parent = <&gic>;
++       interrupts = <GIC_SHARED 19 IRQ_TYPE_LEVEL_HIGH>;
++};
+
+ &pcie {
+        status = "okay";
+@@ -32,23 +41,23 @@
+        ports {
+                port@0 {
+                        status = "okay";
+-                       label = "wan";
+-                       mtd-mac-address = <&factory 0xe006>;
++                       label = "lan1";
+                };
+                
+                port@2 {
+                        status = "okay";
+-                       label = "lan1";
++                       label = "lan2";
+                };
+
+                port@3 {
+                        status = "okay";
+-                       label = "lan2";
++                       label = "lan3";
+                };
+
+                port@4 {
+                        status = "okay";
+-                       label = "lan3";
++                       label = "wan";
++                       mtd-mac-address = <&factory 0xe006>;
+                };
+        };
+ };
+ diff --git a/target/linux/ramips/mt7621/config-5.4 b/target/linux/ramips/mt7621/config-5.4
+index 057c782760..87e2ede134 100644
+--- a/target/linux/ramips/mt7621/config-5.4
++++ b/target/linux/ramips/mt7621/config-5.4
+@@ -40,30 +40,41 @@ CONFIG_CRC16=y
+ CONFIG_CRYPTO_ACOMP2=y
+ CONFIG_CRYPTO_AEAD=y
+ CONFIG_CRYPTO_AEAD2=y
++CONFIG_CRYPTO_AUTHENC=y
+ CONFIG_CRYPTO_DEFLATE=y
++CONFIG_CRYPTO_DEV_EIP93=y
++CONFIG_CRYPTO_DEV_EIP93_AEAD=y
++CONFIG_CRYPTO_DEV_EIP93_AES=y
++CONFIG_CRYPTO_DEV_EIP93_DES=y
++CONFIG_CRYPTO_DEV_EIP93_HMAC=y
++CONFIG_CRYPTO_DEV_EIP93_SKCIPHER=y
++CONFIG_CRYPTO_HASH=y
+ CONFIG_CRYPTO_HASH2=y
+ CONFIG_CRYPTO_HASH_INFO=y
++CONFIG_CRYPTO_HW=y
++CONFIG_CRYPTO_LIB_DES=y
++CONFIG_CRYPTO_LIB_POLY1305_RSIZE=2
++CONFIG_CRYPTO_LIB_SHA256=y
+ CONFIG_CRYPTO_LZO=y
+ CONFIG_CRYPTO_MANAGER=y
+ CONFIG_CRYPTO_MANAGER2=y
+ +CONFIG_CRYPTO_MD5=y
++CONFIG_CRYPTO_NULL=y
+ CONFIG_CRYPTO_NULL2=y
+ CONFIG_CRYPTO_RNG2=y
++CONFIG_CRYPTO_SHA1=y
++CONFIG_CRYPTO_SHA256=y
+ CONFIG_CSRC_R4K=y
+ CONFIG_DEBUG_PINCTRL=y
+ CONFIG_DIMLIB=y
+ CONFIG_DMA_NONCOHERENT=y
+ CONFIG_DMA_NONCOHERENT_CACHE_SYNC=y
+-# CONFIG_DMA_RALINK is not set
+ # CONFIG_DTB_GNUBEE1 is not set
+ # CONFIG_DTB_GNUBEE2 is not set
+ CONFIG_DTB_RT_NONE=y
+ CONFIG_DTC=y
+ CONFIG_EARLY_PRINTK=y
+-CONFIG_EFI_EARLYCON=y
+ CONFIG_FIXED_PHY=y
+-CONFIG_FONT_8x16=y
+-CONFIG_FONT_AUTOSELECT=y
+-CONFIG_FONT_SUPPORT=y
+ CONFIG_FW_LOADER_PAGED_BUF=y
+ CONFIG_GENERIC_ATOMIC64=y
+ CONFIG_GENERIC_CLOCKEVENTS=y
+@@ -230,7 +241,6 @@ CONFIG_RFS_ACCEL=y
+ CONFIG_RPS=y
+ CONFIG_RTC_CLASS=y
+ CONFIG_RTC_DRV_BQ32K=y
+-# CONFIG_RTC_DRV_JZ4740 is not set
+ CONFIG_RTC_DRV_PCF8563=y
+ CONFIG_RTC_I2C_AND_SPI=y
+ CONFIG_RTC_MC146818_LIB=y
