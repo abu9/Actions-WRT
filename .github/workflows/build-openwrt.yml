@@ -70,8 +70,7 @@ jobs:
       with:
         ccache: 'true'
         prefix: ${{ github.workspace }}/openwrt
-        if: (github.event.inputs.clean_cache == 'true' && github.event.inputs.clean_cache  != 'false') || contains(github.event.action, 'clean_cache')
-        clean: 'true'
+        clean: github.event.inputs.clean_cache
         
     - name: Load custom feeds
       run: |
