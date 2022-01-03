@@ -18,6 +18,10 @@ on:
         description: 'SSH connection to Actions'
         required: false
         default: 'false'
+      cache:
+        description: 'Use Cache files'
+        required: false
+        default: 'true'
 
 env:
   REPO_URL: https://git.openwrt.org/openwrt/openwrt.git
@@ -63,6 +67,7 @@ jobs:
         
     - name: Cache
       uses: abu9/cachewrtbuild@main
+      if: (github.event.inputs.cache == 'true' && github.event.inputs.cache  != 'false') || contains(github.event.action, 'cache')
       with:
         ccache: 'true'
         prefix: ${{ github.workspace }}/openwrt
