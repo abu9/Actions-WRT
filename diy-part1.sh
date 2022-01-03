@@ -16,3 +16,8 @@
 # Add a feed source
 #echo 'src-git helloworld https://github.com/fw876/helloworld' >>feeds.conf.default
 #echo 'src-git passwall https://github.com/xiaorouji/openwrt-passwall' >>feeds.conf.default
+echo 'src-git kenzojell https://github.com/kenzok8/jell' >>feeds.conf.default
+./scripts/feeds update kenzojell
+./scripts/feeds uninstall zerotier
+./scripts/feeds install -p zerotier -f zerotier
+./scripts/feeds install luci-app-vlmcsd luci-app-zerotier kmod-crypto-hw-eip93
