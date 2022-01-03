@@ -17,7 +17,6 @@
 #echo 'src-git helloworld https://github.com/fw876/helloworld' >>feeds.conf.default
 #echo 'src-git passwall https://github.com/xiaorouji/openwrt-passwall' >>feeds.conf.default
 echo 'src-git kenzojell https://github.com/kenzok8/jell' >>feeds.conf.default
-./scripts/feeds update kenzojell
-./scripts/feeds uninstall zerotier
-./scripts/feeds install -p zerotier -f zerotier
-./scripts/feeds install luci-app-vlmcsd luci-app-zerotier kmod-crypto-hw-eip93
+echo 'src-git kenzo https://github.com/kenzok8/openwrt-packages >>feeds.conf.default
+echo 'src-git kenzosmall https://github.com/kenzok8/small >>feeds.conf.default
+echo 'src-git zerotier https://github.com/mwarning/zerotier-openwrt.git >>feeds.conf.default
