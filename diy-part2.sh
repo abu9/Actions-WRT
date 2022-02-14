@@ -16,3 +16,4 @@
 curl -fsSL git.io/file-transfer | sh
 sed -i 's/192.168.1.1/192.168.2.254/g' package/base-files/files/bin/config_generate
 sed -i 's/radio\${devidx}\.disabled=1/radio\${devidx}\.disabled=0/g' package/kernel/mac80211/files/lib/wifi/mac80211.sh
+cp 990-redmirouter-add-eip93.patch target/linux/ramips/patches-5.4/
