@@ -18,6 +18,4 @@
 #echo 'src-git passwall https://github.com/xiaorouji/openwrt-passwall' >>feeds.conf.default
 echo 'src-git zerotier https://github.com/mwarning/zerotier-openwrt.git' >>feeds.conf.default
 echo 'src-git kenzojell https://github.com/kenzok8/jell' >>feeds.conf.default
-echo 'src-git kenzo https://github.com/kenzok8/openwrt-packages' >>feeds.conf.default
-echo 'src-git kenzosmall https://github.com/kenzok8/small' >>feeds.conf.default
 
