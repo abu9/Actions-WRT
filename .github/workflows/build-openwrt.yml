@@ -187,6 +187,8 @@ jobs:
 
     - name: Delete workflow runs
       uses: GitRML/delete-workflow-runs@main
+      permissions:
+        actions: write
       with:
         retain_days: 1
         keep_minimum_runs: 3
