@@ -172,7 +172,7 @@ jobs:
         sed -i 's/ $(tools\/stamp-compile)//;s/ $(tools\/stamp-check)//' Makefile
         
         echo CONFIG_DEVEL=y >> .config
-        echo CONFIG_AUTOREMOVE=y >> .config
+        #echo CONFIG_AUTOREMOVE=y >> .config
         TOOLCHAIN_FILE="external-toolchain/$(ls external-toolchain/ | grep toolchain )"
         tar xf "$TOOLCHAIN_FILE" -C external-toolchain
         rm $TOOLCHAIN_FILE
