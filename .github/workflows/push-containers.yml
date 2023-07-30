@@ -1,0 +1,73 @@
+name: Build and Push prebuilt tools container
+
+on:
+    repository_dispatch:
+    workflow_dispatch:
+      inputs:
+        source_branch:
+          description: "Select the source branch"
+          required: false
+          default: 'hanwckf/immortalwrt-mt798x@openwrt-21.02'
+          type: choice
+          options:
+            - openwrt/openwrt@main
+            - coolsnowwolf/lede@master
+            - immortalwrt/immortalwrt@openwrt-23.05
+            - hanwckf/immortalwrt-mt798x@openwrt-21.02
+        config_name:
+          description: 'Config file name'
+          type: choice
+          options:
+              - '.config7981'
+              - 'mt7981-ax3000.config'
+              - '.config7981.mtwifi-cfg'
+              - '360t7-immortalwrt.conf'
+          default: '.config7981.mtwifi-cfg'
+        build_tools:
+          type: boolean
+          default: true
+        build_toolchain:
+          type: boolean 
+          default: true
+    workflow_call:
+#   push:
+#     paths:
+#       - 'include/version.mk'
+#       - 'include/cmake.mk'
+#       - 'tools/**'
+#       - '.github/workflows/push-containers.yml'
+#       - 'toolchain/**'
+#     branches-ignore:
+#       - master
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}-${{ inputs.source_branch }}
+  cancel-in-progress: true
+
+jobs:
+  determine_targets:
+    name: Get target info
+    uses: ./.github/workflows/determine-targets.yml
+    with:
+      config_name: ${{ inputs.config_name }}
+      source_branch: ${{ inputs.source_branch }}
+
+  build-push-containers:
+    name: Build and Push all prebuilt containers
+    needs: determine_targets
+    permissions:
+      contents: read
+      packages: write
+      actions: write
+    uses: abu9/actions-shared-workflows/.github/workflows/push-containers.yml@main
+    with:
+      target: ${{ needs.determine_targets.outputs.target }}
+      subtarget: ${{ needs.determine_targets.outputs.subtarget }}
+      repo_url: ${{ needs.determine_targets.outputs.repo_url }}
+      repo_branch: ${{ needs.determine_targets.outputs.repo_branch }}
+      author: ${{ needs.determine_targets.outputs.author }}
+      build_tools: ${{ inputs.build_tools }}
+      build_toolchain: ${{ inputs.build_toolchain }}

@@ -1,0 +1,99 @@
+name: Get target info
+on:
+  workflow_call:
+    inputs:
+      source_branch:
+        description: "Select the source branch"
+        required: true
+        type: string
+      config_name:
+        description: 'Config file name'
+        type: string
+    outputs:
+      target: 
+        value: ${{ jobs.determine_targets.outputs.target}}
+      subtarget:
+        value: ${{ jobs.determine_targets.outputs.subtarget }}
+      arch: 
+        value: ${{ jobs.determine_targets.outputs.arch }}
+      device_name: 
+        value: ${{ jobs.determine_targets.outputs.device_name }}
+      file_date: 
+        value: ${{ jobs.determine_targets.outputs.file_date }}
+      repo_url: 
+        value: ${{ jobs.determine_targets.outputs.repo_url }}
+      repo_branch:
+        value: ${{ jobs.determine_targets.outputs.repo_branch }}
+      author: 
+        value: ${{ jobs.determine_targets.outputs.author }}
+jobs:
+  determine_targets:
+    name: Get target info
+    runs-on: ubuntu-latest
+    outputs:
+      target: ${{ steps.get_info.outputs.target }}
+      subtarget: ${{ steps.get_info.outputs.subtarget }}
+      arch: ${{ steps.get_info.outputs.arch }}
+      device_name: ${{ steps.get_info.outputs.device_name }}
+      file_date: ${{ steps.get_info.outputs.file_date }}
+      repo_url: ${{ steps.get_repo_info.outputs.repo_url }}
+      repo_branch: ${{ steps.get_repo_info.outputs.repo_branch }}
+      author: ${{ steps.get_repo_info.outputs.author }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Get repo info
+        id: get_repo_info
+        run: |
+          REPO_URL=$(cut -d "@" -f 1 <<< "${{ inputs.source_branch }}")
+          REPO_BRANCH=$(cut -d "@" -f 2 <<< "${{ inputs.source_branch }}")
+          AUTHOR=$(cut -d "/" -f 1 <<< "$REPO_URL")
+          echo "repo_url=$REPO_URL" >> ${GITHUB_OUTPUT}
+          echo "repo_branch=$REPO_BRANCH" >> ${GITHUB_OUTPUT}
+          echo "author=$AUTHOR" >> ${GITHUB_OUTPUT}
+
+      - name: Checkout openwrt source code
+        if: inputs.config_name != null
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ steps.get_repo_info.outputs.repo_url }}
+          ref: ${{ steps.get_repo_info.outputs.repo_branch }}
+          path: openwrt
+        
+      - name: Get info
+        id: get_info
+        if: inputs.config_name != null
+        run: |
+          [[ -d "files" ]] && mv -f files openwrt/files
+          [[ -e ${{ inputs.config_name }} ]] && cp -f ${{ inputs.config_name }} openwrt/.config
+          cd openwrt
+          make defconfig
+          eval "$(grep \
+                    -e ^CONFIG_TARGET_BOARD= \
+                    -e ^CONFIG_TARGET_SUBTARGET= \
+                    -e ^CONFIG_ARCH= \
+                    .config 2>/dev/null \
+            )"
+          TARGET=${TARGET:-$CONFIG_TARGET_BOARD}
+          SUBTARGET=${SUBTARGET:-$CONFIG_TARGET_SUBTARGET}
+          ARCH=${ARCH:-$CONFIG_ARCH}
+          [[ -n ${TARGET} ]] && echo "target=$TARGET" >> ${GITHUB_OUTPUT}
+          [[ -n ${SUBTARGET} ]] && echo "subtarget=$SUBTARGET" >> ${GITHUB_OUTPUT}
+          [[ -n ${ARCH} ]] && echo "arch=$ARCH" >> ${GITHUB_OUTPUT}
+
+          if [ $(grep -ic '^CONFIG_TARGET_MULTI_PROFILE=y' .config) -eq 1 ]
+          then
+            DEVICE_NAME='MULTI_PROFILE'
+          else
+            DEVICE_NAME=$(grep -e '^CONFIG_TARGET.*DEVICE.*=y' .config | sed -r 's/.*DEVICE_(.*)=y/\1/')
+          fi
+          [[ -n ${DEVICE_NAME} ]] && echo "DEVICE_NAME=$DEVICE_NAME" >> ${GITHUB_OUTPUT}
+          echo "FILE_DATE=_$(date +"%Y%m%d%H%M")" >> ${GITHUB_OUTPUT}
+
+      - name: Show configuration
+        if: inputs.config_name != null
+        working-directory: openwrt
+        run: cat .config
+    
