@@ -127,16 +127,16 @@ jobs:
 
       - name: Build tools 
         working-directory: openwrt
-        run: make tools/install -j$(nproc) BUILD_LOG=1 || ret=$? .github/workflows/scripts/show_build_failures.sh
+        run: make tools/install -j$(nproc) BUILD_LOG=1 || ret=$? ${GITHUB_WORKSPACE}/.github/workflows/scripts/show_build_failures.sh
 
       - name: Build toolchain
         working-directory: openwrt
-        run: make toolchain/install -j$(nproc) BUILD_LOG=1 || ret=$? .github/workflows/scripts/show_build_failures.sh
+        run: make toolchain/install -j$(nproc) BUILD_LOG=1 || ret=$? ${GITHUB_WORKSPACE}/.github/workflows/scripts/show_build_failures.sh
 
       - name: Build external toolchain
         working-directory: openwrt
         run: |
-          make target/toolchain/compile -j$(nproc) BUILD_LOG=1 || ret=$? .github/workflows/scripts/show_build_failures.sh
+          make target/toolchain/compile -j$(nproc) BUILD_LOG=1 || ret=$? ${GITHUB_WORKSPACE}/.github/workflows/scripts/show_build_failures.sh
           TOOLCHAIN_NAME=$(ls bin/targets/${{ env.TARGET }}/${{ env.SUBTARGET }} | grep toolchain)
           echo "toolchain-name=$TOOLCHAIN_NAME" >> $GITHUB_ENV
           mkdir -p external-toolchain && cp -f bin/targets/${{ env.TARGET }}/${{ env.SUBTARGET }}/$TOOLCHAIN_NAME external-toolchain/$TOOLCHAIN_NAME
