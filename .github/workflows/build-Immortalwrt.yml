@@ -113,33 +113,29 @@ jobs:
         sudo -E apt-get -qq clean
         sudo timedatectl set-timezone "${TZ}"
 
-    - name: Load custom feeds
+    - name: Prepare custom scripts
       run: |
+        [[ -d "files" ]] && mv -f files openwrt/files        
         [[ -e "${FEEDS_CONF}" ]] && cp -f ${FEEDS_CONF} openwrt/feeds.conf.default
-        chmod +x ${DIY_P1_SH}
-        cd openwrt
-        ${GITHUB_WORKSPACE}/${DIY_P1_SH}
+        chmod +x ${GITHUB_WORKSPACE}/${DIY_P1_SH} ${GITHUB_WORKSPACE}/${DIY_P2_SH}
 
-    - name: Update feeds
+    - name: Load pre-custom script
+      working-directory: openwrt
+      run: ${GITHUB_WORKSPACE}/${DIY_P1_SH}
+
+    - name: Update and install feeds
       if: inputs.debug == false
       working-directory: openwrt
-      run: ./scripts/feeds update -a
-
-    - name: Install feeds
-      if: inputs.debug == false
-      working-directory: openwrt
-      run: ./scripts/feeds install -a
-
-    - name: Load custom configuration
       run: |
-          chmod +x ${DIY_P2_SH}
-          cd openwrt
-          ${GITHUB_WORKSPACE}/${DIY_P2_SH}
+        ./scripts/feeds update -a
+        ./scripts/feeds install -a
+
+    - name: Load post-custom script
+      working-directory: openwrt
+      run: ${GITHUB_WORKSPACE}/${DIY_P2_SH}
 
     - name: Setup configuration
-      run: |
-        [[ -d "files" ]] && mv -f files openwrt/files
-        [[ -e ${CONFIG_FILE} ]] && cp -f ${CONFIG_FILE} openwrt/.config
+      run: cp -f ${{ env.CONFIG_FILE }} openwrt/.config
 
     - name: Restore ccache cache
       id: restore-ccache-cache
