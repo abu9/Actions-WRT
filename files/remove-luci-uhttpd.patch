@@ -1,0 +1,21 @@
+--- include/target.mk	2023-07-29 22:06:07.214235735 +0800
++++ target.mk	2023-07-29 22:03:33.474224507 +0800
+@@ -52,17 +52,9 @@
+ # For easy usage
+ DEFAULT_PACKAGES.tweak:=\
+ 	block-mount \
+-	default-settings-chn \
+ 	kmod-ipt-raw \
+ 	kmod-nf-nathelper \
+-	kmod-nf-nathelper-extra \
+-	luci \
+-	luci-app-filetransfer \
+-	luci-compat \
+-	luci-lib-base \
+-	luci-lib-fs \
+-	luci-lib-ipkg
+-
++	kmod-nf-nathelper-extra
+ ifneq ($(DUMP),)
+   all: dumpinfo
+ endif
