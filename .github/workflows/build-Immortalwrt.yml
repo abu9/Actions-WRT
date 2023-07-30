@@ -255,5 +255,3 @@ jobs:
 
     - name: Delete workflow runs
       uses: Mattraks/delete-workflow-runs@main
-      with:
-        keep_minimum_runs: 3
