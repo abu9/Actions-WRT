@@ -117,7 +117,7 @@ jobs:
       run: |
         [[ -d "files" ]] && mv -f files openwrt/files        
         [[ -e "${FEEDS_CONF}" ]] && cp -f ${FEEDS_CONF} openwrt/feeds.conf.default
-        chmod +x ${GITHUB_WORKSPACE}/${DIY_P1_SH} ${GITHUB_WORKSPACE}/${DIY_P2_SH}
+        #chmod +x ${GITHUB_WORKSPACE}/${DIY_P1_SH} ${GITHUB_WORKSPACE}/${DIY_P2_SH}
 
     - name: Load pre-custom script
       working-directory: openwrt
