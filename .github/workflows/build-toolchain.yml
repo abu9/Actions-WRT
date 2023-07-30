@@ -8,7 +8,9 @@ on:
         type: string
       config_name:
         type: string
-  
+      use_ccache_cache:
+        type: boolean
+        default: true
   workflow_call:
     inputs:
       repo_url:
@@ -17,7 +19,9 @@ on:
         type: string
       config_name:
         type: string
-
+      use_ccache_cache:
+        type: boolean
+        default: true
 env:
   REPO_URL: ${{ github.event.inputs.repo_url || 'hanwckf/immortalwrt-mt798x' }}
   REPO_BRANCH: ${{ github.event.inputs.repo_branch || 'openwrt-21.02' }}
@@ -29,17 +33,18 @@ jobs:
     outputs:
       target: ${{ steps.find_targets.outputs.target }}
       subtarget: ${{ steps.find_targets.outputs.subtarget }}
-      arch: ${{ steps.find_targets.outputs.arch }}
 
     steps:
     - name: Checkout
       uses: actions/checkout@v3
+
     - name: Checkoutsrc
       uses: actions/checkout@v3
       with:
         repository: ${{ env.REPO_URL }}
         ref: ${{ env.REPO_BRANCH}}
-        path: openwrt      
+        path: openwrt
+
     - name: Find targets
       id: find_targets
       run: |
@@ -50,16 +55,14 @@ jobs:
         eval "$(grep \
                   -e ^CONFIG_TARGET_BOARD= \
                   -e ^CONFIG_TARGET_SUBTARGET= \
-                  -e ^CONFIG_ARCH= \
                   .config 2>/dev/null \
          )"
         TARGET=${TARGET:-$CONFIG_TARGET_BOARD}
         SUBTARGET=${SUBTARGET:-$CONFIG_TARGET_SUBTARGET}
-        ARCH=${ARCH:-$CONFIG_ARCH}
         [[ -n ${TARGET} ]] && echo "target=$TARGET" >> ${GITHUB_OUTPUT}
         [[ -n ${SUBTARGET} ]] && echo "subtarget=$SUBTARGET" >> ${GITHUB_OUTPUT}
-        [[ -n ${ARCH} ]] && echo "arch=$ARCH" >> ${GITHUB_OUTPUT}
-        echo $TARGET $SUBTARGET $ARCH
+        echo $TARGET/$SUBTARGET
+
   build:
     name: Build tools
     runs-on: ubuntu-latest
@@ -67,7 +70,6 @@ jobs:
     env: 
       TARGET: ${{ needs.determine_targets.outputs.target }}
       SUBTARGET: ${{ needs.determine_targets.outputs.subtarget }}
-      ARCH: ${{ needs.determine_targets.outputs.arch }}
     steps:
       - name: Checkoutsrc
         uses: actions/checkout@v3
@@ -76,12 +78,15 @@ jobs:
           ref: ${{ env.REPO_BRANCH}}
           path: openwrt
 
-      - name: Cache prebuilt tools and toolchain
-        uses: actions/cache@v3
+      - name: Restore ccache cache
+        id: restore-ccache-cache
+        if: inputs.use_ccache_cache  
+        uses: actions/cache/restore@v3
         with:
-          path: openwrt/tools.tar
-          key: ${{ env.TARGET }}-${{ env.SUBTARGET }}-external-toolchain-${{ hashFiles('openwrt/tools/**','openwrt/toolchain/**') }}
-          restore-keys: ${{ env.TARGET }}-${{ env.SUBTARGET }}-external-toolchain-
+          path: openwrt/.ccache
+          key: ccache-${{ env.TARGET }}-${{ env.SUBTARGET }}-external-toolchain-${{ hashFiles('openwrt/tools/**','openwrt/toolchain/**') }}
+          restore-keys: |
+            ccache-${{ env.TARGET }}-${{ env.SUBTARGET }}-external-toolchain-
 
       - name: Set global configs
         working-directory: openwrt
@@ -89,10 +94,27 @@ jobs:
           touch .config
           echo CONFIG_DEVEL=y >> .config
           echo CONFIG_AUTOREMOVE=y >> .config
-          echo CONFIG_CCACHE=y >> .config
-          echo "CONFIG_TARGET_${{ env.TARGET }}=y" >> .config
-          echo "CONFIG_TARGET_${{ env.TARGET }}_${{ env.SUBTARGET }}=y" >> .config
+          echo CONFIG_TARGET_${{ env.TARGET }}=y >> .config
+          echo CONFIG_TARGET_${{ env.TARGET }}_${{ env.SUBTARGET }}=y >> .config
           echo CONFIG_BUILD_ALL_HOST_TOOLS=y >> .config
+                    
+      - name: Configure ccache and apply fixes
+        if: inputs.use_ccache_cache 
+        working-directory: openwrt
+        env:
+          SYSTEM_CCACHE_CONF: staging_dir/host/etc/ccache.conf
+        run: |
+          mkdir -p staging_dir/host/etc
+          touch $SYSTEM_CCACHE_CONF
+          echo compiler_type=gcc >> $SYSTEM_CCACHE_CONF
+          echo CONFIG_CCACHE=y >> .config
+
+      - name: Cache prebuilt tools and toolchain
+        uses: actions/cache@v3
+        with:
+          path: openwrt/tools.tar
+          key: ${{ env.TARGET }}-${{ env.SUBTARGET }}-external-toolchain-${{ hashFiles('openwrt/tools/**','openwrt/toolchain/**') }}
+          restore-keys: ${{ env.TARGET }}-${{ env.SUBTARGET }}-external-toolchain-
 
       - name: Make prereq
         working-directory: openwrt
@@ -118,20 +140,14 @@ jobs:
           echo "toolchain-name=$TOOLCHAIN_NAME" >> $GITHUB_ENV
           mkdir -p external-toolchain && cp -f bin/targets/${{ env.TARGET }}/${{ env.SUBTARGET }}/$TOOLCHAIN_NAME external-toolchain/$TOOLCHAIN_NAME
 
-      - name: Upload prebuilt toolchain
-        uses: actions/upload-artifact@v3
-        with:
-          name: ${{ env.TARGET }}-${{ env.SUBTARGET }}-external-toolchain
-          path: openwrt/bin/targets/${{ env.TARGET }}/${{ env.SUBTARGET }}/${{ env.toolchain-name }}
-
-      - name: Package tools 
+      - name: Package tools and external toolchain 
         working-directory: openwrt
         run: tar -cvf tools.tar staging_dir/host build_dir/host staging_dir/target-* external-toolchain
 
-      - name: Upload prebuilt tools
+      - name: Upload prebuilt tools and external toolchain
         uses: actions/upload-artifact@v3
         with:
-          name: linux-buildbot-prebuilt-tools
+          name: ${{ env.TARGET }}-${{ env.SUBTARGET }}-external-toolchain
           path: openwrt/tools.tar
 
       - name: Upload logs
@@ -148,3 +164,7 @@ jobs:
           name: linux-buildbot-config
           path: openwrt/.config
   
+      - name: Delete workflow runs
+        uses: Mattraks/delete-workflow-runs@main
+        with:
+          keep_minimum_runs: 3
