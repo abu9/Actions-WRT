@@ -1,4 +1,5 @@
 name: Build tools and Toolchain
+run-name: Build tools and Toolchain - ${{ inputs.config_name }}
 on:
   workflow_dispatch:
     inputs:

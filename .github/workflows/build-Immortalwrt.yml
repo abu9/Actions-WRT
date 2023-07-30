@@ -8,7 +8,8 @@
 # Description: Build OpenWrt using GitHub Actions
 #
 
-name: Build ImmortalWrt
+name: Build ImmortalWrt 
+run-name: Build ImmortalWrt - ${{ inputs.config_name }}
 
 on:
   repository_dispatch:
@@ -246,6 +247,13 @@ jobs:
       with:
         name: ${{ env.TARGET }}-${{ env.SUBTARGET }}-logs
         path: "openwrt/logs"
+
+    - name: Upload config
+      if: ${{!cancelled()}}
+      uses: actions/upload-artifact@v3
+      with:
+        name: build-config
+        path: openwrt/.config
 
     - name: Delete workflow runs
       uses: Mattraks/delete-workflow-runs@main
