@@ -192,7 +192,9 @@ jobs:
 
     - name: Show configuration
       working-directory: openwrt
-      run: ./scripts/diffconfig.sh
+      run: |
+        make defconfig
+        ./scripts/diffconfig.sh
       
     - name: Build tools and toolchain
       if: inputs.use_prebuild_toolchain 
@@ -208,7 +210,7 @@ jobs:
         make -j$(nproc) BUILD_LOG=1 || ret=$? ${GITHUB_WORKSPACE}/.github/workflows/scripts/show_build_failures.sh
 
     - name: Save ccache cache
-      if: inputs.use_ccache_cache && steps.restore-ccache-cache.outputs.cache-hit != 'true' && !cancelled()
+      if: inputs.use_ccache_cache && steps.restore-ccache-cache.outputs.cache-hit != 'true'
       uses: actions/cache/save@v3
       with:
         path: openwrt/.ccache
