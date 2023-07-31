@@ -85,7 +85,7 @@ jobs:
       - name: Restore ccache cache
         id: restore-ccache-cache
         if: inputs.use_ccache_cache  
-        uses: actions/cache/restore@v3
+        uses: actions/cache@v3
         with:
           path: openwrt/.ccache
           key: ccache-${{ env.TARGET }}-${{ env.SUBTARGET }}-external-toolchain-${{ hashFiles('openwrt/tools/**','openwrt/toolchain/**') }}
