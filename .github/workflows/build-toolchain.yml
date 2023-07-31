@@ -72,6 +72,9 @@ jobs:
       TARGET: ${{ needs.determine_targets.outputs.target }}
       SUBTARGET: ${{ needs.determine_targets.outputs.subtarget }}
     steps:
+      - name: Checkout
+        uses: actions/checkout@v3      
+
       - name: Checkoutsrc
         uses: actions/checkout@v3
         with:
@@ -92,11 +95,11 @@ jobs:
       - name: Set global configs
         working-directory: openwrt
         run: |
-          touch .config
+          [[ -e ${CONFIG_FILE} ]] && cp -f ${CONFIG_FILE} openwrt/.config
           echo CONFIG_DEVEL=y >> .config
           echo CONFIG_AUTOREMOVE=y >> .config
-          echo CONFIG_TARGET_${{ env.TARGET }}=y >> .config
-          echo CONFIG_TARGET_${{ env.TARGET }}_${{ env.SUBTARGET }}=y >> .config
+          # echo CONFIG_TARGET_${{ env.TARGET }}=y >> .config
+          # echo CONFIG_TARGET_${{ env.TARGET }}_${{ env.SUBTARGET }}=y >> .config
           echo CONFIG_BUILD_ALL_HOST_TOOLS=y >> .config
                     
       - name: Configure ccache and apply fixes
