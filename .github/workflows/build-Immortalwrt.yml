@@ -195,7 +195,15 @@ jobs:
       run: |
         make defconfig
         ./scripts/diffconfig.sh
-      
+        
+    - name: Download package
+      working-directory: openwrt
+      id: package
+      run: |
+        make download -j8
+        find dl -size -1024c -exec ls -l {} \;
+        find dl -size -1024c -exec rm -f {} \;
+        
     - name: Build tools and toolchain
       if: inputs.use_prebuild_toolchain 
       working-directory: openwrt
