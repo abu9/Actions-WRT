@@ -95,7 +95,7 @@ jobs:
       - name: Set global configs
         working-directory: openwrt
         run: |
-          [[ -e ${GITHUB_WORKSPACE}/${CONFIG_FILE} ]] && cp -f ${GITHUB_WORKSPACE}/${CONFIG_FILE} openwrt/.config
+          [[ -e ${GITHUB_WORKSPACE}/${CONFIG_FILE} ]] && cp -f ${GITHUB_WORKSPACE}/${CONFIG_FILE} .config
           echo CONFIG_DEVEL=y >> .config
           echo CONFIG_AUTOREMOVE=y >> .config
           # echo CONFIG_TARGET_${{ env.TARGET }}=y >> .config
