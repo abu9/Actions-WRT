@@ -91,17 +91,7 @@ jobs:
           key: ccache-${{ env.TARGET }}-${{ env.SUBTARGET }}-external-toolchain-${{ hashFiles('openwrt/tools/**','openwrt/toolchain/**') }}
           restore-keys: |
             ccache-${{ env.TARGET }}-${{ env.SUBTARGET }}-external-toolchain-
-
-      - name: Set global configs
-        working-directory: openwrt
-        run: |
-          [[ -e ${GITHUB_WORKSPACE}/${CONFIG_FILE} ]] && cp -f ${GITHUB_WORKSPACE}/${CONFIG_FILE} .config
-          echo CONFIG_DEVEL=y >> .config
-          echo CONFIG_AUTOREMOVE=y >> .config
-          # echo CONFIG_TARGET_${{ env.TARGET }}=y >> .config
-          # echo CONFIG_TARGET_${{ env.TARGET }}_${{ env.SUBTARGET }}=y >> .config
-          echo CONFIG_BUILD_ALL_HOST_TOOLS=y >> .config
-                    
+              
       - name: Configure ccache and apply fixes
         if: inputs.use_ccache_cache 
         working-directory: openwrt
@@ -120,9 +110,17 @@ jobs:
           key: ${{ env.TARGET }}-${{ env.SUBTARGET }}-external-toolchain-${{ hashFiles('openwrt/tools/**','openwrt/toolchain/**') }}
           restore-keys: ${{ env.TARGET }}-${{ env.SUBTARGET }}-external-toolchain-
 
-      - name: Make prereq
+      - name: Set global configs
         working-directory: openwrt
-        run: make defconfig
+        run: |
+          [[ -e ${GITHUB_WORKSPACE}/${CONFIG_FILE} ]] && cp -f ${GITHUB_WORKSPACE}/${CONFIG_FILE} .config
+          echo CONFIG_KERNEL_WERROR=y >> .config
+          echo CONFIG_DEVEL=y >> .config
+          echo CONFIG_AUTOREMOVE=y >> .config
+          # echo CONFIG_TARGET_${{ env.TARGET }}=y >> .config
+          # echo CONFIG_TARGET_${{ env.TARGET }}_${{ env.SUBTARGET }}=y >> .config
+          echo CONFIG_BUILD_ALL_HOST_TOOLS=y >> .config
+          make defconfig
   
       - name: Show configuration
         working-directory: openwrt
@@ -138,15 +136,20 @@ jobs:
 
       - name: Build external toolchain
         working-directory: openwrt
-        run: |
-          make target/toolchain/compile -j$(nproc) BUILD_LOG=1 || ret=$? ${GITHUB_WORKSPACE}/.github/workflows/scripts/show_build_failures.sh
+        run: make target/toolchain/compile -j$(nproc) BUILD_LOG=1 || ret=$? ${GITHUB_WORKSPACE}/.github/workflows/scripts/show_build_failures.sh
+
+      - name: Find external toolchain name
+        id: get-toolchain-name
+        working-directory: openwrt
+        run: |       
           TOOLCHAIN_NAME=$(ls bin/targets/${{ env.TARGET }}/${{ env.SUBTARGET }} | grep toolchain)
-          echo "toolchain-name=$TOOLCHAIN_NAME" >> $GITHUB_ENV
-          mkdir -p external-toolchain && cp -f bin/targets/${{ env.TARGET }}/${{ env.SUBTARGET }}/$TOOLCHAIN_NAME external-toolchain/$TOOLCHAIN_NAME
+          echo "toolchain-name=$TOOLCHAIN_NAME" >> $GITHUB_OUTPUT
 
       - name: Package tools and external toolchain 
         working-directory: openwrt
-        run: tar -cvf tools.tar staging_dir/host build_dir/host staging_dir/target-* external-toolchain
+        run: |
+          mkdir -p external-toolchain && cp -f bin/targets/${{ env.TARGET }}/${{ env.SUBTARGET }}/${{ steps.get-toolchain-name.outputs.toolchain-name }} external-toolchain/${{ steps.get-toolchain-name.outputs.toolchain-name }}
+          tar -cvf tools.tar staging_dir/host build_dir/host staging_dir/target-* external-toolchain
 
       - name: Upload prebuilt tools and external toolchain
         uses: actions/upload-artifact@v3
