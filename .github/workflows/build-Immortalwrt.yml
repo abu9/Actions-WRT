@@ -9,7 +9,7 @@
 #
 
 name: Build ImmortalWrt 
-run-name: Build ImmortalWrt - ${{ inputs.config_name }}
+run-name: Build ImmortalWrt - ${{ github.ref_name }}/${{ inputs.config_name }}
 
 on:
   repository_dispatch:
