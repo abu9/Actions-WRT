@@ -57,7 +57,7 @@ env:
 
 jobs:
   determine_targets:
-    name: Determine targets
+    name: Get tag
     runs-on: ubuntu-latest
     outputs:
       target: ${{ steps.find_targets.outputs.target }}
@@ -131,7 +131,6 @@ jobs:
       SUBTARGET: ${{ needs.determine_targets.outputs.subtarget }}
       DEVICE_NAME: ${{ needs.determine_targets.outputs.device_name }}
       FILE_DATE: ${{ needs.determine_targets.outputs.file_date }}
-
 
     permissions:
       actions: write
@@ -293,7 +292,7 @@ jobs:
       uses: actions/upload-artifact@main
       if: env.UPLOAD_FIRMWARE == 'true'
       with:
-        name: OpenWrt_firmware${{ env.DEVICE_NAME }}${{ env.FILE_DATE }}
+        name: OpenWrt_firmware_${{ env.DEVICE_NAME }}${{ env.FILE_DATE }}
         path: ${{ steps.organize.outputs.FIRMWARE }}
 
     - name: Upload logs
