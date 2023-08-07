@@ -15,6 +15,16 @@ on:
   repository_dispatch:
   workflow_dispatch:
     inputs:
+      source_branch:
+        description: "Select the source branch"
+        required: false
+        default: "openwrt-main"
+        type: choice
+        options:
+          - openwrt/openert@main
+          - coolsnowwolf/lede@master
+          - immortalwrt/immortalwrt@master
+          - hanwckf/immortalwrt-mt798x@openwrt-21.02
       config_name:
         description: 'Config file name'
         type: choice
@@ -52,6 +62,8 @@ jobs:
     outputs:
       target: ${{ steps.find_targets.outputs.target }}
       subtarget: ${{ steps.find_targets.outputs.subtarget }}
+      device_name: ${{ steps.find_targets.outputs.device_name }}
+      file_date: ${{ steps.find_targets.outputs.file_date }}
 
     steps:
     - name: Checkout
@@ -63,6 +75,32 @@ jobs:
         repository: ${{ env.REPO_URL }}
         ref: ${{ env.REPO_BRANCH}}
         path: openwrt
+
+    # - name: Get repo info
+    #   run: |
+    #      awk 'BEGIN { FS = "@"}; { print $2 }' ${{ inputs.source_branch }}
+
+    #      # Set up compilation source code
+    #      if [[ "${{ inputs.source_branch }}" == *"openwrt"* ]]; then
+    #          REPO_URL="https://github.com/openwrt/openwrt"
+    #          REPO_BRANCH="main"
+    #          TAGS_NAME="official"
+    #      elif [[ "${{ inputs.source_branch }}" == *"lede"* ]]; then
+    #          REPO_URL="https://github.com/coolsnowwolf/lede"
+    #          REPO_BRANCH="master"
+    #          TAGS_NAME="lede"
+    #      elif [[ "${{ inputs.source_branch }}" == *"immortalwrt"* ]]; then
+    #          REPO_URL="https://github.com/immortalwrt/immortalwrt"
+    #          REPO_BRANCH="master"
+    #          TAGS_NAME="immortalwrt"
+    #      else
+    #          echo "Unknown source code repository."
+    #          exit 1
+    #      fi
+
+    #      echo "build_tag=OpenWrt_${TAGS_NAME}_$(date +"%Y.%m")" >> ${GITHUB_OUTPUT}
+    #      echo -e "REPO_URL: [ ${REPO_URL} ]\nREPO_BRANCH: [ ${REPO_BRANCH} ]\nTAGS_NAME: [ ${TAGS_NAME} ]"
+
 
     - name: Find targets
       id: find_targets
@@ -81,12 +119,20 @@ jobs:
         [[ -n ${TARGET} ]] && echo "target=$TARGET" >> ${GITHUB_OUTPUT}
         [[ -n ${SUBTARGET} ]] && echo "subtarget=$SUBTARGET" >> ${GITHUB_OUTPUT}
         echo $TARGET/$SUBTARGET
+
+        DEVICE_NAME=grep '^CONFIG_TARGET.*DEVICE.*=y' .config | sed -r 's/.*DEVICE_(.*)=y/\1/'
+        [[ -n ${DEVICE_NAME} ]] && echo "DEVICE_NAME=$DEVICE_NAME" >> ${GITHUB_OUTPUT}
+        echo "FILE_DATE=_$(date +"%Y%m%d%H%M")" >> ${GITHUB_OUTPUT}
   build:
     runs-on: ubuntu-latest
     needs: determine_targets
     env: 
       TARGET: ${{ needs.determine_targets.outputs.target }}
       SUBTARGET: ${{ needs.determine_targets.outputs.subtarget }}
+      DEVICE_NAME: ${{ needs.determine_targets.outputs.device_name }}
+      FILE_DATE: ${{ needs.determine_targets.outputs.file_date }}
+
+
     permissions:
       actions: write
 
@@ -94,7 +140,7 @@ jobs:
     - name: Checkout
       uses: actions/checkout@main
 
-    - name: Checkout openwrt source code
+    - name: Checkout [ ${{ env.REPO_URL }} ]
       uses: actions/checkout@v3
       with:
         repository: ${{ env.REPO_URL }}
@@ -106,11 +152,13 @@ jobs:
       env:
         DEBIAN_FRONTEND: noninteractive
       run: |
-        sudo rm -rf /etc/apt/sources.list.d/* /usr/share/dotnet /usr/local/lib/android /opt/ghc
-        sudo -E apt-get -qq update
-        sudo -E apt-get -qq install $(curl -fsSL https://gist.githubusercontent.com/abu9/67e4c9e6c14523d642c868bb81b51ada/raw/immortalwrt.build.dep)
-        sudo -E apt-get -qq autoremove --purge
-        sudo -E apt-get -qq clean
+        docker rmi `docker images -q`
+        sudo rm -rf /usr/share/dotnet /etc/apt/sources.list.d /usr/local/lib/android 2>/dev/null
+        sudo -E apt-get -y update >/dev/null
+        sudo -E apt-get -y purge azure-cli ghc* zulu* llvm* firefox google* dotnet* powershell openjdk* mongodb* moby* || true
+        sudo -E apt-get -y install $(curl -fsSL https://gist.githubusercontent.com/abu9/67e4c9e6c14523d642c868bb81b51ada/raw/immortalwrt.build.dep)
+        sudo -E apt-get -y autoremove --purge
+        sudo -E apt-get clean
         sudo timedatectl set-timezone "${TZ}"
 
     - name: Prepare custom scripts
@@ -181,10 +229,12 @@ jobs:
         TOOLCHAIN_FILE="external-toolchain/$(ls external-toolchain/ | grep toolchain )"
         tar xf "$TOOLCHAIN_FILE" -C external-toolchain
         rm $TOOLCHAIN_FILE
+
         ./scripts/ext-toolchain.sh \
           --toolchain external-toolchain/$(ls external-toolchain/ | grep wrt-toolchain)/toolchain-* \
           --overwrite-config \
           --config ${{ env.TARGET }}/${{ env.SUBTARGET }}
+
         eval "$(grep -e ^CONFIG_TARGET_NAME= .config 2>/dev/null)"
         [[ -n ${CONFIG_TARGET_NAME} ]] && echo "CONFIG_TARGET_NAME=$CONFIG_TARGET_NAME" >> ${GITHUB_ENV}
         mkdir -p staging_dir/target-"$CONFIG_TARGET_NAME"_musl
@@ -196,13 +246,13 @@ jobs:
         make defconfig
         ./scripts/diffconfig.sh
         
-    - name: Download package
-      working-directory: openwrt
-      id: package
-      run: |
-        make download -j8
-        find dl -size -1024c -exec ls -l {} \;
-        find dl -size -1024c -exec rm -f {} \;
+    # - name: Download package
+    #   working-directory: openwrt
+    #   id: package
+    #   run: |
+    #     make download -j8
+    #     find dl -size -1024c -exec ls -l {} \;
+    #     find dl -size -1024c -exec rm -f {} \;
         
     - name: Build tools and toolchain
       if: inputs.use_prebuild_toolchain 
@@ -235,9 +285,6 @@ jobs:
       id: organize
       if: env.UPLOAD_FIRMWARE == 'true'
       run: |
-        grep '^CONFIG_TARGET.*DEVICE.*=y' .config | sed -r 's/.*DEVICE_(.*)=y/\1/' > DEVICE_NAME
-        [ -s DEVICE_NAME ] && echo "DEVICE_NAME=_$(cat DEVICE_NAME)" >> ${GITHUB_OUTPUT}
-        echo "FILE_DATE=_$(date +"%Y%m%d%H%M")" >> ${GITHUB_OUTPUT}
         cd openwrt/bin/targets/*/*
         rm -rf packages
         echo "FIRMWARE=$PWD" >> ${GITHUB_OUTPUT}
@@ -246,7 +293,7 @@ jobs:
       uses: actions/upload-artifact@main
       if: env.UPLOAD_FIRMWARE == 'true'
       with:
-        name: OpenWrt_firmware${{ steps.organize.outputs.DEVICE_NAME }}${{ steps.organize.outputs.FILE_DATE }}
+        name: OpenWrt_firmware${{ env.DEVICE_NAME }}${{ env.FILE_DATE }}
         path: ${{ steps.organize.outputs.FIRMWARE }}
 
     - name: Upload logs
