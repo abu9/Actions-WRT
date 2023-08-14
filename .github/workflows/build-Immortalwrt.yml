@@ -120,7 +120,7 @@ jobs:
         [[ -n ${SUBTARGET} ]] && echo "subtarget=$SUBTARGET" >> ${GITHUB_OUTPUT}
         echo $TARGET/$SUBTARGET
 
-        DEVICE_NAME=grep '^CONFIG_TARGET.*DEVICE.*=y' .config | sed -r 's/.*DEVICE_(.*)=y/\1/'
+        DEVICE_NAME=grep -e '^CONFIG_TARGET.*DEVICE.*=y' .config | sed -r 's/.*DEVICE_(.*)=y/\1/'
         [[ -n ${DEVICE_NAME} ]] && echo "DEVICE_NAME=$DEVICE_NAME" >> ${GITHUB_OUTPUT}
         echo "FILE_DATE=_$(date +"%Y%m%d%H%M")" >> ${GITHUB_OUTPUT}
   build:
