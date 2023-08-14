@@ -118,6 +118,7 @@ jobs:
         SUBTARGET=${SUBTARGET:-$CONFIG_TARGET_SUBTARGET}
         [[ -n ${TARGET} ]] && echo "target=$TARGET" >> ${GITHUB_OUTPUT}
         [[ -n ${SUBTARGET} ]] && echo "subtarget=$SUBTARGET" >> ${GITHUB_OUTPUT}
+        cat .config
         echo $TARGET/$SUBTARGET
 
         DEVICE_NAME=$(grep -e '^CONFIG_TARGET.*DEVICE.*=y' .config | sed -r 's/.*DEVICE_(.*)=y/\1/')
