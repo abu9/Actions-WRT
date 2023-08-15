@@ -36,12 +36,14 @@ on:
         default: true
       use_ccache_cache:
         type: boolean
-        default: true
+        default: false
       ccache_type:
         type: string
         default: kernel
       debug:
         type: boolean
+      package:
+        type: string
 
 env:
   REPO_URL: hanwckf/immortalwrt-mt798x
@@ -144,6 +146,7 @@ jobs:
       SUBTARGET: ${{ needs.determine_targets.outputs.subtarget }}
       DEVICE_NAME: ${{ needs.determine_targets.outputs.device_name }}
       FILE_DATE: ${{ needs.determine_targets.outputs.file_date }}
+      PACKAGE: ${{ inputs.package }}
 
     permissions:
       actions: write
@@ -315,7 +318,9 @@ jobs:
       run: |
         make defconfig
         echo -e "$(nproc) thread compile"
-        make -j$(nproc) BUILD_LOG=1 || ret=$? ${GITHUB_WORKSPACE}/.github/workflows/scripts/show_build_failures.sh
+        make target/compile -j$(nproc) BUILD_LOG=1 || ret=$? ${GITHUB_WORKSPACE}/.github/workflows/scripts/show_build_failures.sh
+        make package/linux/compile -j$(nproc) BUILD_LOG=1 || ret=$? ${GITHUB_WORKSPACE}/.github/workflows/scripts/show_build_failures.sh
+        make -j1 V=sc $(PACKAGE)
 
     - name: Save ccache cache
       if: inputs.use_ccache_cache && steps.restore-ccache-cache.outputs.cache-hit != 'true'
