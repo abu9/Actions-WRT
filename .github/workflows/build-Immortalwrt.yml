@@ -57,13 +57,14 @@ env:
 
 jobs:
   determine_targets:
-    name: Get tag
+    name: Get target info
     runs-on: ubuntu-latest
     outputs:
-      target: ${{ steps.find_targets.outputs.target }}
-      subtarget: ${{ steps.find_targets.outputs.subtarget }}
-      device_name: ${{ steps.find_targets.outputs.device_name }}
-      file_date: ${{ steps.find_targets.outputs.file_date }}
+      target: ${{ steps.get_info.outputs.target }}
+      subtarget: ${{ steps.get_info.outputs.subtarget }}
+      arch: ${{ steps.get_info.outputs.arch }}
+      device_name: ${{ steps.get_info.outputs.device_name }}
+      file_date: ${{ steps.get_info.outputs.file_date }}
 
     steps:
     - name: Checkout
@@ -102,8 +103,8 @@ jobs:
     #      echo -e "REPO_URL: [ ${REPO_URL} ]\nREPO_BRANCH: [ ${REPO_BRANCH} ]\nTAGS_NAME: [ ${TAGS_NAME} ]"
 
 
-    - name: Find targets
-      id: find_targets
+    - name: Get info
+      id: get_info
       run: |
         [[ -d "files" ]] && mv -f files openwrt/files
         [[ -e ${CONFIG_FILE} ]] && cp -f ${CONFIG_FILE} openwrt/.config
@@ -112,18 +113,29 @@ jobs:
         eval "$(grep \
                   -e ^CONFIG_TARGET_BOARD= \
                   -e ^CONFIG_TARGET_SUBTARGET= \
+                  -e ^CONFIG_ARCH= \
                   .config 2>/dev/null \
          )"
         TARGET=${TARGET:-$CONFIG_TARGET_BOARD}
         SUBTARGET=${SUBTARGET:-$CONFIG_TARGET_SUBTARGET}
+        ARCH=${ARCH:-$CONFIG_ARCH}
         [[ -n ${TARGET} ]] && echo "target=$TARGET" >> ${GITHUB_OUTPUT}
         [[ -n ${SUBTARGET} ]] && echo "subtarget=$SUBTARGET" >> ${GITHUB_OUTPUT}
-        cat .config
-        echo $TARGET/$SUBTARGET
+        [[ -n ${ARCH} ]] && echo "arch=$ARCH" >> ${GITHUB_OUTPUT}
 
-        DEVICE_NAME=$(grep -e '^CONFIG_TARGET.*DEVICE.*=y' .config | sed -r 's/.*DEVICE_(.*)=y/\1/')
+        if [ $(grep -e '^CONFIG_TARGET_MULTI_PROFILE=y' .config) -eq 1 ]
+        then
+          DEVICE_NAME='MULTI_PROFILE'
+        else
+          DEVICE_NAME=$(grep -e '^CONFIG_TARGET.*DEVICE.*=y' .config | sed -r 's/.*DEVICE_(.*)=y/\1/')
+        fi
         [[ -n ${DEVICE_NAME} ]] && echo "DEVICE_NAME=$DEVICE_NAME" >> ${GITHUB_OUTPUT}
         echo "FILE_DATE=_$(date +"%Y%m%d%H%M")" >> ${GITHUB_OUTPUT}
+
+    - name: Show configuration
+      working-directory: openwrt
+      run: cat .config
+
   build:
     runs-on: ubuntu-latest
     needs: determine_targets
@@ -253,11 +265,49 @@ jobs:
     #     make download -j8
     #     find dl -size -1024c -exec ls -l {} \;
     #     find dl -size -1024c -exec rm -f {} \;
-        
-    - name: Build tools and toolchain
-      if: inputs.use_prebuild_toolchain 
+
+    - name: Build tools 
+      if: inputs.use_prebuild_toolchain && steps.restore-toolchain-cache.outputs.cache-hit != 'true'
+      working-directory: openwrt
+      run: make tools/install -j$(nproc) BUILD_LOG=1 || ret=$? ${GITHUB_WORKSPACE}/.github/workflows/scripts/show_build_failures.sh
+
+    - name: Build toolchain 
       working-directory: openwrt
       run: make toolchain/install -j$(nproc) BUILD_LOG=1 || ret=$? ${GITHUB_WORKSPACE}/.github/workflows/scripts/show_build_failures.sh
+
+    - name: Build external toolchain
+      if: inputs.use_prebuild_toolchain && steps.restore-toolchain-cache.outputs.cache-hit != 'true'
+      working-directory: openwrt
+      run: make target/toolchain/compile -j$(nproc) BUILD_LOG=1 || ret=$? ${GITHUB_WORKSPACE}/.github/workflows/scripts/show_build_failures.sh
+
+    - name: Find external toolchain name
+      if: inputs.use_prebuild_toolchain && steps.restore-toolchain-cache.outputs.cache-hit != 'true'
+      id: get-toolchain-name
+      working-directory: openwrt
+      run: |       
+        TOOLCHAIN_NAME=$(ls bin/targets/${{ env.TARGET }}/${{ env.SUBTARGET }} | grep toolchain)
+        echo "toolchain-name=$TOOLCHAIN_NAME" >> $GITHUB_OUTPUT
+
+    - name: Package tools and external toolchain
+      if: inputs.use_prebuild_toolchain && steps.restore-toolchain-cache.outputs.cache-hit != 'true'
+      working-directory: openwrt
+      run: |
+        mkdir -p external-toolchain && cp -f bin/targets/${{ env.TARGET }}/${{ env.SUBTARGET }}/${{ steps.get-toolchain-name.outputs.toolchain-name }} external-toolchain/${{ steps.get-toolchain-name.outputs.toolchain-name }}
+        tar -cvf tools.tar staging_dir/host build_dir/host staging_dir/target-* external-toolchain
+
+    - name: Upload prebuilt tools and external toolchain
+      if: inputs.use_prebuild_toolchain && steps.restore-toolchain-cache.outputs.cache-hit != 'true'
+      uses: actions/upload-artifact@v3
+      with:
+        name: ${{ env.TARGET }}-${{ env.SUBTARGET }}-external-toolchain
+        path: openwrt/tools.tar
+
+    - name: Update prebuilt tools and toolchain Cache
+      if: inputs.use_prebuild_toolchain && steps.restore-toolchain-cache.outputs.cache-hit != 'true'
+      uses: actions/cache/save@v3
+      with:
+        path: openwrt/tools.tar
+        key: ${{ steps.restore-toolchain-cache.outputs.cache-primary-key }}
 
     - name: Build everything
       id: compile
