@@ -1,0 +1,10 @@
+--- package/feeds/packages/libffi/Makefile      2023-07-30 22:44:19.155136248 +0800
++++ Makefile.p  2023-08-15 22:27:24.179901114 +0800
+@@ -75,7 +75,7 @@
+                $(PKG_INSTALL_DIR)/usr/include/*.h \
+                $(1)/usr/include/
+        $(CP) \
+-               $(PKG_BUILD_DIR)/$(GNU_TARGET_NAME)-gnu/fficonfig.h \
++               $(PKG_BUILD_DIR)/$(BOARD)/fficonfig.h \
+                $(1)/usr/include/
+ endef
