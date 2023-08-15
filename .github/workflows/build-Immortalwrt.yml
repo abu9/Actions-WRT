@@ -320,7 +320,7 @@ jobs:
         echo -e "$(nproc) thread compile"
         make target/compile -j$(nproc) BUILD_LOG=1 || ret=$? ${GITHUB_WORKSPACE}/.github/workflows/scripts/show_build_failures.sh
         make package/linux/compile -j$(nproc) BUILD_LOG=1 || ret=$? ${GITHUB_WORKSPACE}/.github/workflows/scripts/show_build_failures.sh
-        make -j1 V=sc $(PACKAGE)/compile
+        make -j1 V=sc ${{ env.PACKAGE }}/compile
 
     - name: Save ccache cache
       if: inputs.use_ccache_cache && steps.restore-ccache-cache.outputs.cache-hit != 'true'
