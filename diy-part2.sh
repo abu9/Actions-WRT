@@ -19,7 +19,7 @@ echo 'src-git jell https://github.com/kenzok8/jell' >>feeds.conf.default
 # curl -fsSL git.io/file-transfer | sh
 sed -i 's/192.168.1.1/192.168.2.254/g' package/base-files/files/bin/config_generate
 # sed -i 's/radio\${devidx}\.disabled=1/radio\${devidx}\.disabled=0/g' package/kernel/mac80211/files/lib/wifi/mac80211.sh
-patch -p0 -i files/enable-vlan-for-mtwifi.patch
+git apply files/enable-vlan-for-mtwifi.patch
 patch -p0 -i files/fix-libffi-build.patch
 #patch -p0 -i files/remove-luci-uhttpd.patch
 #git apply files/Kmemleak.patch
