@@ -339,6 +339,12 @@ jobs:
         rm -rf packages
         echo "FIRMWARE=$PWD" >> ${GITHUB_OUTPUT}
 
+    - name: Debug
+      working-directory: openwrt
+      if: ${{ !cancelled() }} && steps.compile.outcome !='success'
+      run: |
+        tree -L 4
+
     - name: Upload firmware directory
       uses: actions/upload-artifact@main
       if: env.UPLOAD_FIRMWARE == 'true'
