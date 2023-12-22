@@ -31,6 +31,7 @@ on:
         options:
            - '.config7981'
            - 'mt7981-ax3000.config'
+           - '.config7981.mtwifi-cfg'
       use_prebuild_toolchain:
         type: boolean
         default: true
