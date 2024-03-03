@@ -37,10 +37,10 @@ jobs:
 
     steps:
     - name: Checkout
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
 
     - name: Checkoutsrc
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
       with:
         repository: ${{ env.REPO_URL }}
         ref: ${{ env.REPO_BRANCH}}
@@ -73,10 +73,10 @@ jobs:
       SUBTARGET: ${{ needs.determine_targets.outputs.subtarget }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v3      
+        uses: actions/checkout@v4      
 
       - name: Checkoutsrc
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           repository: ${{ env.REPO_URL }}
           ref: ${{ env.REPO_BRANCH}}
