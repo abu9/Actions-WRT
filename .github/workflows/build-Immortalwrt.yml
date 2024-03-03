@@ -18,7 +18,7 @@ on:
       source_branch:
         description: "Select the source branch"
         required: false
-        default: "openwrt-main"
+        default: 'hanwckf/immortalwrt-mt798x@openwrt-21.02'
         type: choice
         options:
           - openwrt/openert@main
@@ -32,6 +32,7 @@ on:
            - '.config7981'
            - 'mt7981-ax3000.config'
            - '.config7981.mtwifi-cfg'
+        default: '.config7981.mtwifi-cfg'
       use_prebuild_toolchain:
         type: boolean
         default: true
