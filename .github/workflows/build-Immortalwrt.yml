@@ -125,7 +125,7 @@ jobs:
         [[ -n ${SUBTARGET} ]] && echo "subtarget=$SUBTARGET" >> ${GITHUB_OUTPUT}
         [[ -n ${ARCH} ]] && echo "arch=$ARCH" >> ${GITHUB_OUTPUT}
 
-        if [ $(grep -e '^CONFIG_TARGET_MULTI_PROFILE=y' .config) -eq 1 ]
+        if [ $(grep -ic '^CONFIG_TARGET_MULTI_PROFILE=y' .config) -eq 1 ]
         then
           DEVICE_NAME='MULTI_PROFILE'
         else
