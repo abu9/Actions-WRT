@@ -202,7 +202,7 @@ jobs:
     - name: Restore ccache cache
       id: restore-ccache-cache
       if: inputs.use_ccache_cache
-      uses: actions/cache/restore@v3
+      uses: actions/cache/restore@v4
       with:
         path: openwrt/.ccache
         key: ccache-${{ inputs.ccache_type }}-${{ env.TARGET }}/${{ env.SUBTARGET }}-${{ hashFiles('openwrt/include/kernel-**') }}
@@ -223,7 +223,7 @@ jobs:
     - name: Restore tools and toolchain cache
       id: restore-toolchain-cache
       if: inputs.use_prebuild_toolchain 
-      uses: actions/cache/restore@v3
+      uses: actions/cache/restore@v4
       with:
         path: openwrt/tools.tar
         key: ${{ env.TARGET }}-${{ env.SUBTARGET }}-external-toolchain-${{ hashFiles('openwrt/tools/**','openwrt/toolchain/**') }}
@@ -306,7 +306,7 @@ jobs:
 
     - name: Update prebuilt tools and toolchain Cache
       if: inputs.use_prebuild_toolchain && steps.restore-toolchain-cache.outputs.cache-hit != 'true'
-      uses: actions/cache/save@v3
+      uses: actions/cache/save@v4
       with:
         path: openwrt/tools.tar
         key: ${{ steps.restore-toolchain-cache.outputs.cache-primary-key }}
@@ -321,7 +321,7 @@ jobs:
 
     - name: Save ccache cache
       if: inputs.use_ccache_cache && steps.restore-ccache-cache.outputs.cache-hit != 'true'
-      uses: actions/cache/save@v3
+      uses: actions/cache/save@v4
       with:
         path: openwrt/.ccache
         key: ${{ steps.restore-ccache-cache.outputs.cache-primary-key }}
