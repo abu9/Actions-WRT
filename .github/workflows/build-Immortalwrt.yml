@@ -78,9 +78,8 @@ jobs:
     - name: Get repo info
       id: get_repo_info
       run: |
-        awk 'BEGIN { FS = "@"}; { print $2 }' ${{ inputs.source_branch }}
-        REPO_URL=$(cut -d "@" -f 1 <<< ${{ inputs.source_branch }})
-        REPO_BRANCH=$(cut -d "@" -f 2 <<< ${{ inputs.source_branch }})
+        REPO_URL=$(cut -d "@" -f 1 <<< "${{ inputs.source_branch }})
+        REPO_BRANCH=$(cut -d "@" -f 2 <<< "${{ inputs.source_branch }}")
         echo "repo_url=https://github.com/$REPO_URL" >> ${GITHUB_OUTPUT}
         echo "repo_branch=$REPO_BRANCH" >> ${GITHUB_OUTPUT}
 
