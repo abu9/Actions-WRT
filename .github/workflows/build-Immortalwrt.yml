@@ -67,44 +67,29 @@ jobs:
       arch: ${{ steps.get_info.outputs.arch }}
       device_name: ${{ steps.get_info.outputs.device_name }}
       file_date: ${{ steps.get_info.outputs.file_date }}
+      repo_url: ${{ steps.get_repo_info.outputs.repo_url }}
+      repo_branch: ${{ steps.get_repo_info.outputs.repo_branch }}
 
     steps:
     - name: Checkout
       uses: actions/checkout@v4
 
+    - name: Get repo info
+      id: get_repo_info
+      run: |
+        awk 'BEGIN { FS = "@"}; { print $2 }' ${{ inputs.source_branch }}
+        REPO_URL=$(cut -d "@" -f 1 <<< ${{ inputs.source_branch }})
+        REPO_BRANCH=$(cut -d "@" -f 2 <<< ${{ inputs.source_branch }})
+        echo "repo_url=https://github.com/$REPO_URL" >> ${GITHUB_OUTPUT}
+        echo "repo_branch=$REPO_BRANCH" >> ${GITHUB_OUTPUT}
+
     - name: Checkout openwrt source code
       uses: actions/checkout@v4
       with:
-        repository: ${{ env.REPO_URL }}
-        ref: ${{ env.REPO_BRANCH}}
+        repository: ${{ steps.get_repo_info.outputs.repo_url }}
+        ref: ${{ steps.get_repo_info.outputs.repo_branch }}
         path: openwrt
-
-    # - name: Get repo info
-    #   run: |
-    #      awk 'BEGIN { FS = "@"}; { print $2 }' ${{ inputs.source_branch }}
-
-    #      # Set up compilation source code
-    #      if [[ "${{ inputs.source_branch }}" == *"openwrt"* ]]; then
-    #          REPO_URL="https://github.com/openwrt/openwrt"
-    #          REPO_BRANCH="main"
-    #          TAGS_NAME="official"
-    #      elif [[ "${{ inputs.source_branch }}" == *"lede"* ]]; then
-    #          REPO_URL="https://github.com/coolsnowwolf/lede"
-    #          REPO_BRANCH="master"
-    #          TAGS_NAME="lede"
-    #      elif [[ "${{ inputs.source_branch }}" == *"immortalwrt"* ]]; then
-    #          REPO_URL="https://github.com/immortalwrt/immortalwrt"
-    #          REPO_BRANCH="master"
-    #          TAGS_NAME="immortalwrt"
-    #      else
-    #          echo "Unknown source code repository."
-    #          exit 1
-    #      fi
-
-    #      echo "build_tag=OpenWrt_${TAGS_NAME}_$(date +"%Y.%m")" >> ${GITHUB_OUTPUT}
-    #      echo -e "REPO_URL: [ ${REPO_URL} ]\nREPO_BRANCH: [ ${REPO_BRANCH} ]\nTAGS_NAME: [ ${TAGS_NAME} ]"
-
-
+      
     - name: Get info
       id: get_info
       run: |
@@ -146,6 +131,8 @@ jobs:
       SUBTARGET: ${{ needs.determine_targets.outputs.subtarget }}
       DEVICE_NAME: ${{ needs.determine_targets.outputs.device_name }}
       FILE_DATE: ${{ needs.determine_targets.outputs.file_date }}
+      REPO_URL: ${{ needs.determine_targets.outputs.repo_url }}
+      REPO_BRANCH: ${{ needs.determine_targets.outputs.repo_branch }}
 
     permissions:
       actions: write
