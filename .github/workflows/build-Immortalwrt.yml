@@ -23,7 +23,7 @@ on:
         options:
           - openwrt/openert@main
           - coolsnowwolf/lede@master
-          - immortalwrt/immortalwrt@master
+          - immortalwrt/immortalwrt@openwrt-23.05
           - hanwckf/immortalwrt-mt798x@openwrt-21.02
       config_name:
         description: 'Config file name'
@@ -32,6 +32,7 @@ on:
            - '.config7981'
            - 'mt7981-ax3000.config'
            - '.config7981.mtwifi-cfg'
+           - '.config360t7'
         default: '.config7981.mtwifi-cfg'
       use_prebuild_toolchain:
         type: boolean
