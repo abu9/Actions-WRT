@@ -286,7 +286,7 @@ jobs:
 
     - name: Upload prebuilt tools and external toolchain
       if: inputs.use_prebuild_toolchain && steps.restore-toolchain-cache.outputs.cache-hit != 'true'
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: ${{ env.TARGET }}-${{ env.SUBTARGET }}-external-toolchain
         path: openwrt/tools.tar
