@@ -1,0 +1,65 @@
+name: test
+on:
+  repository_dispatch:
+  workflow_dispatch:
+    inputs:
+      source_branch:
+        description: "Select the source branch"
+        type: boolean
+
+jobs:
+  push-toolchain-container:
+    name: Push Target Toolchain container
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          repository: abu9/actions-shared-workflows
+          sparse-checkout: .github/dockerfiles/Dockerfile.toolchain
+          sparse-checkout-cone-mode: false
+
+      - name: Download external toolchain from build job
+        uses: actions/download-artifact@v4
+        with:
+          name: mediatek-filogic-external-toolchain
+          repository: abu9/Actions-WRT
+          run-id: 9642167915
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Debug Session
+        if: inputs.source_branch
+        env:
+          TMATE_ENCRYPT_PASSWORD: ${{secrets.TMATE_ENCRYPT_PASSWORD}}
+          # HOME: "/root"
+        uses: tete1030/safe-debugger-action@master          
+
+      - name: Find external toolchain name
+        id: get-toolchain-name
+        run: |
+          TOOLCHAIN_NAME=$(ls bin/targets/mediatek/filogic/* | grep toolchain)
+          [ -n "$TOOLCHAIN_NAME" ] && echo "toolchain-name=$TOOLCHAIN_NAME" >> $GITHUB_OUTPUT
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: ghcr.io/abu9/toolchain:mediatek-filogic-immortalwrt_openwrt-23.05
+          file: .github/dockerfiles/Dockerfile.toolchain
+          build-args: |
+            OWNER_LC=abu9
+            CONTAINER_TAG=immortalwrt_openwrt-23.05
+            TOOLCHAIN_NAME=${{ steps.get-toolchain-name.outputs.toolchain-name }}

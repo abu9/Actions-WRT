@@ -1,4 +1,5 @@
 name: Build and Push prebuilt tools container
+run-name: Build and Push prebuilt tools container - ${{ inputs.source_branch }}/${{ inputs.config_name }}
 
 on:
     repository_dispatch:
@@ -25,7 +26,6 @@ on:
           default: '.config7981.mtwifi-cfg'
         build_tools:
           type: boolean
-          default: true
         build_toolchain:
           type: boolean 
           default: true

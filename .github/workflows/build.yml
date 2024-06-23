@@ -1,0 +1,89 @@
+name: Build WRT
+run-name: Build WRT - ${{ inputs.source_branch }}/${{ inputs.config_name }}
+
+on:
+  repository_dispatch:
+  workflow_dispatch:
+    inputs:
+      source_branch:
+        description: "Select the source branch"
+        type: choice
+        options:
+          - openwrt/openert@main
+          - coolsnowwolf/lede@master
+          - immortalwrt/immortalwrt@openwrt-23.05
+          - hanwckf/immortalwrt-mt798x@openwrt-21.02
+        default: 'immortalwrt/immortalwrt@openwrt-23.05'
+      config_name:
+        description: 'Config file name'
+        type: choice
+        options:
+           - '.config7981'
+           - 'mt7981-ax3000.config'
+           - '.config7981.mtwifi-cfg'
+           - '360t7-immortalwrt.conf'
+        default: '360t7-immortalwrt.conf'
+      build_toolchain:
+        type: boolean
+      debug:
+        type: boolean
+      build_kernel:
+        type: boolean
+      use_ccache_cache:
+        type: boolean   
+      build_full:
+        type: boolean
+        default: true
+      
+
+env:
+  REPO_URL: hanwckf/immortalwrt-mt798x
+  REPO_BRANCH: openwrt-21.02
+  FEEDS_CONF: 
+  CONFIG_FILE: ${{github.event.inputs.config_name || '.config7981'}}
+  DIY_P1_SH: diy-part1.sh
+  DIY_P2_SH: diy-part2.sh
+  UPLOAD_BIN_DIR: false
+  UPLOAD_FIRMWARE: true
+  UPLOAD_RELEASE: false
+  TZ: Asia/Shanghai
+
+permissions:
+  contents: read
+
+# concurrency:
+#   group: ${{ github.workflow }}-${{ github.ref }}-${{ inputs.source_branch }}
+#   cancel-in-progress: true
+
+jobs:
+  determine_targets:
+    name: Get target info
+    uses: ./.github/workflows/determine-targets.yml
+    with:
+      config_name: ${{ inputs.config_name }}
+      source_branch: ${{ inputs.source_branch }}
+
+  build-push-containers:
+    name: Build and Push all prebuilt containers
+    needs: determine_targets
+    permissions:
+      contents: read
+      packages: read
+      actions: write
+    uses: abu9/actions-shared-workflows/.github/workflows/reusable_build.yml@main
+    with:
+      target: ${{ needs.determine_targets.outputs.target }}
+      subtarget: ${{ needs.determine_targets.outputs.subtarget }}
+      repo_url: ${{ needs.determine_targets.outputs.repo_url }}
+      repo_branch: ${{ needs.determine_targets.outputs.repo_branch }}
+      author: ${{ needs.determine_targets.outputs.author }}
+      container_name: toolchain
+      build_kernel: ${{ inputs.build_kernel }}
+      build_full: ${{ inputs.build_full }}
+      build_toolchain: ${{ inputs.build_toolchain }}
+      debug: ${{ inputs.debug }}
+      config_name: ${{ inputs.config_name }}
+      ccache_type: packages
+      use_ccache_cache: ${{ inputs.use_ccache_cache }}
+
+    

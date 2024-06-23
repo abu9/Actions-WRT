@@ -176,9 +176,9 @@ jobs:
       working-directory: openwrt
       run: |
         tar -xf tools.tar
-        
+
         ./scripts/ext-tools.sh --refresh
-        
+
         echo CONFIG_DEVEL=y >> .config
         echo CONFIG_AUTOREMOVE=y >> .config
 
@@ -196,7 +196,7 @@ jobs:
       run: |
         make defconfig
         ./scripts/diffconfig.sh
-        
+
     - name: Download package
       working-directory: openwrt
       id: package

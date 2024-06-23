@@ -1,0 +1,25 @@
+From 96677be745db84c1f0da092e78b23a29131fecd3 Mon Sep 17 00:00:00 2001
+From: abu9 <2047272+abu9@users.noreply.github.com>
+Date: Fri, 28 Jun 2024 18:46:15 +0000
+Subject: [PATCH] fix default-settings depends
+
+---
+ package/emortal/default-settings/Makefile | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/package/emortal/default-settings/Makefile b/package/emortal/default-settings/Makefile
+index 65a6f52a06..f8bff20d6a 100644
+--- a/package/emortal/default-settings/Makefile
++++ b/package/emortal/default-settings/Makefile
+@@ -16,7 +16,7 @@ define Package/default-settings
+   SECTION:=luci
+   CATEGORY:=LuCI
+   TITLE:=LuCI support for Default Settings
+-  DEPENDS:=+luci
++  DEPENDS:=+uci
+   PKGARCH:=all
+ endef
+ 
+-- 
+2.34.1
+
