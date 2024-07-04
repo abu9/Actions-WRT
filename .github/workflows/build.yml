@@ -34,6 +34,11 @@ on:
       build_full:
         type: boolean
         default: true
+      container_name:
+        type: choice
+        options:
+          - 'tools'
+          - 'toolchain'
       
 
 env:
@@ -77,7 +82,7 @@ jobs:
       repo_url: ${{ needs.determine_targets.outputs.repo_url }}
       repo_branch: ${{ needs.determine_targets.outputs.repo_branch }}
       author: ${{ needs.determine_targets.outputs.author }}
-      container_name: toolchain
+      container_name: ${{ inputs.container_name }}
       build_kernel: ${{ inputs.build_kernel }}
       build_full: ${{ inputs.build_full }}
       build_toolchain: ${{ inputs.build_toolchain }}
