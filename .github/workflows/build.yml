@@ -22,6 +22,7 @@ on:
            - 'mt7981-ax3000.config'
            - '.config7981.mtwifi-cfg'
            - '360t7-immortalwrt.conf'
+           - '360t7-immortalwrt-uhttpd.conf'
         default: '360t7-immortalwrt.conf'
       build_toolchain:
         type: boolean
