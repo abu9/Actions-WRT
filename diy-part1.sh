@@ -16,12 +16,31 @@
 # Add a feed source
 # echo 'src-git kenzojell https://github.com/kenzok8/jell' >>feeds.conf.default
 
-# Function to clone a git repository sparsely
+# Function to handle file conflicts
+function handle_conflict() {
+    local localdir="$1"
+    if [ -d "$localdir" ]; then
+        if [ "$OVERWRITE_ALL" == "1" ]; then
+            rm -rf "$localdir"
+        else
+            read -p "Directory $localdir already exists. Overwrite? (y/n/all): " choice
+            case "$choice" in
+                y|Y ) rm -rf "$localdir" ;;
+                n|N ) echo "Skipping $localdir"; return 1 ;;
+                all|ALL ) rm -rf "$localdir"; export OVERWRITE_ALL=1 ;;
+                * ) echo "Invalid choice"; return 1 ;;
+            esac
+        fi
+    fi
+}
+
+# Function to clone a git repository sparsely with conflict checking
 function git_sparse_clone() {
     local branch="$1"
     local rurl="$2"
     local localdir="$3"
     shift 3
+    handle_conflict "$localdir" || return 1
     git clone -b "$branch" --depth 1 --filter=blob:none --sparse "$rurl" "$localdir"
     (
         cd "$localdir" || exit
@@ -32,16 +51,20 @@ function git_sparse_clone() {
     rm -rf "$localdir"
 }
 
-# Function to clone a git repository with depth 1
+# Function to clone a git repository with depth 1 with conflict checking
 function git_clone() {
+    local localdir=$(basename "$1" .git)
+    handle_conflict "$localdir" || return 1
     git clone --depth 1 --filter=blob:none "$1"
 }
 
 # Define custom feed path
 custom_feed_path="$PWD/customfeed"
 
-# Add custom feed source to feeds.conf.default if it exists
-[[ -s feeds.conf.default ]] && sed -i "1isrc-link custom $custom_feed_path" feeds.conf.default
+# Add custom feed source to feeds.conf.default if it doesn't already exist
+if ! grep -q "src-link custom $custom_feed_path" feeds.conf.default; then
+    sed -i "1isrc-link custom $custom_feed_path" feeds.conf.default
+fi
 
 # Create custom feed directory and navigate into it
 mkdir -p "$custom_feed_path" && cd "$custom_feed_path" || exit
