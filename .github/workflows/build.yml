@@ -12,6 +12,7 @@ on:
           - openwrt/openert@main
           - coolsnowwolf/lede@master
           - immortalwrt/immortalwrt@openwrt-23.05
+          - immortalwrt/immortalwrt@openwrt-24.10
           - hanwckf/immortalwrt-mt798x@openwrt-21.02
         default: 'immortalwrt/immortalwrt@openwrt-23.05'
       config_name:
