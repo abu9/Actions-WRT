@@ -83,7 +83,7 @@ mkdir -p "$custom_feed_path" && cd "$custom_feed_path" || exit
 
 # Clone specific packages and luci applications sparsely
 git_sparse_clone master "https://github.com/immortalwrt/packages" "immpkgs" lang/perl # fix perl compile issue with external-toolchain
-git_sparse_clone master "https://github.com/immortalwrt/luci" "immlucipkgs" applications/luci-app-filemanager
+git_sparse_clone master "https://github.com/immortalwrt/luci" "../feeds/luci" applications/luci-app-filemanager
 
 # Clone additional luci applications
 git_clone https://github.com/tty228/luci-app-wechatpush 
