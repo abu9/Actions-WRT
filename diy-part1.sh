@@ -27,7 +27,7 @@ function handle_conflict() {
             return 1
         else
             echo -n "Directory $localdir already exists. Overwrite? [Y] Yes  [A] Yes to All  [N] No  [L] No to All  [S] Suspend  [?] Help (default is \"Y\"): "
-            read choice
+            read -r choice
             case "$choice" in
                 Y|y ) rm -rf "$localdir" ;;
                 N|n ) echo "Skipping $localdir"; return 1 ;;
@@ -60,6 +60,7 @@ function git_sparse_clone() {
             mv -n "$path" "../$localdir/$path"
             # Update Makefile include paths if Makefile exists
             if [ -f "../$localdir/$path/Makefile" ]; then
+                # shellcheck disable=SC2016
                 sed -i 's|include ../../luci.mk|include $(TOPDIR)/feeds/luci/luci.mk|' "../$localdir/$path/Makefile"
             fi
         done
