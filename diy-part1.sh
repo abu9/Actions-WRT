@@ -20,9 +20,9 @@
 function handle_conflict() {
     local localdir="$1"
     if [ -d "$localdir" ]; then
-        if [ "$OVERWRITE_ALL" == "1" ]; then
+        if (("$OVERWRITE_ALL" == "1")); then
             rm -rf "$localdir"
-        elif [ "$SKIP_ALL" == "1" ]; then
+        elif (("$SKIP_ALL" == "1")); then
             echo "Skipping $localdir"
             return 1
         else
@@ -57,14 +57,14 @@ function git_sparse_clone() {
         for path in "$@"; do
             mkdir -p "../$localdir/$(dirname "$path")"
             mv -n "$path" "../$localdir/$path"
+            # Update Makefile include paths if Makefile exists
+            if [ -f "../$localdir/$path/Makefile" ]; then
+                sed -i 's|include ../../luci.mk|include $(TOPDIR)/feeds/luci/luci.mk|' "../$localdir/$path/Makefile"
+            fi
         done
     )
     echo "Cleaning up temporary directory $tempdir"
     rm -rf "$tempdir"
-    # Update Makefile include paths
-    if [ -f "$localdir/Makefile" ]; then
-        sed -i 's|include ../../luci.mk|include $(TOPDIR)/feeds/luci/luci.mk|' "$localdir/Makefile"
-    fi
 }
 
 # Function to clone a git repository with depth 1 with conflict checking
