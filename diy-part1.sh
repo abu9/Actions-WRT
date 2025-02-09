@@ -51,7 +51,7 @@ function git_sparse_clone() {
         mv -n "$@" "../$localdir/"
     )
     rm -rf "$tempdir"
-
+}
 # Function to clone a git repository with depth 1 with conflict checking
 function git_clone() {
     local localdir=$(basename "$1" .git)
