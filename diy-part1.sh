@@ -26,13 +26,14 @@ function handle_conflict() {
             echo "Skipping $localdir"
             return 1
         else
-            echo -n "Directory $localdir already exists. Overwrite? (yes/no/yes all/no all): "
+            echo -n "Directory $localdir already exists. Overwrite? [Y] Yes  [A] Yes to All  [N] No  [L] No to All  [S] Suspend  [?] Help (default is \"Y\"): "
             read choice
             case "$choice" in
-                yes|YES|y|Y ) rm -rf "$localdir" ;;
-                no|NO|n|N ) echo "Skipping $localdir"; return 1 ;;
-                "yes all"|"YES ALL"|"y all"|"Y ALL" ) rm -rf "$localdir"; export OVERWRITE_ALL=1 ;;
-                "no all"|"NO ALL"|"n all"|"N ALL" ) echo "Skipping $localdir"; export SKIP_ALL=1; return 1 ;;
+                Y|y ) rm -rf "$localdir" ;;
+                N|n ) echo "Skipping $localdir"; return 1 ;;
+                A|a ) rm -rf "$localdir"; export OVERWRITE_ALL=1 ;;
+                L|l ) echo "Skipping $localdir"; export SKIP_ALL=1; return 1 ;;
+                S|s ) echo "Suspending script"; exit 1 ;;
                 * ) echo "Invalid choice"; return 1 ;;
             esac
         fi
