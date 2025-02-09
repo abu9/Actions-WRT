@@ -39,17 +39,18 @@ function git_sparse_clone() {
     local branch="$1"
     local rurl="$2"
     local localdir="$3"
+    local tempdir="${localdir}_temp"
     shift 3
     handle_conflict "$localdir" || return 1
-    git clone -b "$branch" --depth 1 --filter=blob:none --sparse "$rurl" "$localdir"
+    git clone -b "$branch" --depth 1 --filter=blob:none --sparse "$rurl" "$tempdir"
     (
-        cd "$localdir" || exit
+        cd "$tempdir" || exit
         git sparse-checkout init --cone
         git sparse-checkout set "$@"
-        mv -n "$@" ../
+        mkdir -p "../$localdir"
+        mv -n "$@" "../$localdir/"
     )
-    rm -rf "$localdir"
-}
+    rm -rf "$tempdir"
 
 # Function to clone a git repository with depth 1 with conflict checking
 function git_clone() {
