@@ -20,9 +20,9 @@
 function handle_conflict() {
     local localdir="$1"
     if [ -d "$localdir" ]; then
-        if (("$OVERWRITE_ALL" == "1")); then
+        if [ "$OVERWRITE_ALL" == "1" ]; then
             rm -rf "$localdir"
-        elif (("$SKIP_ALL" == "1")); then
+        elif [ "$SKIP_ALL" == "1" ]; then
             echo "Skipping $localdir"
             return 1
         else
