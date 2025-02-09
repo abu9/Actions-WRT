@@ -22,12 +22,17 @@ function handle_conflict() {
     if [ -d "$localdir" ]; then
         if [ "$OVERWRITE_ALL" == "1" ]; then
             rm -rf "$localdir"
+        elif [ "$SKIP_ALL" == "1" ]; then
+            echo "Skipping $localdir"
+            return 1
         else
-            read -p "Directory $localdir already exists. Overwrite? (y/n/all): " choice
+            echo -n "Directory $localdir already exists. Overwrite? (yes/no/yes all/no all): "
+            read choice
             case "$choice" in
-                y|Y ) rm -rf "$localdir" ;;
-                n|N ) echo "Skipping $localdir"; return 1 ;;
-                all|ALL ) rm -rf "$localdir"; export OVERWRITE_ALL=1 ;;
+                yes|YES|y|Y ) rm -rf "$localdir" ;;
+                no|NO|n|N ) echo "Skipping $localdir"; return 1 ;;
+                "yes all"|"YES ALL"|"y all"|"Y ALL" ) rm -rf "$localdir"; export OVERWRITE_ALL=1 ;;
+                "no all"|"NO ALL"|"n all"|"N ALL" ) echo "Skipping $localdir"; export SKIP_ALL=1; return 1 ;;
                 * ) echo "Invalid choice"; return 1 ;;
             esac
         fi
@@ -42,16 +47,22 @@ function git_sparse_clone() {
     local tempdir="${localdir}_temp"
     shift 3
     handle_conflict "$localdir" || return 1
-    git clone -b "$branch" --depth 1 --filter=blob:none --sparse "$rurl" "$tempdir"
+    echo "Cloning into temporary directory $tempdir"
+    git clone -b "$branch" --depth 1 --filter=blob:none --sparse "$rurl" "$tempdir" || { echo "Clone failed"; rm -rf "$tempdir"; return 1; }
     (
-        cd "$tempdir" || exit
+        cd "$tempdir" || { echo "Failed to enter directory $tempdir"; rm -rf "$tempdir"; return 1; }
         git sparse-checkout init --cone
         git sparse-checkout set "$@"
         mkdir -p "../$localdir"
-        mv -n "$@" "../$localdir/"
+        for path in "$@"; do
+            mkdir -p "../$localdir/$(dirname "$path")"
+            mv -n "$path" "../$localdir/$path"
+        done
     )
+    echo "Cleaning up temporary directory $tempdir"
     rm -rf "$tempdir"
 }
+
 # Function to clone a git repository with depth 1 with conflict checking
 function git_clone() {
     local localdir=$(basename "$1" .git)
