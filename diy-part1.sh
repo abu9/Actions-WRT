@@ -61,6 +61,10 @@ function git_sparse_clone() {
     )
     echo "Cleaning up temporary directory $tempdir"
     rm -rf "$tempdir"
+    # Update Makefile include paths
+    if [ -f "$localdir/Makefile" ]; then
+        sed -i 's|include ../../luci.mk|include $(TOPDIR)/feeds/luci/luci.mk|' "$localdir/Makefile"
+    fi
 }
 
 # Function to clone a git repository with depth 1 with conflict checking
