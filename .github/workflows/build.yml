@@ -24,6 +24,7 @@ on:
            - '.config7981.mtwifi-cfg'
            - '360t7-immortalwrt.conf'
            - '360t7-immortalwrt-uhttpd.conf'
+           - '360t7-immortalwrt-24.10.conf'
         default: '360t7-immortalwrt.conf'
       build_toolchain:
         type: boolean
