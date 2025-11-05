@@ -14,6 +14,7 @@ on:
             - openwrt/openwrt@main
             - coolsnowwolf/lede@master
             - immortalwrt/immortalwrt@openwrt-23.05
+            - immortalwrt/immortalwrt@openwrt-24.10
             - hanwckf/immortalwrt-mt798x@openwrt-21.02
         config_name:
           description: 'Config file name'
@@ -23,6 +24,7 @@ on:
               - 'mt7981-ax3000.config'
               - '.config7981.mtwifi-cfg'
               - '360t7-immortalwrt.conf'
+              - '360t7-immortalwrt-24.10.conf'
           default: '.config7981.mtwifi-cfg'
         build_tools:
           type: boolean
