@@ -20,17 +20,18 @@ on:
         description: 'Config file name'
         type: choice
         options:
-           - '.config7981'
-           - 'mt7981-ax3000.config'
-           - '.config7981.mtwifi-cfg'
-           - '360t7-immortalwrt.conf'
-           - '360t7-immortalwrt-uhttpd.conf'
-           - '360t7-immortalwrt-24.10.conf'
-           - '360t7-immortalwrt-25.12-ubi.conf'
+          - '.config7981'
+          - 'mt7981-ax3000.config'
+          - '.config7981.mtwifi-cfg'
+          - '360t7-immortalwrt.conf'
+          - '360t7-immortalwrt-uhttpd.conf'
+          - '360t7-immortalwrt-24.10.conf'
+          - '360t7-immortalwrt-25.12-ubi.conf'
         default: '360t7-immortalwrt-25.12-ubi.conf'
       build_toolchain:
+        description: 'Build the target toolchain from source; disable to use the official prebuilt toolchain/SDK when available'
         type: boolean
-        default: true
+        default: false
       debug:
         type: boolean
       build_kernel:
@@ -71,9 +72,81 @@ jobs:
       config_name: ${{ inputs.config_name }}
       source_branch: ${{ inputs.source_branch }}
 
-  build-tools-container:
-    name: Build and Push tools container
+  check_tools_container:
+    name: Check whether a tools container is needed
     needs: determine_targets
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: read
+    outputs:
+      tools_required: ${{ steps.check.outputs.tools_required }}
+      checked_image: ${{ steps.check.outputs.checked_image }}
+    steps:
+      - name: Check GHCR manifest
+        id: check
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          OWNER: ${{ github.repository_owner }}
+          AUTHOR: ${{ needs.determine_targets.outputs.author }}
+          REPO_BRANCH: ${{ needs.determine_targets.outputs.repo_branch }}
+          TARGET: ${{ needs.determine_targets.outputs.target }}
+          SUBTARGET: ${{ needs.determine_targets.outputs.subtarget }}
+          CONTAINER_NAME: ${{ inputs.container_name }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          OWNER_LC="${OWNER,,}"
+          TAG="${AUTHOR}_${REPO_BRANCH}"
+
+          TOKEN="$(curl --fail --silent --show-error --user "${GITHUB_ACTOR}:${GITHUB_TOKEN}" \
+            "https://ghcr.io/token?scope=repository:${OWNER_LC}/tools:pull" | jq -r '.token // .access_token // empty')"
+          if [ -z "$TOKEN" ]; then
+            echo "Unable to obtain a GHCR pull token." >&2
+            exit 1
+          fi
+
+          check_manifest() {
+            local image="$1"
+            local tag="$2"
+            local status
+            status="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
+              --header "Authorization: Bearer $TOKEN" \
+              --header 'Accept: application/vnd.oci.image.index.v1+json, application/vnd.docker.distribution.manifest.list.v2+json, application/vnd.oci.image.manifest.v1+json, application/vnd.docker.distribution.manifest.v2+json' \
+              "https://ghcr.io/v2/${OWNER_LC}/${image}/manifests/${tag}")"
+            case "$status" in
+              200) return 0 ;;
+              404) return 1 ;;
+              *) echo "GHCR manifest check failed for ${image}:${tag} (HTTP $status)." >&2; exit 1 ;;
+            esac
+          }
+
+          # If the target-specific toolchain image exists, reusable_build will use it
+          # directly and does not need the generic tools image.
+          if [ "$CONTAINER_NAME" = "toolchain" ]; then
+            TOOLCHAIN_TAG="${TARGET}-${SUBTARGET}-${TAG}"
+            if check_manifest toolchain "$TOOLCHAIN_TAG"; then
+              echo "Existing target toolchain image found: ghcr.io/${OWNER_LC}/toolchain:${TOOLCHAIN_TAG}"
+              echo "tools_required=false" >> "$GITHUB_OUTPUT"
+              echo "checked_image=toolchain:${TOOLCHAIN_TAG}" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+          fi
+
+          if check_manifest tools "$TAG"; then
+            echo "Existing tools image found: ghcr.io/${OWNER_LC}/tools:${TAG}"
+            echo "tools_required=false" >> "$GITHUB_OUTPUT"
+            echo "checked_image=tools:${TAG}" >> "$GITHUB_OUTPUT"
+          else
+            echo "Tools image is missing: ghcr.io/${OWNER_LC}/tools:${TAG}"
+            echo "tools_required=true" >> "$GITHUB_OUTPUT"
+            echo "checked_image=tools:${TAG}" >> "$GITHUB_OUTPUT"
+          fi
+
+  build_tools_container:
+    name: Build and Push tools container (only when missing)
+    needs: [determine_targets, check_tools_container]
+    if: needs.check_tools_container.outputs.tools_required == 'true'
     permissions:
       contents: read
       packages: write
@@ -85,14 +158,20 @@ jobs:
       build_tools: true
       build_toolchain: false
 
-  build-firmware:
+  build_firmware:
     name: Build firmware
-    needs: [determine_targets, build-tools-container]
+    needs: [determine_targets, check_tools_container, build_tools_container]
+    if: >-
+      ${{ always() &&
+          needs.determine_targets.result == 'success' &&
+          needs.check_tools_container.result == 'success' &&
+          (needs.build_tools_container.result == 'success' ||
+           needs.build_tools_container.result == 'skipped') }}
     permissions:
       contents: read
       packages: read
       actions: write
-    uses: abu9/actions-shared-workflows/.github/workflows/reusable_build.yml@main
+    uses: ./.github/workflows/reusable_build.yml
     with:
       target: ${{ needs.determine_targets.outputs.target }}
       subtarget: ${{ needs.determine_targets.outputs.subtarget }}
