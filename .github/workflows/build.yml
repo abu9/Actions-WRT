@@ -15,7 +15,7 @@ on:
           - immortalwrt/immortalwrt@openwrt-24.10
           - immortalwrt/immortalwrt@openwrt-25.12
           - hanwckf/immortalwrt-mt798x@openwrt-21.02
-        default: 'immortalwrt/immortalwrt@openwrt-23.05'
+        default: 'immortalwrt/immortalwrt@openwrt-25.12'
       config_name:
         description: 'Config file name'
         type: choice
@@ -27,7 +27,7 @@ on:
            - '360t7-immortalwrt-uhttpd.conf'
            - '360t7-immortalwrt-24.10.conf'
            - '360t7-immortalwrt-25.12-ubi.conf'
-        default: '360t7-immortalwrt.conf'
+        default: '360t7-immortalwrt-25.12-ubi.conf'
       build_toolchain:
         type: boolean
       debug:
