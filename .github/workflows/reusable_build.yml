@@ -156,21 +156,26 @@ jobs:
             TOOLCHAIN_TAG="${TARGET}-${SUBTARGET}-${CONTAINER_TAG}"
             TOKEN="$(curl --fail --silent --show-error --user "${GHCR_USER}:${GHCR_PASSWORD}" \
               "https://ghcr.io/token?scope=repository:${GHCR_OWNER}/toolchain:pull" | jq -r '.token // .access_token // empty')"
-            if [ -n "$TOKEN" ]; then
-              STATUS="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
-                --header "Authorization: Bearer $TOKEN" \
-                --header 'Accept: application/vnd.oci.image.index.v1+json, application/vnd.docker.distribution.manifest.list.v2+json, application/vnd.oci.image.manifest.v1+json, application/vnd.docker.distribution.manifest.v2+json' \
-                "https://ghcr.io/v2/${GHCR_OWNER}/toolchain/manifests/${TOOLCHAIN_TAG}")"
-            else
-              STATUS="000"
+            if [ -z "$TOKEN" ]; then
+              echo "Unable to obtain a GHCR pull token for the target toolchain image." >&2
+              exit 1
             fi
+            STATUS="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
+              --header "Authorization: Bearer $TOKEN" \
+              --header 'Accept: application/vnd.oci.image.index.v1+json, application/vnd.docker.distribution.manifest.list.v2+json, application/vnd.oci.image.manifest.v1+json, application/vnd.docker.distribution.manifest.v2+json' \
+              "https://ghcr.io/v2/${GHCR_OWNER}/toolchain/manifests/${TOOLCHAIN_TAG}")"
 
-            if [ "$STATUS" = "200" ]; then
-              CONTAINER_TAG="$TOOLCHAIN_TAG"
-            else
-              echo "Target toolchain image unavailable (HTTP $STATUS); falling back to tools image."
-              CONTAINER_NAME=tools
-            fi
+            case "$STATUS" in
+              200) CONTAINER_TAG="$TOOLCHAIN_TAG" ;;
+              404)
+                echo "Target toolchain image not found; falling back to tools image."
+                CONTAINER_NAME=tools
+                ;;
+              *)
+                echo "GHCR target toolchain manifest check failed (HTTP $STATUS)." >&2
+                exit 1
+                ;;
+            esac
           fi
 
           echo "Container to use: $CONTAINER_NAME:$CONTAINER_TAG"
