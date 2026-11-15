@@ -2,45 +2,54 @@ name: Build and Push prebuilt tools container
 run-name: Build and Push prebuilt tools container - ${{ inputs.source_branch }}/${{ inputs.config_name }}
 
 on:
-    repository_dispatch:
-    workflow_dispatch:
-      inputs:
-        source_branch:
-          description: "Select the source branch"
-          required: false
-          default: 'hanwckf/immortalwrt-mt798x@openwrt-21.02'
-          type: choice
-          options:
-            - openwrt/openwrt@main
-            - coolsnowwolf/lede@master
-            - immortalwrt/immortalwrt@openwrt-23.05
-            - immortalwrt/immortalwrt@openwrt-24.10
-            - hanwckf/immortalwrt-mt798x@openwrt-21.02
-        config_name:
-          description: 'Config file name'
-          type: choice
-          options:
-              - '.config7981'
-              - 'mt7981-ax3000.config'
-              - '.config7981.mtwifi-cfg'
-              - '360t7-immortalwrt.conf'
-              - '360t7-immortalwrt-24.10.conf'
-          default: '.config7981.mtwifi-cfg'
-        build_tools:
-          type: boolean
-        build_toolchain:
-          type: boolean 
-          default: true
-    workflow_call:
-#   push:
-#     paths:
-#       - 'include/version.mk'
-#       - 'include/cmake.mk'
-#       - 'tools/**'
-#       - '.github/workflows/push-containers.yml'
-#       - 'toolchain/**'
-#     branches-ignore:
-#       - master
+  repository_dispatch:
+  workflow_dispatch:
+    inputs:
+      source_branch:
+        description: "Select the source branch"
+        required: false
+        default: 'immortalwrt/immortalwrt@openwrt-25.12'
+        type: choice
+        options:
+          - openwrt/openwrt@main
+          - coolsnowwolf/lede@master
+          - immortalwrt/immortalwrt@openwrt-23.05
+          - immortalwrt/immortalwrt@openwrt-24.10
+          - immortalwrt/immortalwrt@openwrt-25.12
+          - hanwckf/immortalwrt-mt798x@openwrt-21.02
+      config_name:
+        description: 'Config file name'
+        type: choice
+        options:
+          - '.config7981'
+          - 'mt7981-ax3000.config'
+          - '.config7981.mtwifi-cfg'
+          - '360t7-immortalwrt.conf'
+          - '360t7-immortalwrt-24.10.conf'
+          - '360t7-immortalwrt-25.12-ubi.conf'
+        default: '360t7-immortalwrt-25.12-ubi.conf'
+      build_tools:
+        description: 'Build and push the tools container'
+        type: boolean
+        default: true
+      build_toolchain:
+        description: 'Build and push the target toolchain container'
+        type: boolean
+        default: false
+  workflow_call:
+    inputs:
+      source_branch:
+        required: true
+        type: string
+      config_name:
+        required: true
+        type: string
+      build_tools:
+        type: boolean
+        default: true
+      build_toolchain:
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -58,7 +67,7 @@ jobs:
       source_branch: ${{ inputs.source_branch }}
 
   build-push-containers:
-    name: Build and Push all prebuilt containers
+    name: Build and Push tools container
     needs: determine_targets
     permissions:
       contents: read
