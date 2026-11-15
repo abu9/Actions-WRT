@@ -499,8 +499,8 @@ jobs:
         run: |
           set -euo pipefail
 
-          TARGET_PATH="${{ env.DOWNLOADSERVER }}/${{ env.TOOLCHAIN_PATH }}/targets/${{ inputs.target }}/${{ inputs.subtarget }}"
-          curl --fail --silent --show-error --location --retry 3 "$TARGET_PATH/${{ env.TOOLCHAIN_ARCHIVE }}" -o "${{ env.TOOLCHAIN_ARCHIVE }}"
+          TARGET_PATH="$DOWNLOADSERVER/$TOOLCHAIN_PATH/targets/${{ inputs.target }}/${{ inputs.subtarget }}"
+          curl --fail --silent --show-error --location --retry 3 "$TARGET_PATH/$TOOLCHAIN_ARCHIVE" -o "$TOOLCHAIN_ARCHIVE"
           curl --fail --silent --show-error --location --retry 3 "$TARGET_PATH/sha256sums" -o sha256sums
 
           SIGNATURE=""
@@ -516,13 +516,13 @@ jobs:
           fi
 
           gpg --verify "$SIGNATURE" sha256sums
-          grep -F "  ${{ env.TOOLCHAIN_ARCHIVE }}" sha256sums | sha256sum --check -
-          case "${{ env.TOOLCHAIN_ARCHIVE }}" in
-            *.tar.zst) tar --zstd -xf "${{ env.TOOLCHAIN_ARCHIVE }}" ;;
-            *.tar.xz)  tar -xJf "${{ env.TOOLCHAIN_ARCHIVE }}" ;;
+          grep -F "  $TOOLCHAIN_ARCHIVE" sha256sums | sha256sum --check -
+          case "$TOOLCHAIN_ARCHIVE" in
+            *.tar.zst) tar --zstd -xf "$TOOLCHAIN_ARCHIVE" ;;
+            *.tar.xz)  tar -xJf "$TOOLCHAIN_ARCHIVE" ;;
             *) echo "Unsupported official toolchain archive format" >&2; exit 1 ;;
           esac
-          rm -f "${{ env.TOOLCHAIN_ARCHIVE }}" sha256sums "$SIGNATURE"
+          rm -f "$TOOLCHAIN_ARCHIVE" sha256sums "$SIGNATURE"
 
       - name: Clean configuration
         shell: su buildbot -c "sh -e {0}"
@@ -623,7 +623,7 @@ jobs:
           echo CONFIG_AUTOREMOVE=y >> .config
 
           ./scripts/ext-toolchain.sh \
-            --toolchain ${{ env.TOOLCHAIN_FILE }}/toolchain-* \
+            --toolchain $TOOLCHAIN_FILE/toolchain-* \
             --overwrite-config \
             --config ${{ inputs.target }}/${{ inputs.subtarget }}
 
@@ -632,7 +632,7 @@ jobs:
         shell: su buildbot -c "sh -e {0}"
         working-directory: openwrt
         run: |
-          TOOLCHAIN_DIR=${{ env.TOOLCHAIN_FILE }}/staging_dir/$(ls ${{ env.TOOLCHAIN_FILE }}/staging_dir | grep toolchain)
+          TOOLCHAIN_DIR=$TOOLCHAIN_FILE/staging_dir/$(ls $TOOLCHAIN_FILE/staging_dir | grep toolchain)
           TOOLCHAIN_BIN=$TOOLCHAIN_DIR/bin
           OPENWRT_DIR=$(pwd)
 
@@ -664,7 +664,7 @@ jobs:
           echo CONFIG_AUTOREMOVE=y >> .config
 
           ./scripts/ext-toolchain.sh \
-            --toolchain ${{ env.TOOLCHAIN_FILE }}/staging_dir/toolchain-* \
+            --toolchain $TOOLCHAIN_FILE/staging_dir/toolchain-* \
             --overwrite-config \
             --config ${{ inputs.target }}/${{ inputs.subtarget }}
 
