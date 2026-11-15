@@ -106,6 +106,10 @@ jobs:
       device_name: ${{ steps.get_info.outputs.device_name }}
       file_date: ${{ steps.get_info.outputs.file_date }}
 
+    permissions:
+      contents: read
+      packages: read
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -130,25 +134,45 @@ jobs:
       # you need to use for the branch name a prefix of openwrt-[0-9][0-9].[0-9][0-9]-
       - name: Determine container name
         id: determine_container_name
+        env:
+          GHCR_USER: ${{ github.actor }}
+          GHCR_PASSWORD: ${{ secrets.GITHUB_TOKEN }}
+          GHCR_OWNER: ${{ steps.lower_owner.outputs.owner_lc }}
+          TARGET: ${{ inputs.target }}
+          SUBTARGET: ${{ inputs.subtarget }}
+          AUTHOR: ${{ inputs.author }}
+          REPO_BRANCH: ${{ inputs.repo_branch }}
+          REQUESTED_CONTAINER: ${{ inputs.container_name }}
+        shell: bash
         run: |
-          CONTAINER_NAME=${{ inputs.container_name }}
-          CONTAINER_TAG=${{ inputs.author }}_${{ inputs.repo_branch }}
+          set -euo pipefail
+          CONTAINER_NAME="$REQUESTED_CONTAINER"
+          CONTAINER_TAG="${AUTHOR}_${REPO_BRANCH}"
 
           if [ "$CONTAINER_NAME" = "toolchain" ]; then
-            GHCR_TOKEN=$(echo ${{ secrets.GITHUB_TOKEN }} | base64)
-            GHCR_HEADER="Authorization: Bearer ${GHCR_TOKEN}"
-            GHCR_MANIFEST_LINK=https://ghcr.io/v2/${{ steps.lower_owner.outputs.owner_lc }}/${{ inputs.container_name }}/manifests/${{ inputs.target }}-${{ inputs.subtarget }}-"$CONTAINER_TAG"
-            # Check if container exist
-            if [ $(curl -s -o /dev/null -w "%{http_code}" -H "$GHCR_HEADER" -I "$GHCR_MANIFEST_LINK") = 200 ]; then
-              CONTAINER_TAG=${{ inputs.target }}-${{ inputs.subtarget }}-"$CONTAINER_TAG"
+            TOOLCHAIN_TAG="${TARGET}-${SUBTARGET}-${CONTAINER_TAG}"
+            TOKEN="$(curl --fail --silent --show-error --user "${GHCR_USER}:${GHCR_PASSWORD}" \
+              "https://ghcr.io/token?scope=repository:${GHCR_OWNER}/toolchain:pull" | jq -r '.token // .access_token // empty')"
+            if [ -n "$TOKEN" ]; then
+              STATUS="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
+                --header "Authorization: Bearer $TOKEN" \
+                --header 'Accept: application/vnd.oci.image.index.v1+json, application/vnd.docker.distribution.manifest.list.v2+json, application/vnd.oci.image.manifest.v1+json, application/vnd.docker.distribution.manifest.v2+json' \
+                "https://ghcr.io/v2/${GHCR_OWNER}/toolchain/manifests/${TOOLCHAIN_TAG}")"
             else
+              STATUS="000"
+            fi
+
+            if [ "$STATUS" = "200" ]; then
+              CONTAINER_TAG="$TOOLCHAIN_TAG"
+            else
+              echo "Target toolchain image unavailable (HTTP $STATUS); falling back to tools image."
               CONTAINER_NAME=tools
             fi
           fi
 
-          echo "Tools container to use $CONTAINER_NAME:$CONTAINER_TAG"
-          echo "container_tag=$CONTAINER_TAG" >> $GITHUB_OUTPUT
-          echo "container_name=$CONTAINER_NAME:$CONTAINER_TAG" >> $GITHUB_OUTPUT
+          echo "Container to use: $CONTAINER_NAME:$CONTAINER_TAG"
+          echo "container_tag=$CONTAINER_TAG" >> "$GITHUB_OUTPUT"
+          echo "container_name=$CONTAINER_NAME:$CONTAINER_TAG" >> "$GITHUB_OUTPUT"
 
       - name: Determine container
         id: determine_container
