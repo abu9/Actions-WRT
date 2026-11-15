@@ -29,11 +29,11 @@ on:
           - '360t7-immortalwrt-25.12-ubi.conf'
         default: '360t7-immortalwrt-25.12-ubi.conf'
       build_tools:
-        description: 'Build and push the tools container'
+        description: 'Build and push the generic host-tools container'
         type: boolean
         default: true
       build_toolchain:
-        description: 'Build and push the target toolchain container'
+        description: 'Also build and push a target-specific toolchain container'
         type: boolean
         default: false
   workflow_call:
@@ -66,19 +66,153 @@ jobs:
       config_name: ${{ inputs.config_name }}
       source_branch: ${{ inputs.source_branch }}
 
-  build-push-containers:
-    name: Build and Push tools container
+  determine_container_info:
+    name: Determine tools image tag
+    needs: determine_targets
+    runs-on: ubuntu-latest
+    outputs:
+      owner_lc: ${{ steps.info.outputs.owner_lc }}
+      container_tag: ${{ steps.info.outputs.container_tag }}
+    steps:
+      - name: Determine owner and tag
+        id: info
+        env:
+          AUTHOR: ${{ needs.determine_targets.outputs.author }}
+          REPO_BRANCH: ${{ needs.determine_targets.outputs.repo_branch }}
+          OWNER: ${{ github.repository_owner }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          OWNER_LC="${OWNER,,}"
+          TAG=latest
+          if [[ "${GITHUB_REF_TYPE}" == "branch" && "$REPO_BRANCH" =~ (openwrt-[0-9][0-9]\.[0-9][0-9]) ]]; then
+            TAG="${BASH_REMATCH[1]}"
+          fi
+          CONTAINER_TAG="${AUTHOR}_${TAG}"
+          echo "owner_lc=$OWNER_LC" >> "$GITHUB_OUTPUT"
+          echo "container_tag=$CONTAINER_TAG" >> "$GITHUB_OUTPUT"
+          echo "Will publish ghcr.io/$OWNER_LC/tools:$CONTAINER_TAG"
+
+  build-linux-buildbot:
+    name: Build host tools with upstream buildbot
+    if: ${{ !cancelled() && inputs.build_tools == true }}
     needs: determine_targets
     permissions:
       contents: read
-      packages: write
+      packages: read
       actions: write
-    uses: abu9/actions-shared-workflows/.github/workflows/push-containers.yml@main
+    uses: abu9/actions-shared-workflows/.github/workflows/reusable_build-tools.yml@main
+    with:
+      generate_prebuilt_artifacts: true
+      repo_url: ${{ needs.determine_targets.outputs.repo_url }}
+      repo_branch: ${{ needs.determine_targets.outputs.repo_branch }}
+
+  push-tools-container:
+    name: Push generic host-tools image
+    if: ${{ !cancelled() && inputs.build_tools == true && needs.build-linux-buildbot.result == 'success' }}
+    needs: [determine_container_info, build-linux-buildbot]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout shared Dockerfile from its default branch
+        uses: actions/checkout@v4
+        with:
+          repository: abu9/actions-shared-workflows
+          ref: main
+          sparse-checkout: .github/dockerfiles/Dockerfile.tools
+          sparse-checkout-cone-mode: false
+
+      - name: Download prebuilt tools
+        uses: actions/download-artifact@v4
+        with:
+          name: linux-buildbot-prebuilt-tools
+
+      - name: Extract prebuilt tools
+        run: tar -xf tools.tar
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push tools image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: ghcr.io/${{ needs.determine_container_info.outputs.owner_lc }}/tools:${{ needs.determine_container_info.outputs.container_tag }}
+          file: .github/dockerfiles/Dockerfile.tools
+
+  build-target-toolchain:
+    name: Build target-specific toolchain
+    if: ${{ !cancelled() && inputs.build_toolchain == true && inputs.build_tools == true }}
+    needs: [determine_targets, push-tools-container]
+    permissions:
+      contents: read
+      packages: read
+      actions: write
+    uses: ./.github/workflows/reusable_build.yml
     with:
       target: ${{ needs.determine_targets.outputs.target }}
       subtarget: ${{ needs.determine_targets.outputs.subtarget }}
       repo_url: ${{ needs.determine_targets.outputs.repo_url }}
       repo_branch: ${{ needs.determine_targets.outputs.repo_branch }}
       author: ${{ needs.determine_targets.outputs.author }}
-      build_tools: ${{ inputs.build_tools }}
-      build_toolchain: ${{ inputs.build_toolchain }}
+      container_name: tools
+      build_toolchain: true
+      build_external_toolchain: true
+      upload_external_toolchain: true
+
+  push-target-toolchain:
+    name: Push target-specific toolchain image
+    if: ${{ !cancelled() && needs.build-target-toolchain.outputs.push == 'true' }}
+    needs: [determine_targets, determine_container_info, build-target-toolchain]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout shared Dockerfile from its default branch
+        uses: actions/checkout@v4
+        with:
+          repository: abu9/actions-shared-workflows
+          ref: main
+          sparse-checkout: .github/dockerfiles/Dockerfile.toolchain
+          sparse-checkout-cone-mode: false
+
+      - name: Download external toolchain artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ needs.determine_targets.outputs.target }}-${{ needs.determine_targets.outputs.subtarget }}-external-toolchain
+
+      - name: Determine toolchain archive name
+        id: get-toolchain-name
+        shell: bash
+        run: |
+          set -euo pipefail
+          TOOLCHAIN_NAME="$(find . -maxdepth 1 -type f -name '*toolchain*' -printf '%f\n' | head -n1)"
+          test -n "$TOOLCHAIN_NAME"
+          echo "toolchain_name=$TOOLCHAIN_NAME" >> "$GITHUB_OUTPUT"
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push target toolchain image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: ghcr.io/${{ needs.determine_container_info.outputs.owner_lc }}/toolchain:${{ needs.determine_targets.outputs.target }}-${{ needs.determine_targets.outputs.subtarget }}-${{ needs.determine_container_info.outputs.container_tag }}
+          file: .github/dockerfiles/Dockerfile.toolchain
+          build-args: |
+            OWNER_LC=${{ needs.determine_container_info.outputs.owner_lc }}
+            CONTAINER_TAG=${{ needs.determine_container_info.outputs.container_tag }}
+            TOOLCHAIN_NAME=${{ steps.get-toolchain-name.outputs.toolchain_name }}
