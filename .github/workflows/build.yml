@@ -30,17 +30,20 @@ on:
         default: '360t7-immortalwrt-25.12-ubi.conf'
       build_toolchain:
         type: boolean
+        default: true
       debug:
         type: boolean
       build_kernel:
         type: boolean
       use_ccache_cache:
-        type: boolean   
+        type: boolean
+        default: true   
       build_full:
         type: boolean
         default: true
       container_name:
         type: choice
+        default: 'tools'
         options:
           - 'tools'
           - 'toolchain'
