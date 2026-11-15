@@ -99,19 +99,19 @@ jobs:
           OWNER_LC="${OWNER,,}"
           TAG="${AUTHOR}_${REPO_BRANCH}"
 
-          TOKEN="$(curl --fail --silent --show-error --user "${GITHUB_ACTOR}:${GITHUB_TOKEN}" \
-            "https://ghcr.io/token?scope=repository:${OWNER_LC}/tools:pull" | jq -r '.token // .access_token // empty')"
-          if [ -z "$TOKEN" ]; then
-            echo "Unable to obtain a GHCR pull token." >&2
-            exit 1
-          fi
-
           check_manifest() {
             local image="$1"
             local tag="$2"
+            local token
             local status
+            token="$(curl --fail --silent --show-error --user "${GITHUB_ACTOR}:${GITHUB_TOKEN}" \
+              "https://ghcr.io/token?scope=repository:${OWNER_LC}/${image}:pull" | jq -r '.token // .access_token // empty')"
+            if [ -z "$token" ]; then
+              echo "Unable to obtain a GHCR pull token for ${image}." >&2
+              exit 1
+            fi
             status="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
-              --header "Authorization: Bearer $TOKEN" \
+              --header "Authorization: Bearer $token" \
               --header 'Accept: application/vnd.oci.image.index.v1+json, application/vnd.docker.distribution.manifest.list.v2+json, application/vnd.oci.image.manifest.v1+json, application/vnd.docker.distribution.manifest.v2+json' \
               "https://ghcr.io/v2/${OWNER_LC}/${image}/manifests/${tag}")"
             case "$status" in
