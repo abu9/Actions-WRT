@@ -37,7 +37,7 @@ on:
         type: boolean
       use_ccache_cache:
         type: boolean
-        default: true   
+        default: true
       build_full:
         type: boolean
         default: true
@@ -47,13 +47,12 @@ on:
         options:
           - 'tools'
           - 'toolchain'
-      
 
 env:
   REPO_URL: hanwckf/immortalwrt-mt798x
   REPO_BRANCH: openwrt-21.02
-  FEEDS_CONF: 
-  CONFIG_FILE: ${{github.event.inputs.config_name || '.config7981'}}
+  FEEDS_CONF:
+  CONFIG_FILE: ${{ github.event.inputs.config_name || '360t7-immortalwrt-25.12-ubi.conf' }}
   DIY_P1_SH: diy-part1.sh
   DIY_P2_SH: diy-part2.sh
   UPLOAD_BIN_DIR: false
@@ -64,10 +63,6 @@ env:
 permissions:
   contents: read
 
-# concurrency:
-#   group: ${{ github.workflow }}-${{ github.ref }}-${{ inputs.source_branch }}
-#   cancel-in-progress: true
-
 jobs:
   determine_targets:
     name: Get target info
@@ -76,9 +71,23 @@ jobs:
       config_name: ${{ inputs.config_name }}
       source_branch: ${{ inputs.source_branch }}
 
-  build-push-containers:
-    name: Build and Push all prebuilt containers
+  build-tools-container:
+    name: Build and Push tools container
     needs: determine_targets
+    permissions:
+      contents: read
+      packages: write
+      actions: write
+    uses: ./.github/workflows/push-containers.yml
+    with:
+      source_branch: ${{ inputs.source_branch }}
+      config_name: ${{ inputs.config_name }}
+      build_tools: true
+      build_toolchain: false
+
+  build-firmware:
+    name: Build firmware
+    needs: [determine_targets, build-tools-container]
     permissions:
       contents: read
       packages: read
@@ -98,5 +107,3 @@ jobs:
       config_name: ${{ inputs.config_name }}
       ccache_type: packages
       use_ccache_cache: ${{ inputs.use_ccache_cache }}
-
-    
