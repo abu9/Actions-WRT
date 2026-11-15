@@ -84,11 +84,9 @@ jobs:
         run: |
           set -euo pipefail
           OWNER_LC="${OWNER,,}"
-          TAG=latest
-          if [[ "${GITHUB_REF_TYPE}" == "branch" && "$REPO_BRANCH" =~ (openwrt-[0-9][0-9]\.[0-9][0-9]) ]]; then
-            TAG="${BASH_REMATCH[1]}"
-          fi
-          CONTAINER_TAG="${AUTHOR}_${TAG}"
+          # Keep this identical to reusable_build.yml, which selects
+          # images using ${AUTHOR}_${REPO_BRANCH}.
+          CONTAINER_TAG="${AUTHOR}_${REPO_BRANCH}"
           echo "owner_lc=$OWNER_LC" >> "$GITHUB_OUTPUT"
           echo "container_tag=$CONTAINER_TAG" >> "$GITHUB_OUTPUT"
           echo "Will publish ghcr.io/$OWNER_LC/tools:$CONTAINER_TAG"
