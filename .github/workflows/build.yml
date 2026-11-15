@@ -9,10 +9,11 @@ on:
         description: "Select the source branch"
         type: choice
         options:
-          - openwrt/openert@main
+          - openwrt/openwrt@main
           - coolsnowwolf/lede@master
           - immortalwrt/immortalwrt@openwrt-23.05
           - immortalwrt/immortalwrt@openwrt-24.10
+          - immortalwrt/immortalwrt@openwrt-25.12
           - hanwckf/immortalwrt-mt798x@openwrt-21.02
         default: 'immortalwrt/immortalwrt@openwrt-23.05'
       config_name:
@@ -25,6 +26,7 @@ on:
            - '360t7-immortalwrt.conf'
            - '360t7-immortalwrt-uhttpd.conf'
            - '360t7-immortalwrt-24.10.conf'
+           - '360t7-immortalwrt-25.12-ubi.conf'
         default: '360t7-immortalwrt.conf'
       build_toolchain:
         type: boolean
