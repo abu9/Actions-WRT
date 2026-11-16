@@ -597,7 +597,7 @@ jobs:
           curl --fail --silent --show-error --location --retry 3 "$TARGET_PATH/sha256sums" -o sha256sums
 
           SIGNATURE=""
-          for candidate in sha256sums.asc sha256sums.sig; do
+          for candidate in sha256sums.asc sha256sums.gpg; do
             if curl --fail --silent --show-error --location "$TARGET_PATH/$candidate" -o "$candidate"; then
               SIGNATURE="$candidate"
               break
