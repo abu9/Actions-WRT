@@ -31,7 +31,7 @@ on:
 jobs:
   determine_targets:
     name: Get target info
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     outputs:
       target: ${{ steps.get_info.outputs.target }}
       subtarget: ${{ steps.get_info.outputs.subtarget }}
