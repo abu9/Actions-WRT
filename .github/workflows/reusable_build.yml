@@ -413,6 +413,16 @@ jobs:
               ;;
           esac
 
+          # Snapshot download trees move independently from the pinned source
+          # commit. Their prebuilt toolchain may therefore target a different
+          # compiler/binutils/libc revision. Build it from the exact checked-out
+          # source commit instead of silently mixing versions.
+          if [[ "$TOOLCHAIN_PATH" == *SNAPSHOT* || "$TOOLCHAIN_PATH" == "snapshots" ]]; then
+            echo "Snapshot source detected; using an in-tree toolchain build to match the pinned source commit."
+            echo "toolchain-type=internal" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
           TARGET_PATH="$DOWNLOADSERVER/$TOOLCHAIN_PATH/targets/${{ inputs.target }}/${{ inputs.subtarget }}"
           SUMS_URL="$TARGET_PATH/sha256sums"
           echo "Looking for official toolchain at: $TARGET_PATH"
