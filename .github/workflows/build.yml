@@ -342,17 +342,15 @@ jobs:
       build_tools: true
       build_toolchain: false
 
-  build_firmware:
-    name: Build firmware
-    needs: [determine_targets, tools_fingerprint, check_tools_container, build_tools_container]
+  build_firmware_cached_tools:
+    name: Build firmware (reuse cached tools)
+    needs: [determine_targets, tools_fingerprint, check_tools_container]
     if: >-
-      ${{ always() &&
-          github.event_name != 'pull_request' && !inputs.validate_only &&
+      ${{ github.event_name != 'pull_request' && !inputs.validate_only &&
           needs.determine_targets.result == 'success' &&
           needs.tools_fingerprint.result == 'success' &&
           needs.check_tools_container.result == 'success' &&
-          (needs.build_tools_container.result == 'success' ||
-           needs.build_tools_container.result == 'skipped') }}
+          needs.check_tools_container.outputs.tools_required == 'false' }}
     permissions:
       contents: read
       packages: read
@@ -366,7 +364,39 @@ jobs:
       repo_commit: ${{ needs.tools_fingerprint.outputs.source_commit }}
       tools_fingerprint: ${{ needs.tools_fingerprint.outputs.tools_fingerprint }}
       author: ${{ needs.determine_targets.outputs.author }}
-      # Only request the target-toolchain image when the preceding GHCR label check verified its fingerprint.
+      container_name: ${{ startsWith(needs.check_tools_container.outputs.checked_image, 'toolchain:') && 'toolchain' || 'tools' }}
+      build_kernel: ${{ github.event_name == 'push' || inputs.build_kernel }}
+      build_full: ${{ github.event_name == 'repository_dispatch' || inputs.build_full }}
+      build_toolchain: ${{ inputs.build_toolchain }}
+      debug: ${{ inputs.debug }}
+      config_name: ${{ (github.event_name == 'push' && '360t7-immortalwrt-25.12-kernel-min.conf') || github.event.client_payload.config_name || inputs.config_name || '360t7-immortalwrt-25.12-ubi.conf' }}
+      ccache_type: packages
+      use_ccache_cache: ${{ github.event_name == 'repository_dispatch' || github.event_name == 'push' || inputs.use_ccache_cache }}
+      check: ${{ github.event_name != 'push' }}
+
+  build_firmware_after_tools:
+    name: Build firmware (after tools build)
+    needs: [determine_targets, tools_fingerprint, check_tools_container, build_tools_container]
+    if: >-
+      ${{ github.event_name != 'pull_request' && !inputs.validate_only &&
+          needs.determine_targets.result == 'success' &&
+          needs.tools_fingerprint.result == 'success' &&
+          needs.check_tools_container.result == 'success' &&
+          needs.check_tools_container.outputs.tools_required == 'true' &&
+          needs.build_tools_container.result == 'success' }}
+    permissions:
+      contents: read
+      packages: read
+      actions: write
+    uses: ./.github/workflows/reusable_build.yml
+    with:
+      target: ${{ needs.determine_targets.outputs.target }}
+      subtarget: ${{ needs.determine_targets.outputs.subtarget }}
+      repo_url: ${{ needs.determine_targets.outputs.repo_url }}
+      repo_branch: ${{ needs.determine_targets.outputs.repo_branch }}
+      repo_commit: ${{ needs.tools_fingerprint.outputs.source_commit }}
+      tools_fingerprint: ${{ needs.tools_fingerprint.outputs.tools_fingerprint }}
+      author: ${{ needs.determine_targets.outputs.author }}
       container_name: ${{ startsWith(needs.check_tools_container.outputs.checked_image, 'toolchain:') && 'toolchain' || 'tools' }}
       build_kernel: ${{ github.event_name == 'push' || inputs.build_kernel }}
       build_full: ${{ github.event_name == 'repository_dispatch' || inputs.build_full }}
