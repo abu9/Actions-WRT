@@ -227,8 +227,10 @@ jobs:
 
   build_tools_container:
     name: Build and Push tools container (only when missing)
-    needs: [determine_targets, check_tools_container]
-    if: needs.check_tools_container.outputs.tools_required == 'true'
+    needs: [determine_targets, tools_fingerprint, check_tools_container]
+    if: >-
+      ${{ needs.tools_fingerprint.result == 'success' &&
+          needs.check_tools_container.outputs.tools_required == 'true' }}
     permissions:
       contents: read
       packages: write
@@ -243,10 +245,11 @@ jobs:
 
   build_firmware:
     name: Build firmware
-    needs: [determine_targets, check_tools_container, build_tools_container]
+    needs: [determine_targets, tools_fingerprint, check_tools_container, build_tools_container]
     if: >-
       ${{ always() &&
           needs.determine_targets.result == 'success' &&
+          needs.tools_fingerprint.result == 'success' &&
           needs.check_tools_container.result == 'success' &&
           (needs.build_tools_container.result == 'success' ||
            needs.build_tools_container.result == 'skipped') }}
