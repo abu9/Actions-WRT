@@ -175,7 +175,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          KEY="$(printf '%s\\n' "$TARGET" "$SUBTARGET" "$SOURCE_COMMIT" "$TOOLS_FINGERPRINT" | sha256sum | cut -c1-32)"
+          KEY="$(printf '%s\n' "$TARGET" "$SUBTARGET" "$SOURCE_COMMIT" "$TOOLS_FINGERPRINT" | sha256sum | cut -c1-32)"
           echo "cache_key=$KEY" >> "$GITHUB_OUTPUT"
 
   build-target-toolchain:
@@ -238,7 +238,7 @@ jobs:
         with:
           context: .
           push: true
-          tags: ghcr.io/${{ needs.determine_container_info.outputs.owner_lc }}/toolchain:${{ needs.determine_targets.outputs.target }}-${{ needs.determine_targets.outputs.subtarget }}-${{ needs.determine_container_info.outputs.container_tag }}-${{ needs.compute-tools-fingerprint.outputs.source_commit }}-${{ needs.compute-tools-fingerprint.outputs.tools_fingerprint }}
+          tags: ghcr.io/${{ needs.determine_container_info.outputs.owner_lc }}/toolchain:${{ needs.determine_targets.outputs.target }}-${{ needs.determine_targets.outputs.subtarget }}-${{ needs.determine_container_info.outputs.container_tag }}-${{ needs.compute-toolchain-cache-key.outputs.cache_key }}
           file: .github/dockerfiles/Dockerfile.toolchain
           build-args: |
             OWNER_LC=${{ needs.determine_container_info.outputs.owner_lc }}
