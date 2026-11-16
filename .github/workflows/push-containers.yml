@@ -2,7 +2,6 @@ name: Build and Push prebuilt tools container
 run-name: Build and Push prebuilt tools container - ${{ inputs.source_branch }}/${{ inputs.config_name }}
 
 on:
-  repository_dispatch:
   workflow_dispatch:
     inputs:
       source_branch:
