@@ -182,7 +182,7 @@ jobs:
   push-target-toolchain:
     name: Push target-specific toolchain image
     if: ${{ !cancelled() && needs.build-target-toolchain.outputs.push == 'true' }}
-    needs: [determine_targets, determine_container_info, build-target-toolchain]
+    needs: [determine_targets, determine_container_info, compute-tools-fingerprint, build-target-toolchain]
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -221,5 +221,5 @@ jobs:
           file: .github/dockerfiles/Dockerfile.toolchain
           build-args: |
             OWNER_LC=${{ needs.determine_container_info.outputs.owner_lc }}
-            CONTAINER_TAG=${{ needs.determine_container_info.outputs.container_tag }}
+            CONTAINER_TAG=${{ needs.determine_container_info.outputs.container_tag }}-${{ needs.compute-tools-fingerprint.outputs.tools_fingerprint }}
             TOOLCHAIN_NAME=${{ steps.get-toolchain-name.outputs.toolchain_name }}
