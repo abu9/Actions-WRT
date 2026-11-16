@@ -1,6 +1,5 @@
 name: test
 on:
-  repository_dispatch:
   workflow_dispatch:
     inputs:
       source_branch:
