@@ -17,12 +17,8 @@ jobs:
       packages: write
 
     steps:
-      - name: Checkout
+      - name: Checkout Actions-WRT repository
         uses: actions/checkout@v4
-        with:
-          repository: abu9/actions-shared-workflows
-          sparse-checkout: .github/dockerfiles/Dockerfile.toolchain
-          sparse-checkout-cone-mode: false
 
       - name: Download external toolchain from build job
         uses: actions/download-artifact@v4
