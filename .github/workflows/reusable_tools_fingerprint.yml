@@ -53,4 +53,4 @@ jobs:
             --source-dir openwrt \
             --local-repo-dir actions-wrt \
             --source-repo "$SOURCE_REPO" \
-            --source-ref "${{ inputs.repo_branch }}" \
+            --source-ref "${{ inputs.repo_branch }}"
