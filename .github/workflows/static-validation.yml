@@ -21,16 +21,16 @@ jobs:
         uses: actions/checkout@v7.0.1
 
       - name: Create buildbot test account
-        run: sudo useradd --create-home --shell /bin/bash buildbot
+        run: sudo useradd --no-create-home --shell /bin/bash buildbot
 
       - name: Validate custom sh shell template
-        shell: su buildbot -c "sh -e {0}"
+        shell: sudo -E -n su buildbot -c "sh -e {0}"
         run: |
           test "$(id -un)" = buildbot
           test -n "$GITHUB_WORKSPACE"
 
       - name: Validate custom bash shell template
-        shell: su buildbot -c "bash {0}"
+        shell: sudo -E -n su buildbot -c "bash {0}"
         run: |
           set -euo pipefail
           test "$(id -un)" = buildbot
