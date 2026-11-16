@@ -1,0 +1,19 @@
+name: Host tools timestamp diagnostics
+
+# GitHub only exposes the Run workflow button for workflow_dispatch
+# workflows that exist on the repository's default branch.
+# Select "test/host-tools-timestamp-diagnostics" in the branch dropdown
+# before starting the diagnostic workflow. The actual test definition and
+# all its dependencies live on that branch.
+on:
+  workflow_dispatch:
+
+jobs:
+  default-branch-guard:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Explain how to start the diagnostic
+        run: |
+          echo "::error::Select the test/host-tools-timestamp-diagnostics branch from the Run workflow branch dropdown."
+          exit 1
