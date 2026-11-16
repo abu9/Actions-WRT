@@ -41,6 +41,7 @@ on:
           - '360t7-immortalwrt-uhttpd.conf'
           - '360t7-immortalwrt-24.10.conf'
           - '360t7-immortalwrt-25.12-ubi.conf'
+          - '360t7-immortalwrt-25.12-kernel-min.conf'
         default: '360t7-immortalwrt-25.12-ubi.conf'
       build_toolchain:
         description: 'Build the target toolchain from source; disable to use the official prebuilt toolchain/SDK when available'
