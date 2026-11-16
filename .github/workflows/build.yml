@@ -117,6 +117,7 @@ jobs:
       tools_required: ${{ steps.check.outputs.tools_required }}
       checked_image: ${{ steps.check.outputs.checked_image }}
       expected_fingerprint: ${{ steps.check.outputs.expected_fingerprint }}
+      tools_image_fingerprint: ${{ steps.check.outputs.tools_image_fingerprint }}
     steps:
       - name: Check GHCR manifest and tools fingerprint
         id: check
@@ -128,7 +129,7 @@ jobs:
           TARGET: ${{ needs.determine_targets.outputs.target }}
           SUBTARGET: ${{ needs.determine_targets.outputs.subtarget }}
           CONTAINER_NAME: ${{ inputs.container_name || 'tools' }}
-          EXPECTED_FINGERPRINT: ${{ needs.tools_fingerprint.outputs.tools_fingerprint }}
+          EXPECTED_FINGERPRINT: ${{ needs.tools_fingerprint.outputs.tools_image_fingerprint }}
           EXPECTED_SOURCE_COMMIT: ${{ needs.tools_fingerprint.outputs.source_commit }}
         shell: bash
         run: |
@@ -144,6 +145,7 @@ jobs:
             exit 1
           fi
           echo "expected_fingerprint=$EXPECTED_FINGERPRINT" >> "$GITHUB_OUTPUT"
+          echo "tools_image_fingerprint=$EXPECTED_FINGERPRINT" >> "$GITHUB_OUTPUT"
 
           registry_token() {
             local image="$1"
@@ -303,6 +305,7 @@ jobs:
       repo_branch: ${{ needs.determine_targets.outputs.repo_branch }}
       repo_commit: ${{ needs.tools_fingerprint.outputs.source_commit }}
       tools_fingerprint: ${{ needs.tools_fingerprint.outputs.tools_fingerprint }}
+      tools_image_fingerprint: ${{ needs.check_tools_container.outputs.tools_image_fingerprint }}
       author: ${{ needs.determine_targets.outputs.author }}
       # Only request the target-toolchain image when the preceding GHCR label check verified its fingerprint.
       container_name: ${{ startsWith(needs.check_tools_container.outputs.checked_image, 'toolchain:') && 'toolchain' || 'tools' }}

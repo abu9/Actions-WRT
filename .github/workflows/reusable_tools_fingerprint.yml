@@ -18,6 +18,8 @@ on:
         value: ${{ jobs.fingerprint.outputs.tools_fingerprint }}
       source_commit:
         value: ${{ jobs.fingerprint.outputs.source_commit }}
+      tools_image_fingerprint:
+        value: ${{ jobs.fingerprint.outputs.tools_image_fingerprint }}
 
 permissions:
   contents: read
@@ -29,6 +31,7 @@ jobs:
     outputs:
       tools_fingerprint: ${{ steps.fingerprint.outputs.tools_fingerprint }}
       source_commit: ${{ steps.fingerprint.outputs.source_commit }}
+      tools_image_fingerprint: ${{ steps.fingerprint.outputs.tools_image_fingerprint }}
     steps:
       - name: Checkout Actions-WRT workflow and fingerprint scripts
         uses: actions/checkout@v7.0.1

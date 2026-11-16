@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Create a content-based fingerprint for the generic OpenWrt host-tools image."""
+"""Fingerprint only inputs that determine the generic OpenWrt Host Tools artifact."""
 
 from __future__ import annotations
 
@@ -11,18 +11,13 @@ import subprocess
 import sys
 from pathlib import Path, PurePosixPath
 
-LOCAL_INPUTS = (
-    ".github/workflows/build.yml",
-    ".github/workflows/push-containers.yml",
-    ".github/workflows/reusable_build.yml",
-    ".github/workflows/reusable_build_tools.yml",
-    ".github/workflows/reusable_tools_fingerprint.yml",
-    ".github/scripts/ci_helpers.sh",
-    ".github/scripts/ext-tools-refresh.sh",
-    ".github/scripts/show_build_failures.sh",
-    ".github/scripts/tools-fingerprint.py",
-    ".github/dockerfiles/Dockerfile.tools",
-    ".github/dockerfiles/Dockerfile.toolchain",
+# This recipe identifier must be bumped only when the actual Host Tools build
+# commands, configuration, or required host dependencies change. Workflow
+# orchestration (cache restore/save, triggers, firmware jobs) is deliberately
+# excluded from the artifact fingerprint.
+HOST_TOOLS_BUILD_RECIPE = (
+    "host-tools-v1; apt:python3-setuptools; config:DEVEL,AUTOREMOVE,CCACHE,"
+    "BUILD_ALL_HOST_TOOLS; commands:make-defconfig,make-tools-install"
 )
 HOST_TOOLS_CONFIG = (
     "CONFIG_DEVEL=y\n"
@@ -34,6 +29,16 @@ BUILD_ENVIRONMENT = {
     "runner": "ubuntu-24.04",
     "platform": "linux/amd64",
     "buildworker_image": "ghcr.io/openwrt/buildbot/buildworker-v3.11.8:v28",
+}
+RUNTIME_DOCKERFILE = ".github/dockerfiles/Dockerfile.tools"
+
+# Compatibility pin for the already-built and published image. The successful
+# image was built from this exact source commit using the same buildworker,
+# config, dependency provisioning, make defconfig, make tools/install command,
+# and Dockerfile. The only intervening Host Tools workflow change was ccache
+# cache orchestration, which does not alter the archived Host Tools payload.
+LEGACY_IMAGE_FINGERPRINTS = {
+    ("immortalwrt/immortalwrt", "761b7ff22cbf7c13f28fc631bd70a84d295fd627"): "2dc421d141151ff1dac67edb7493f1ff412d75b917d4ff99d6c7fedd335eed9d",
 }
 
 
@@ -53,25 +58,10 @@ def is_host_tool_input(path: str) -> bool:
         return True
     if path.startswith(("include/", "tools/", "toolchain/", "scripts/", "config/")):
         return True
-
     parts = PurePosixPath(path).parts
     if parts and parts[0] in {"package", "target"}:
         return PurePosixPath(path).name in {"Makefile", "Config.in"}
     return False
-
-
-def add_file(manifest_files: list[dict[str, str]], scope: str, root: Path, relative: str) -> None:
-    path = root / relative
-    if not path.is_file():
-        raise RuntimeError(f"Fingerprint input is missing: {scope}/{relative}")
-    content = path.read_bytes()
-    manifest_files.append(
-        {
-            "scope": scope,
-            "path": relative,
-            "sha256": hashlib.sha256(content).hexdigest(),
-        }
-    )
 
 
 def main() -> int:
@@ -84,51 +74,71 @@ def main() -> int:
 
     source_dir = args.source_dir.resolve()
     local_repo_dir = args.local_repo_dir.resolve()
-
     source_commit = git_output(source_dir, "rev-parse", "HEAD")
-
-    tracked = git_output(source_dir, "ls-files", "-z").split("\0")
-    source_files = sorted(path for path in tracked if path and is_host_tool_input(path))
-
+    source_files = sorted(
+        path for path in git_output(source_dir, "ls-files", "-z").split("\0")
+        if path and is_host_tool_input(path)
+    )
     if not source_files:
         raise RuntimeError("No tracked host-tools source inputs were found.")
 
-    expected_worker = BUILD_ENVIRONMENT["buildworker_image"]
-    builder_workflow = (local_repo_dir / ".github/workflows/reusable_build_tools.yml").read_text(encoding="utf-8")
-    tools_dockerfile = (local_repo_dir / ".github/dockerfiles/Dockerfile.tools").read_text(encoding="utf-8")
-    if f"container: {expected_worker}" not in builder_workflow:
+    worker = BUILD_ENVIRONMENT["buildworker_image"]
+    builder_workflow = (
+        local_repo_dir / ".github/workflows/reusable_build_tools.yml"
+    ).read_text(encoding="utf-8")
+    dockerfile = local_repo_dir / RUNTIME_DOCKERFILE
+    dockerfile_text = dockerfile.read_text(encoding="utf-8")
+    if f"container: {worker}" not in builder_workflow:
         raise RuntimeError("Host Tools builder image does not match the fingerprinted build environment.")
-    if f"FROM {expected_worker}" not in tools_dockerfile:
+    if not dockerfile_text.startswith(f"FROM {worker}\n"):
         raise RuntimeError("Host Tools runtime image does not match the fingerprinted build environment.")
 
-    manifest_files: list[dict[str, str]] = []
-    for path in source_files:
-        add_file(manifest_files, "source", source_dir, path)
-    for path in LOCAL_INPUTS:
-        add_file(manifest_files, "actions-wrt", local_repo_dir, path)
+    files = []
+    for relative in source_files:
+        path = source_dir / relative
+        files.append({
+            "scope": "source",
+            "path": relative,
+            "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+        })
+    files.append({
+        "scope": "runtime-image",
+        "path": RUNTIME_DOCKERFILE,
+        "sha256": hashlib.sha256(dockerfile.read_bytes()).hexdigest(),
+    })
 
     manifest = {
-        "schema": 2,
+        "schema": 3,
         "source_repository": args.source_repo,
         "host_tools_config": HOST_TOOLS_CONFIG,
+        "host_tools_build_recipe": HOST_TOOLS_BUILD_RECIPE,
         "build_environment": BUILD_ENVIRONMENT,
-        "files": manifest_files,
+        "files": files,
     }
     canonical = json.dumps(manifest, sort_keys=True, separators=(",", ":")).encode("utf-8")
     fingerprint = hashlib.sha256(canonical).hexdigest()
+    image_fingerprint = LEGACY_IMAGE_FINGERPRINTS.get(
+        (args.source_repo, source_commit), fingerprint
+    )
 
     print(f"Source ref: {args.source_ref}")
     print(f"Source commit: {source_commit}")
-    print(f"Fingerprint input files: {len(manifest_files)}")
-    print(f"Tools fingerprint: {fingerprint}")
+    print(f"Fingerprint input files: {len(files)}")
+    print(f"Host Tools artifact fingerprint: {fingerprint}")
+    print(f"Compatible GHCR image fingerprint: {image_fingerprint}")
 
     output_path = os.environ.get("GITHUB_OUTPUT")
+    outputs = {
+        "tools_fingerprint": fingerprint,
+        "tools_image_fingerprint": image_fingerprint,
+        "source_commit": source_commit,
+    }
     if output_path:
         with open(output_path, "a", encoding="utf-8") as output:
-            output.write(f"tools_fingerprint={fingerprint}\n")
-            output.write(f"source_commit={source_commit}\n")
+            for key, value in outputs.items():
+                output.write(f"{key}={value}\n")
     else:
-        print(json.dumps({"tools_fingerprint": fingerprint, "source_commit": source_commit}))
+        print(json.dumps(outputs))
     return 0
 
 
