@@ -1,6 +1,4 @@
-# Local maintained snapshot of abu9/actions-shared-workflows/.github/workflows/reusable_build.yml.
-# Kept in this repository so the official toolchain detection/download fixes can be tested
-# without requiring write access to the shared-workflows repository.
+# Locally maintained build workflow. All workflow helpers are versioned in this repository.
 name: Build sub target
 
 on:
@@ -248,14 +246,6 @@ jobs:
           ref: ${{ inputs.repo_commit != '' && inputs.repo_commit || inputs.repo_branch }}
           path: openwrt
 
-      - name: Checkout shared workflows tools
-        uses: actions/checkout@v4
-        with:
-          repository: abu9/actions-shared-workflows
-          path: shared-workflows
-          sparse-checkout: |
-            .github/workflows/scripts
-
       - name: Fix permission
         run: chown -R buildbot:buildbot .
 
@@ -293,13 +283,13 @@ jobs:
       - name: Compile needed host tools
         shell: su buildbot -c "sh -e {0}"
         working-directory: openwrt
-        run: make tools/tar/compile -j$(nproc) BUILD_LOG=1 || ret=$? ../shared-workflows/.github/workflows/scripts/show_build_failures.sh
+        run: make tools/tar/compile -j$(nproc) BUILD_LOG=1 || ret=$? ../.github/scripts/show_build_failures.sh
 
       - name: Download and check toolchain
         if: inputs.build_toolchain == true
         shell: su buildbot -c "sh -e {0}"
         working-directory: openwrt
-        run: make toolchain/download toolchain/check FIXUP=1 -j$(nproc) BUILD_LOG=1 || ret=$? ../shared-workflows/.github/workflows/scripts/show_build_failures.sh
+        run: make toolchain/download toolchain/check FIXUP=1 -j$(nproc) BUILD_LOG=1 || ret=$? ../.github/scripts/show_build_failures.sh
 
       - name: Download and check packages
         if: inputs.build_all_modules == true || inputs.build_all_kmods == true || inputs.build_full == true
@@ -308,11 +298,11 @@ jobs:
         run: |
           # With push events or check_packages_list set to all check all packages
           if [ "${{ github.event_name }}" = "push" ] || [ "${{ inputs.check_packages_list }}" = "all" ]; then
-            make package/download package/check FIXUP=1 -j$(nproc) BUILD_LOG=1 || ret=$? ../shared-workflows/.github/workflows/scripts/show_build_failures.sh
+            make package/download package/check FIXUP=1 -j$(nproc) BUILD_LOG=1 || ret=$? ../.github/scripts/show_build_failures.sh
           # With every other event check only changed packages (if provided)
           elif [ -n "${{ inputs.check_packages_list }}" ]; then
             for package in ${{ inputs.check_packages_list }}; do
-              make package/$package/download package/$package/check FIXUP=1 -j$(nproc) BUILD_LOG=1 || ret=$? ../shared-workflows/.github/workflows/scripts/show_build_failures.sh
+              make package/$package/download package/$package/check FIXUP=1 -j$(nproc) BUILD_LOG=1 || ret=$? ../.github/scripts/show_build_failures.sh
             done
           fi
 
@@ -320,7 +310,7 @@ jobs:
         shell: su buildbot -c "sh -e {0}"
         working-directory: openwrt
         run: |
-          . ../shared-workflows/.github/workflows/scripts/ci_helpers.sh
+          . ../.github/scripts/ci_helpers.sh
 
           if git diff --name-only --exit-code; then
             success "All packages seems ok"
@@ -366,14 +356,6 @@ jobs:
           repository: ${{ inputs.repo_url }}
           ref: ${{ inputs.repo_commit != '' && inputs.repo_commit || inputs.repo_branch }}
           path: openwrt
-
-      - name: Checkout shared workflows tools
-        uses: actions/checkout@v4
-        with:
-          repository: abu9/actions-shared-workflows
-          path: shared-workflows
-          sparse-checkout: |
-            .github/workflows/scripts
 
       - name: Parse toolchain file
         if: inputs.build_toolchain == false
@@ -761,13 +743,13 @@ jobs:
       - name: Build tools
         shell: su buildbot -c "sh -e {0}"
         working-directory: openwrt
-        run: make tools/install -j$(nproc) BUILD_LOG=1 || ret=$? ../shared-workflows/.github/workflows/scripts/show_build_failures.sh
+        run: make tools/install -j$(nproc) BUILD_LOG=1 || ret=$? ../.github/scripts/show_build_failures.sh
 
       - name: Build toolchain
         if: inputs.build_toolchain == true || steps.parse-toolchain.outputs.toolchain-type == 'internal'
         shell: su buildbot -c "sh -e {0}"
         working-directory: openwrt
-        run: make toolchain/install -j$(nproc) BUILD_LOG=1 || ret=$? ../shared-workflows/.github/workflows/scripts/show_build_failures.sh
+        run: make toolchain/install -j$(nproc) BUILD_LOG=1 || ret=$? ../.github/scripts/show_build_failures.sh
 
       - name: Setup Debug Session
         if: inputs.debug == true
@@ -781,7 +763,7 @@ jobs:
         if: inputs.build_kernel == true
         shell: su buildbot -c "sh -e {0}"
         working-directory: openwrt
-        run: make target/compile -j$(nproc) BUILD_LOG=1 || ret=$? ../shared-workflows/.github/workflows/scripts/show_build_failures.sh
+        run: make target/compile -j$(nproc) BUILD_LOG=1 || ret=$? ../.github/scripts/show_build_failures.sh
 
       - name: Save ccache kernel cache
         if: inputs.use_ccache_cache == true && inputs.build_kernel == true
@@ -794,7 +776,7 @@ jobs:
         if: inputs.build_kernel == true
         shell: su buildbot -c "sh -e {0}"
         working-directory: openwrt
-        run: make package/linux/compile -j$(nproc) BUILD_LOG=1 || ret=$? ../shared-workflows/.github/workflows/scripts/show_build_failures.sh
+        run: make package/linux/compile -j$(nproc) BUILD_LOG=1 || ret=$? ../.github/scripts/show_build_failures.sh
 
       - name: Build DTBs
         if: inputs.build_dtb == true
@@ -807,19 +789,19 @@ jobs:
           TOPDIR=$(pwd) make -C target/linux dtb -q >/dev/null 2>/dev/null || ret=$?
           [ $ret = 2 ] && exit 0
 
-          make target/linux/dtb -j$(nproc) BUILD_LOG=1 || ret=$? ../shared-workflows/.github/workflows/scripts/show_build_failures.sh
+          make target/linux/dtb -j$(nproc) BUILD_LOG=1 || ret=$? ../.github/scripts/show_build_failures.sh
 
       - name: Build everything
         if: inputs.build_full == true
         shell: su buildbot -c "sh -e {0}"
         working-directory: openwrt
-        run: make -j$(nproc) BUILD_LOG=1 || ret=$? ../shared-workflows/.github/workflows/scripts/show_build_failures.sh
+        run: make -j$(nproc) BUILD_LOG=1 || ret=$? ../.github/scripts/show_build_failures.sh
 
       - name: Build external toolchain
         if: inputs.build_external_toolchain == true
         shell: su buildbot -c "sh -e {0}"
         working-directory: openwrt
-        run: make target/toolchain/compile -j$(nproc) BUILD_LOG=1 || ret=$? ../shared-workflows/.github/workflows/scripts/show_build_failures.sh
+        run: make target/toolchain/compile -j$(nproc) BUILD_LOG=1 || ret=$? ../.github/scripts/show_build_failures.sh
 
       - name: Coverity prepare toolchain
         if: inputs.coverity_check_packages != ''
@@ -848,15 +830,15 @@ jobs:
 
           coverity_check_packages=(${{ inputs.coverity_check_packages }})
           printf -v clean_packages "package/%s/clean " "${coverity_check_packages[@]}"
-          make -j$(nproc) BUILD_LOG=1 $clean_packages || ret=$? ../shared-workflows/.github/workflows/scripts/show_build_failures.sh
+          make -j$(nproc) BUILD_LOG=1 $clean_packages || ret=$? ../.github/scripts/show_build_failures.sh
 
           coverity_force_compile_packages=(${{ inputs.coverity_force_compile_packages }})
           printf -v force_compile_packages "package/%s/compile " "${coverity_force_compile_packages[@]}"
-          make -j$(nproc) BUILD_LOG=1 $force_compile_packages || ret=$? ../shared-workflows/.github/workflows/scripts/show_build_failures.sh
+          make -j$(nproc) BUILD_LOG=1 $force_compile_packages || ret=$? ../.github/scripts/show_build_failures.sh
 
           printf -v compile_packages "package/%s/compile " "${coverity_check_packages[@]}"
           export PATH=$(pwd)/cov-analysis-linux64/bin:$PATH
-          cov-build --dir cov-int make -j $(nproc) BUILD_LOG=1 $compile_packages || ret=$? ../shared-workflows/.github/workflows/scripts/show_build_failures.sh
+          cov-build --dir cov-int make -j $(nproc) BUILD_LOG=1 $compile_packages || ret=$? ../.github/scripts/show_build_failures.sh
 
       - name: Upload build to Coverity for analysis
         if: inputs.coverity_check_packages != ''
