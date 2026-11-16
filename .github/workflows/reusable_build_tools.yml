@@ -8,12 +8,10 @@ on:
       repo_url:
         required: true
         type: string
-      repo_branch:
+      source_commit:
+        description: 'Exact upstream source commit resolved by determine-targets/fingerprint'
         required: true
         type: string
-    outputs:
-      tools-hash: 
-        value: ${{ jobs.build.outputs.tools-hash }}
 
 permissions:
   contents: read
@@ -23,9 +21,6 @@ jobs:
     name: Build tools
     runs-on: ubuntu-24.04
     container: ghcr.io/openwrt/buildbot/buildworker-v3.11.8:v28
-    outputs:
-      tools-hash: ${{ steps.gen_tools_hash.outputs.tools-hash }}
-
     permissions:
       contents: read
       packages: read
@@ -39,15 +34,21 @@ jobs:
         uses: actions/checkout@v7.0.1
         with:
           repository: ${{ inputs.repo_url }}
-          ref: ${{ inputs.repo_branch }}
+          ref: ${{ inputs.source_commit }}
           path: openwrt
 
-
-      - name: Generate tools hash
-        id: gen_tools_hash
+      - name: Verify checked out source commit
+        working-directory: openwrt
+        env:
+          EXPECTED_SOURCE_COMMIT: ${{ inputs.source_commit }}
         run: |
-          TOOLS_HASH="${{ hashFiles('openwrt/include/**','openwrt/tools/**') }}"
-          echo tools-hash=$TOOLS_HASH >> $GITHUB_OUTPUT
+          set -euo pipefail
+          ACTUAL_SOURCE_COMMIT="$(git rev-parse HEAD)"
+          if [ "$ACTUAL_SOURCE_COMMIT" != "$EXPECTED_SOURCE_COMMIT" ]; then
+            echo "Host Tools source commit mismatch: expected $EXPECTED_SOURCE_COMMIT, got $ACTUAL_SOURCE_COMMIT" >&2
+            exit 1
+          fi
+          echo "Building Host Tools from exact source commit $ACTUAL_SOURCE_COMMIT"
 
       - name: Fix permission
         run: chown -R buildbot:buildbot .
