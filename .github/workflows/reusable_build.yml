@@ -157,12 +157,18 @@ jobs:
           CONTAINER_NAME="$REQUESTED_CONTAINER"
           CONTAINER_TAG="${AUTHOR}_${REPO_BRANCH}"
 
+          # Preserve the existing branch-scoped ccache namespace; image tags
+          # below are content-addressed and must not fragment compiler caches.
+          CCACHE_TAG="$CONTAINER_TAG"
+
           if [ "$CONTAINER_NAME" = "toolchain" ]; then
             if [ -z "$TOOLS_FINGERPRINT" ]; then
               echo "No tools fingerprint supplied; refusing to reuse a target toolchain image."
               CONTAINER_NAME=tools
             else
-              TOOLCHAIN_TAG="${TARGET}-${SUBTARGET}-${CONTAINER_TAG}-${TOOLS_FINGERPRINT}"
+              TOOLCHAIN_BASE_TAG="${TARGET}-${SUBTARGET}-${CONTAINER_TAG}"
+              CCACHE_TAG="$TOOLCHAIN_BASE_TAG"
+              TOOLCHAIN_TAG="${TOOLCHAIN_BASE_TAG}-${TOOLS_FINGERPRINT}"
               TOKEN="$(curl --fail --silent --show-error --user "${GHCR_USER}:${GHCR_PASSWORD}" \
                 "https://ghcr.io/token?scope=repository:${GHCR_OWNER}/toolchain:pull" | jq -r '.token // .access_token // empty')"
               if [ -z "$TOKEN" ]; then
@@ -187,9 +193,6 @@ jobs:
               esac
             fi
           fi
-
-          # Keep ccache names independent from content-addressed image tags.
-          CCACHE_TAG="$CONTAINER_TAG"
 
           # Both generic host-tools and target-toolchain images are selected
           # with the exact Host Tools fingerprint.
