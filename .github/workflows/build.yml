@@ -346,7 +346,9 @@ jobs:
     name: Build firmware (reuse cached tools)
     needs: [determine_targets, tools_fingerprint, check_tools_container]
     if: >-
-      ${{ github.event_name != 'pull_request' && !inputs.validate_only &&
+      ${{ always() &&
+          (github.event_name == 'push' ||
+           (github.event_name != 'pull_request' && !inputs.validate_only)) &&
           needs.determine_targets.result == 'success' &&
           needs.tools_fingerprint.result == 'success' &&
           needs.check_tools_container.result == 'success' &&
