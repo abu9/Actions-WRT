@@ -20,6 +20,7 @@ LOCAL_INPUTS = (
     ".github/scripts/ext-tools-refresh.sh",
     ".github/scripts/tools-fingerprint.py",
     ".github/dockerfiles/Dockerfile.tools",
+    ".github/dockerfiles/Dockerfile.toolchain",
 )
 HOST_TOOLS_CONFIG = (
     "CONFIG_DEVEL=y\n"
@@ -30,6 +31,7 @@ HOST_TOOLS_CONFIG = (
 BUILD_ENVIRONMENT = {
     "runner": "ubuntu-latest",
     "platform": "linux/amd64",
+    "buildworker_image": "ghcr.io/openwrt/buildbot/buildworker-v3.11.8:v28",
     "buildworker_image": "ghcr.io/openwrt/buildbot/buildworker-v3.11.8:v28",
 }
 
@@ -89,6 +91,14 @@ def main() -> int:
 
     if not source_files:
         raise RuntimeError("No tracked host-tools source inputs were found.")
+
+    expected_worker = BUILD_ENVIRONMENT["buildworker_image"]
+    builder_workflow = (local_repo_dir / ".github/workflows/reusable_build_tools.yml").read_text(encoding="utf-8")
+    tools_dockerfile = (local_repo_dir / ".github/dockerfiles/Dockerfile.tools").read_text(encoding="utf-8")
+    if f"container: {expected_worker}" not in builder_workflow:
+        raise RuntimeError("Host Tools builder image does not match the fingerprinted build environment.")
+    if f"FROM {expected_worker}" not in tools_dockerfile:
+        raise RuntimeError("Host Tools runtime image does not match the fingerprinted build environment.")
 
     manifest_files: list[dict[str, str]] = []
     for path in source_files:
