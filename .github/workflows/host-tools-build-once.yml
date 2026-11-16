@@ -1,4 +1,5 @@
 name: Build Host Tools (one-time validation)
+# Re-trigger after fixing the buildbot shell invocation.
 run-name: Build Host Tools - ImmortalWrt 25.12 / 360T7
 
 on:
