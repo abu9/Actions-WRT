@@ -16,6 +16,11 @@ on:
           - immortalwrt/immortalwrt@openwrt-25.12
           - hanwckf/immortalwrt-mt798x@openwrt-21.02
         default: 'immortalwrt/immortalwrt@openwrt-25.12'
+      source_commit:
+        description: 'Optional exact upstream source commit; empty resolves the selected branch once'
+        required: false
+        default: ''
+        type: string
       config_name:
         description: 'Config file name'
         type: choice
@@ -71,6 +76,7 @@ jobs:
     with:
       config_name: ${{ inputs.config_name }}
       source_branch: ${{ inputs.source_branch }}
+      source_commit: ${{ inputs.source_commit }}
 
   tools_fingerprint:
     name: Calculate generic host-tools fingerprint
