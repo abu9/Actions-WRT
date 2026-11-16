@@ -1,8 +1,10 @@
 name: Build WRT
-run-name: Build WRT - ${{ inputs.source_branch }}/${{ inputs.config_name }}
+run-name: Build WRT - ${{ github.event.client_payload.source_branch || inputs.source_branch || 'immortalwrt/immortalwrt@openwrt-25.12' }}/${{ github.event.client_payload.config_name || inputs.config_name || '360t7-immortalwrt-25.12-ubi.conf' }}
 
 on:
   repository_dispatch:
+    types:
+      - Source Code Update
   workflow_dispatch:
     inputs:
       source_branch:
@@ -58,7 +60,7 @@ env:
   REPO_URL: hanwckf/immortalwrt-mt798x
   REPO_BRANCH: openwrt-21.02
   FEEDS_CONF:
-  CONFIG_FILE: ${{ github.event.inputs.config_name || '360t7-immortalwrt-25.12-ubi.conf' }}
+  CONFIG_FILE: ${{ github.event.client_payload.config_name || github.event.inputs.config_name || '360t7-immortalwrt-25.12-ubi.conf' }}
   DIY_P1_SH: diy-part1.sh
   DIY_P2_SH: diy-part2.sh
   UPLOAD_BIN_DIR: false
@@ -74,9 +76,9 @@ jobs:
     name: Get target info
     uses: ./.github/workflows/determine-targets.yml
     with:
-      config_name: ${{ inputs.config_name }}
-      source_branch: ${{ inputs.source_branch }}
-      source_commit: ${{ inputs.source_commit }}
+      config_name: ${{ github.event.client_payload.config_name || inputs.config_name || '360t7-immortalwrt-25.12-ubi.conf' }}
+      source_branch: ${{ github.event.client_payload.source_branch || inputs.source_branch || 'immortalwrt/immortalwrt@openwrt-25.12' }}
+      source_commit: ${{ github.event.client_payload.source_commit || inputs.source_commit || '' }}
 
   tools_fingerprint:
     name: Calculate generic host-tools fingerprint
@@ -108,7 +110,7 @@ jobs:
           REPO_BRANCH: ${{ needs.determine_targets.outputs.repo_branch }}
           TARGET: ${{ needs.determine_targets.outputs.target }}
           SUBTARGET: ${{ needs.determine_targets.outputs.subtarget }}
-          CONTAINER_NAME: ${{ inputs.container_name }}
+          CONTAINER_NAME: ${{ inputs.container_name || 'tools' }}
           EXPECTED_FINGERPRINT: ${{ needs.tools_fingerprint.outputs.tools_fingerprint }}
           EXPECTED_SOURCE_COMMIT: ${{ needs.tools_fingerprint.outputs.source_commit }}
         shell: bash
@@ -254,8 +256,8 @@ jobs:
       actions: write
     uses: ./.github/workflows/push-containers.yml
     with:
-      source_branch: ${{ inputs.source_branch }}
-      config_name: ${{ inputs.config_name }}
+      source_branch: ${{ github.event.client_payload.source_branch || inputs.source_branch || 'immortalwrt/immortalwrt@openwrt-25.12' }}
+      config_name: ${{ github.event.client_payload.config_name || inputs.config_name || '360t7-immortalwrt-25.12-ubi.conf' }}
       source_commit: ${{ needs.tools_fingerprint.outputs.source_commit }}
       build_tools: true
       build_toolchain: false
@@ -286,9 +288,9 @@ jobs:
       # Only request the target-toolchain image when the preceding GHCR label check verified its fingerprint.
       container_name: ${{ startsWith(needs.check_tools_container.outputs.checked_image, 'toolchain:') && 'toolchain' || 'tools' }}
       build_kernel: ${{ inputs.build_kernel }}
-      build_full: ${{ inputs.build_full }}
+      build_full: ${{ github.event_name == 'repository_dispatch' || inputs.build_full }}
       build_toolchain: ${{ inputs.build_toolchain }}
       debug: ${{ inputs.debug }}
-      config_name: ${{ inputs.config_name }}
+      config_name: ${{ github.event.client_payload.config_name || inputs.config_name || '360t7-immortalwrt-25.12-ubi.conf' }}
       ccache_type: packages
-      use_ccache_cache: ${{ inputs.use_ccache_cache }}
+      use_ccache_cache: ${{ github.event_name == 'repository_dispatch' || inputs.use_ccache_cache }}
