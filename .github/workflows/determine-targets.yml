@@ -9,6 +9,10 @@ on:
       config_name:
         description: 'Config file name'
         type: string
+      source_commit:
+        description: 'Optional exact source commit to resolve target configuration from'
+        type: string
+        default: ''
     outputs:
       target: 
         value: ${{ jobs.determine_targets.outputs.target}}
@@ -22,6 +26,8 @@ on:
         value: ${{ jobs.determine_targets.outputs.repo_branch }}
       author: 
         value: ${{ jobs.determine_targets.outputs.author }}
+      source_commit:
+        value: ${{ jobs.determine_targets.outputs.source_commit }}
 jobs:
   determine_targets:
     name: Get target info
@@ -33,6 +39,7 @@ jobs:
       repo_url: ${{ steps.get_repo_info.outputs.repo_url }}
       repo_branch: ${{ steps.get_repo_info.outputs.repo_branch }}
       author: ${{ steps.get_repo_info.outputs.author }}
+      source_commit: ${{ steps.get_info.outputs.source_commit }}
 
     steps:
       - name: Checkout
@@ -53,7 +60,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: ${{ steps.get_repo_info.outputs.repo_url }}
-          ref: ${{ steps.get_repo_info.outputs.repo_branch }}
+          ref: ${{ inputs.source_commit != '' && inputs.source_commit || steps.get_repo_info.outputs.repo_branch }}
           path: openwrt
 
       - name: Get info
@@ -73,6 +80,8 @@ jobs:
           TARGET=${TARGET:-$CONFIG_TARGET_BOARD}
           SUBTARGET=${SUBTARGET:-$CONFIG_TARGET_SUBTARGET}
           ARCH=${ARCH:-$CONFIG_ARCH}
+          SOURCE_COMMIT="$(git rev-parse HEAD)"
+          [[ -n ${SOURCE_COMMIT} ]] && echo "source_commit=$SOURCE_COMMIT" >> "${GITHUB_OUTPUT}"
           [[ -n ${TARGET} ]] && echo "target=$TARGET" >> ${GITHUB_OUTPUT}
           [[ -n ${SUBTARGET} ]] && echo "subtarget=$SUBTARGET" >> ${GITHUB_OUTPUT}
           [[ -n ${ARCH} ]] && echo "arch=$ARCH" >> ${GITHUB_OUTPUT}
