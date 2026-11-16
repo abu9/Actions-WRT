@@ -12,6 +12,10 @@ on:
         description: 'Exact upstream source commit resolved by determine-targets/fingerprint'
         required: true
         type: string
+      ccache_tag:
+        description: 'Branch-scoped namespace for the persistent Host Tools ccache'
+        required: true
+        type: string
 
 permissions:
   contents: read
@@ -94,8 +98,34 @@ jobs:
           echo "Host Python resolves to: $(readlink -f "$HOST_PYTHON")"
           "$HOST_PYTHON" -c 'import setuptools; print("Host setuptools:", setuptools.__version__)'
 
+      - name: Restore Host Tools ccache
+        id: restore-ccache-cache
+        uses: actions/cache/restore@v6.1.0
+        with:
+          path: openwrt/.ccache
+          key: ccache-host-tools-${{ inputs.ccache_tag }}-buildworker-v28-${{ runner.os }}-${{ runner.arch }}
+
+      - name: Configure Host Tools ccache
+        working-directory: openwrt
+        env:
+          CCACHE_DIR: ${{ github.workspace }}/openwrt/.ccache
+        run: |
+          su --preserve-environment --shell /bin/bash buildbot -c 'bash -s' <<'BUILD_SCRIPT'
+          set -euo pipefail
+          install -d staging_dir/host/etc .ccache
+          touch staging_dir/host/etc/ccache.conf
+          {
+            echo compiler_type=gcc
+            echo depend_mode=true
+            echo sloppiness=file_macro,locale,time_macros
+          } >> staging_dir/host/etc/ccache.conf
+          chown -R buildbot:buildbot .ccache staging_dir/host/etc/ccache.conf
+          BUILD_SCRIPT
+
       - name: Build tools
         working-directory: openwrt
+        env:
+          CCACHE_DIR: ${{ github.workspace }}/openwrt/.ccache
         run: |
           su --preserve-environment --shell /bin/bash buildbot -c 'bash -s' <<'BUILD_SCRIPT'
           set -e
@@ -105,6 +135,37 @@ jobs:
             exit "$ret"
           }
           BUILD_SCRIPT
+
+      - name: Show Host Tools ccache statistics
+        if: always()
+        working-directory: openwrt
+        env:
+          CCACHE_DIR: ${{ github.workspace }}/openwrt/.ccache
+        run: |
+          set -euo pipefail
+          CCACHE_BIN="$PWD/staging_dir/host/bin/ccache"
+          if [ -x "$CCACHE_BIN" ]; then
+            su --preserve-environment --shell /bin/bash buildbot -c '"$1" --show-stats' -- "$CCACHE_BIN"
+          else
+            echo "Host ccache executable not found; statistics unavailable."
+          fi
+
+      - name: Delete existing Host Tools ccache entry
+        if: steps.restore-ccache-cache.outputs.cache-hit == 'true'
+        uses: octokit/request-action@b91aabaa861c777dcdb14e2387e30eddf04619ae # v3.0.0
+        with:
+          route: DELETE /repos/{repository}/actions/caches?key={key}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          INPUT_REPOSITORY: ${{ github.repository }}
+          INPUT_KEY: ${{ steps.restore-ccache-cache.outputs.cache-primary-key }}
+
+      - name: Save Host Tools ccache
+        if: success()
+        uses: actions/cache/save@v6.1.0
+        with:
+          path: openwrt/.ccache
+          key: ${{ steps.restore-ccache-cache.outputs.cache-primary-key }}
 
       - name: Upload logs
         if: always()
