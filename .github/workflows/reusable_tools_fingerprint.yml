@@ -1,0 +1,56 @@
+name: Compute generic host-tools fingerprint
+
+on:
+  workflow_call:
+    inputs:
+      repo_url:
+        required: true
+        type: string
+      repo_branch:
+        required: true
+        type: string
+      source_commit:
+        required: false
+        type: string
+        default: ''
+    outputs:
+      tools_fingerprint:
+        value: ${{ jobs.fingerprint.outputs.tools_fingerprint }}
+      source_commit:
+        value: ${{ jobs.fingerprint.outputs.source_commit }}
+
+permissions:
+  contents: read
+
+jobs:
+  fingerprint:
+    name: Fingerprint host-tools inputs
+    runs-on: ubuntu-24.04
+    outputs:
+      tools_fingerprint: ${{ steps.fingerprint.outputs.tools_fingerprint }}
+      source_commit: ${{ steps.fingerprint.outputs.source_commit }}
+    steps:
+      - name: Checkout Actions-WRT workflow and fingerprint scripts
+        uses: actions/checkout@v7.0.1
+        with:
+          path: actions-wrt
+
+      - name: Checkout OpenWrt source at a fixed commit
+        uses: actions/checkout@v7.0.1
+        with:
+          repository: ${{ inputs.repo_url }}
+          ref: ${{ inputs.source_commit != '' && inputs.source_commit || inputs.repo_branch }}
+          path: openwrt
+
+      - name: Generate tools fingerprint
+        id: fingerprint
+        env:
+          SOURCE_REPO: ${{ inputs.repo_url }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 actions-wrt/.github/scripts/tools-fingerprint.py \
+            --source-dir openwrt \
+            --local-repo-dir actions-wrt \
+            --source-repo "$SOURCE_REPO" \
+            --source-ref "${{ inputs.repo_branch }}"

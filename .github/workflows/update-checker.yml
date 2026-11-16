@@ -1,0 +1,59 @@
+#
+# Copyright (c) 2019-2021 P3TERX <https://p3terx.com>
+#
+# This is free software, licensed under the MIT License.
+# See /LICENSE for more information.
+#
+# https://github.com/P3TERX/Actions-OpenWrt
+# File: .github/workflows/update-checker.yml
+# Description: Source code update checker
+#
+
+name: Update Checker
+
+env:
+  REPO_URL: https://github.com/immortalwrt/immortalwrt
+  REPO_BRANCH: openwrt-25.12
+
+on:
+  workflow_dispatch:
+#  schedule:
+#    - cron: 0 */18 * * *
+
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+
+    steps:
+
+    - name: Get Commit Hash
+      id: getHash
+      run: |
+        git clone --depth 1 "$REPO_URL" -b "$REPO_BRANCH" .
+        echo "commitHash=$(git rev-parse HEAD)" >> $GITHUB_OUTPUT
+
+    - name: Compare Commit Hash
+      id: cacheHash
+      uses: actions/cache@v6.1.0
+      with:
+        path: .commitHash
+        key: HEAD-${{ steps.getHash.outputs.commitHash }}
+
+    - name: Save New Commit Hash
+      if: steps.cacheHash.outputs.cache-hit != 'true'
+      run: |
+        echo ${{ steps.getHash.outputs.commitHash }} | tee .commitHash
+
+    - name: Trigger build
+      if: steps.cacheHash.outputs.cache-hit != 'true'
+      uses: peter-evans/repository-dispatch@28959ce8df70de7be546dd1250a005dd32156697 # v4.0.1
+      with:
+        token: ${{ secrets.ACTIONS_TRIGGER_PAT }}
+        event-type: Source Code Update
+        client-payload: '{"source_branch":"immortalwrt/immortalwrt@openwrt-25.12","source_commit":"${{ steps.getHash.outputs.commitHash }}","config_name":"360t7-immortalwrt-25.12-ubi.conf"}'
+
+    - name: Delete workflow runs
+      uses: Mattraks/delete-workflow-runs@b3018382ca039b53d238908238bd35d1fb14f8ee # v2.1.0
+      with:
+        retain_days: 7
+        keep_minimum_runs: 1

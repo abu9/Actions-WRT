@@ -1,0 +1,254 @@
+name: Build and Push prebuilt tools container
+run-name: Build and Push prebuilt tools container - ${{ inputs.source_branch }}/${{ inputs.config_name }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_branch:
+        description: "Select the source branch"
+        required: false
+        default: 'immortalwrt/immortalwrt@openwrt-25.12'
+        type: choice
+        options:
+          - openwrt/openwrt@main
+          - coolsnowwolf/lede@master
+          - immortalwrt/immortalwrt@openwrt-23.05
+          - immortalwrt/immortalwrt@openwrt-24.10
+          - immortalwrt/immortalwrt@openwrt-25.12
+          - hanwckf/immortalwrt-mt798x@openwrt-21.02
+      source_commit:
+        description: 'Optional exact upstream source commit; empty resolves the selected branch once'
+        required: false
+        default: ''
+        type: string
+      config_name:
+        description: 'Config file name'
+        type: choice
+        options:
+          - '.config7981'
+          - 'mt7981-ax3000.config'
+          - '.config7981.mtwifi-cfg'
+          - '360t7-immortalwrt.conf'
+          - '360t7-immortalwrt-24.10.conf'
+          - '360t7-immortalwrt-25.12-ubi.conf'
+        default: '360t7-immortalwrt-25.12-ubi.conf'
+      build_tools:
+        description: 'Build and push the generic host-tools container'
+        type: boolean
+        default: true
+      build_toolchain:
+        description: 'Also build and push a target-specific toolchain container'
+        type: boolean
+        default: false
+  workflow_call:
+    inputs:
+      source_branch:
+        required: true
+        type: string
+      config_name:
+        required: true
+        type: string
+      build_tools:
+        type: boolean
+        default: true
+      build_toolchain:
+        type: boolean
+        default: false
+      source_commit:
+        type: string
+        default: ''
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}-${{ inputs.source_branch }}
+  cancel-in-progress: true
+
+jobs:
+  determine_targets:
+    name: Get target info
+    uses: ./.github/workflows/determine-targets.yml
+    with:
+      config_name: ${{ inputs.config_name }}
+      source_branch: ${{ inputs.source_branch }}
+      source_commit: ${{ inputs.source_commit }}
+
+  determine_container_info:
+    name: Determine tools image tag
+    needs: determine_targets
+    runs-on: ubuntu-24.04
+    outputs:
+      owner_lc: ${{ steps.info.outputs.owner_lc }}
+      container_tag: ${{ steps.info.outputs.container_tag }}
+    steps:
+      - name: Determine owner and tag
+        id: info
+        env:
+          AUTHOR: ${{ needs.determine_targets.outputs.author }}
+          REPO_BRANCH: ${{ needs.determine_targets.outputs.repo_branch }}
+          OWNER: ${{ github.repository_owner }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          OWNER_LC="${OWNER,,}"
+          # This is the branch-scoped base tag. The published generic tools
+          # image appends the computed content fingerprint to this value.
+          CONTAINER_TAG="${AUTHOR}_${REPO_BRANCH}"
+          echo "owner_lc=$OWNER_LC" >> "$GITHUB_OUTPUT"
+          echo "container_tag=$CONTAINER_TAG" >> "$GITHUB_OUTPUT"
+          echo "Will publish ghcr.io/$OWNER_LC/tools:$CONTAINER_TAG"
+
+  compute-tools-fingerprint:
+    name: Compute generic host-tools fingerprint
+    if: ${{ !cancelled() && inputs.build_tools == true }}
+    needs: determine_targets
+    uses: ./.github/workflows/reusable_tools_fingerprint.yml
+    with:
+      repo_url: ${{ needs.determine_targets.outputs.repo_url }}
+      repo_branch: ${{ needs.determine_targets.outputs.repo_branch }}
+      source_commit: ${{ needs.determine_targets.outputs.source_commit }}
+
+  build-linux-buildbot:
+    name: Build host tools with upstream buildbot
+    if: ${{ !cancelled() && inputs.build_tools == true }}
+    needs: [determine_targets, determine_container_info, compute-tools-fingerprint]
+    permissions:
+      contents: read
+      packages: read
+      actions: write
+    uses: ./.github/workflows/reusable_build_tools.yml
+    with:
+      generate_prebuilt_artifacts: true
+      repo_url: ${{ needs.determine_targets.outputs.repo_url }}
+      source_commit: ${{ needs.compute-tools-fingerprint.outputs.source_commit }}
+      ccache_tag: ${{ needs.determine_container_info.outputs.container_tag }}
+
+  push-tools-container:
+    name: Push generic host-tools image
+    if: ${{ !cancelled() && inputs.build_tools == true && needs.build-linux-buildbot.result == 'success' && needs.compute-tools-fingerprint.result == 'success' }}
+    needs: [determine_targets, determine_container_info, build-linux-buildbot, compute-tools-fingerprint]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout Actions-WRT repository
+        uses: actions/checkout@v7.0.1
+
+      - name: Download prebuilt tools
+        uses: actions/download-artifact@v8.0.2
+        with:
+          name: linux-buildbot-prebuilt-tools
+
+      - name: Extract prebuilt tools
+        run: tar -xf tools.tar
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v4.8.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push tools image
+        uses: docker/build-push-action@v7.4.0
+        with:
+          context: .
+          push: true
+          tags: ghcr.io/${{ needs.determine_container_info.outputs.owner_lc }}/tools:${{ needs.determine_container_info.outputs.container_tag }}-${{ needs.compute-tools-fingerprint.outputs.tools_fingerprint }}
+          labels: |
+            io.abu9.actions-wrt.tools-fingerprint=${{ needs.compute-tools-fingerprint.outputs.tools_fingerprint }}
+            io.abu9.actions-wrt.tools-source-commit=${{ needs.compute-tools-fingerprint.outputs.source_commit }}
+            io.abu9.actions-wrt.tools-source-repository=${{ needs.determine_targets.outputs.repo_url }}
+          file: .github/dockerfiles/Dockerfile.tools
+
+  compute-toolchain-cache-key:
+    name: Compute target toolchain cache key
+    if: ${{ !cancelled() && inputs.build_toolchain == true && inputs.build_tools == true }}
+    needs: [determine_targets, compute-tools-fingerprint]
+    runs-on: ubuntu-24.04
+    outputs:
+      cache_key: ${{ steps.key.outputs.cache_key }}
+    steps:
+      - name: Compute cache key
+        id: key
+        env:
+          TARGET: ${{ needs.determine_targets.outputs.target }}
+          SUBTARGET: ${{ needs.determine_targets.outputs.subtarget }}
+          SOURCE_COMMIT: ${{ needs.compute-tools-fingerprint.outputs.source_commit }}
+          TOOLS_FINGERPRINT: ${{ needs.compute-tools-fingerprint.outputs.tools_fingerprint }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          KEY="$(printf '%s\n' "$TARGET" "$SUBTARGET" "$SOURCE_COMMIT" "$TOOLS_FINGERPRINT" | sha256sum | cut -c1-32)"
+          echo "cache_key=$KEY" >> "$GITHUB_OUTPUT"
+
+  build-target-toolchain:
+    name: Build target-specific toolchain
+    if: ${{ !cancelled() && inputs.build_toolchain == true && inputs.build_tools == true && needs.compute-tools-fingerprint.result == 'success' }}
+    needs: [determine_targets, compute-tools-fingerprint, push-tools-container]
+    permissions:
+      contents: read
+      packages: read
+      actions: write
+    uses: ./.github/workflows/reusable_build.yml
+    with:
+      target: ${{ needs.determine_targets.outputs.target }}
+      subtarget: ${{ needs.determine_targets.outputs.subtarget }}
+      repo_url: ${{ needs.determine_targets.outputs.repo_url }}
+      repo_branch: ${{ needs.determine_targets.outputs.repo_branch }}
+      repo_commit: ${{ needs.compute-tools-fingerprint.outputs.source_commit }}
+      tools_fingerprint: ${{ needs.compute-tools-fingerprint.outputs.tools_fingerprint }}
+      author: ${{ needs.determine_targets.outputs.author }}
+      container_name: tools
+      build_toolchain: true
+      build_external_toolchain: true
+      upload_external_toolchain: true
+
+  push-target-toolchain:
+    name: Push target-specific toolchain image
+    if: ${{ !cancelled() && needs.build-target-toolchain.outputs.push == 'true' }}
+    needs: [determine_targets, determine_container_info, compute-tools-fingerprint, compute-toolchain-cache-key, build-target-toolchain]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout Actions-WRT repository
+        uses: actions/checkout@v7.0.1
+
+      - name: Download external toolchain artifact
+        uses: actions/download-artifact@v8.0.2
+        with:
+          name: ${{ needs.determine_targets.outputs.target }}-${{ needs.determine_targets.outputs.subtarget }}-external-toolchain
+
+      - name: Determine toolchain archive name
+        id: get-toolchain-name
+        shell: bash
+        run: |
+          set -euo pipefail
+          TOOLCHAIN_NAME="$(find . -maxdepth 1 -type f -name '*toolchain*' -printf '%f\n' | head -n1)"
+          test -n "$TOOLCHAIN_NAME"
+          echo "toolchain_name=$TOOLCHAIN_NAME" >> "$GITHUB_OUTPUT"
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v4.8.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push target toolchain image
+        uses: docker/build-push-action@v7.4.0
+        with:
+          context: .
+          push: true
+          tags: ghcr.io/${{ needs.determine_container_info.outputs.owner_lc }}/toolchain:${{ needs.determine_targets.outputs.target }}-${{ needs.determine_targets.outputs.subtarget }}-${{ needs.determine_container_info.outputs.container_tag }}-${{ needs.compute-toolchain-cache-key.outputs.cache_key }}
+          file: .github/dockerfiles/Dockerfile.toolchain
+          build-args: |
+            OWNER_LC=${{ needs.determine_container_info.outputs.owner_lc }}
+            CONTAINER_TAG=${{ needs.determine_container_info.outputs.container_tag }}-${{ needs.compute-tools-fingerprint.outputs.tools_fingerprint }}
+            TOOLS_FINGERPRINT=${{ needs.compute-tools-fingerprint.outputs.tools_fingerprint }}
+            SOURCE_COMMIT=${{ needs.compute-tools-fingerprint.outputs.source_commit }}
+            TOOLCHAIN_NAME=${{ steps.get-toolchain-name.outputs.toolchain_name }}

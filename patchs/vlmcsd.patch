@@ -1,0 +1,13 @@
+diff --git a/net/vlmcsd/Makefile b/net/vlmcsd/Makefile
+index eeefbb2..e1cfded 100644
+--- a/net/vlmcsd/Makefile
++++ b/net/vlmcsd/Makefile
+@@ -37,6 +37,8 @@ define Package/vlmcsd/description
+        Solaris, Minix, Mac OS, iOS, Windows with or without Cygwin)
+ endef
+
++MAKE_FLAGS += CC="$(TARGET_CC_NOCACHE)"
++
+ define Package/vlmcsd/install
+        $(INSTALL_DIR) $(1)/usr/bin
+        #$(INSTALL_BIN) $(PKG_BUILD_DIR)/bin/vlmcs $(1)/usr/bin/vlmcs
