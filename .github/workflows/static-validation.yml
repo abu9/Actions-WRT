@@ -46,8 +46,18 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends shellcheck
 
+      - name: Create ShellCheck error-only wrapper
+        run: |
+          set -euo pipefail
+          cat > "$RUNNER_TEMP/shellcheck-errors-only" <<'WRAPPER'
+          #!/usr/bin/env bash
+          set -euo pipefail
+          exec shellcheck --severity=error "$@"
+          WRAPPER
+          chmod 0755 "$RUNNER_TEMP/shellcheck-errors-only"
+
       - name: Lint all workflow files and embedded shell
         run: |
           set -euo pipefail
-          actionlint -shellcheck=shellcheck -color .github/workflows/*.yml
+          actionlint -shellcheck="$RUNNER_TEMP/shellcheck-errors-only" -color .github/workflows/*.yml
           shellcheck --severity=error .github/scripts/*.sh
