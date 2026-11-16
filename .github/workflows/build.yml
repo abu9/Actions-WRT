@@ -267,7 +267,8 @@ jobs:
       repo_commit: ${{ needs.tools_fingerprint.outputs.source_commit }}
       tools_fingerprint: ${{ needs.tools_fingerprint.outputs.tools_fingerprint }}
       author: ${{ needs.determine_targets.outputs.author }}
-      container_name: ${{ inputs.container_name }}
+      # Only request the target-toolchain image when the preceding GHCR label check verified its fingerprint.
+      container_name: ${{ startsWith(needs.check_tools_container.outputs.checked_image, 'toolchain:') && 'toolchain' || 'tools' }}
       build_kernel: ${{ inputs.build_kernel }}
       build_full: ${{ inputs.build_full }}
       build_toolchain: ${{ inputs.build_toolchain }}
