@@ -30,10 +30,9 @@ jobs:
 
       - name: Setup Debug Session
         if: inputs.source_branch
-        env:
-          TMATE_ENCRYPT_PASSWORD: ${{secrets.TMATE_ENCRYPT_PASSWORD}}
-          # HOME: "/root"
-        uses: tete1030/safe-debugger-action@master          
+        uses: mxschmitt/action-tmate@35b54afac29c97fb54faba5b513f8fbd1882f113 # v3.24
+        with:
+          limit-access-to-actor: true          
 
       - name: Find external toolchain name
         id: get-toolchain-name
