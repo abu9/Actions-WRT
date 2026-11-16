@@ -4,5 +4,8 @@ ARG CONTAINER_TAG
 FROM ghcr.io/$OWNER_LC/tools:$CONTAINER_TAG
 
 ARG TOOLCHAIN_NAME
+ARG TOOLS_FINGERPRINT
+
+LABEL io.abu9.actions-wrt.tools-fingerprint="${TOOLS_FINGERPRINT}"
 
 ADD $TOOLCHAIN_NAME /external-toolchain/
