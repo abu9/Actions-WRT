@@ -53,14 +53,14 @@ jobs:
       - name: Fix permission
         run: chown -R buildbot:buildbot .
 
-      # The U-Boot prerequisite check in include/u-boot.mk imports setuptools
-      # through STAGING_DIR_HOST/bin/python3. The buildworker image does not
-      # provide this host dependency for the current Host Tools bootstrap.
+      # The buildworker uses /opt/venv/bin/python3 ahead of Debian's system
+      # Python. Install setuptools into that active virtual environment so the
+      # U-Boot prerequisite check can import it.
       - name: Install missing host Python dependency
         run: |
-          apt-get update
-          apt-get install -y --no-install-recommends python3-setuptools
-          python3 -c 'import setuptools; print("System setuptools:", setuptools.__version__)'
+          set -euo pipefail
+          python3 -m pip install --disable-pip-version-check --no-cache-dir setuptools
+          python3 -c 'import setuptools; print("Buildworker setuptools:", setuptools.__version__)'
 
       - name: Set configs for tools container
         working-directory: openwrt
