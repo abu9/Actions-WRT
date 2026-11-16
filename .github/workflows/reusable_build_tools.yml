@@ -53,14 +53,22 @@ jobs:
       - name: Fix permission
         run: chown -R buildbot:buildbot .
 
-      # The buildworker uses /opt/venv/bin/python3 ahead of Debian's system
-      # Python. Install setuptools into that active virtual environment so the
-      # U-Boot prerequisite check can import it.
-      - name: Install missing host Python dependency
+      # Diagnose the exact interpreter used by the U-Boot prerequisite check.
+      # The buildworker's /opt/venv Python and STAGING_DIR_HOST Python are not
+      # necessarily the same interpreter.
+      - name: Diagnose host Python environment
+        working-directory: openwrt
         run: |
           set -euo pipefail
-          python3 -m pip install --disable-pip-version-check --no-cache-dir setuptools
-          python3 -c 'import setuptools; print("Buildworker setuptools:", setuptools.__version__)'
+          HOST_PYTHON="$PWD/staging_dir/host/bin/python3"
+          echo "PATH python: $(command -v python3)"
+          python3 -c 'import sys; print("PATH executable:", sys.executable); print("PATH sys.path:", sys.path)'
+          echo "Host Python link:"
+          ls -l "$HOST_PYTHON"
+          readlink -f "$HOST_PYTHON" || true
+          "$HOST_PYTHON" -c 'import sys; print("Host executable:", sys.executable); print("Host sys.path:", sys.path)'
+          "$HOST_PYTHON" -m pip --version || true
+          "$HOST_PYTHON" -c 'import setuptools; print("Host setuptools:", setuptools.__version__)'
 
       - name: Set configs for tools container
         working-directory: openwrt
