@@ -80,6 +80,7 @@ def main() -> int:
     parser.add_argument("--local-repo-dir", required=True, type=Path)
     parser.add_argument("--shared-workflows-dir", required=True, type=Path)
     parser.add_argument("--source-repo", required=True)
+    parser.add_argument("--source-ref", required=True)
     parser.add_argument("--shared-ref", required=True)
     args = parser.parse_args()
 
@@ -116,6 +117,8 @@ def main() -> int:
     manifest = {
         "schema": 1,
         "source_repository": args.source_repo,
+        "source_ref": args.source_ref,
+        "source_commit": source_commit,
         "shared_workflows_ref": SHARED_WORKFLOWS_REF,
         "host_tools_config": HOST_TOOLS_CONFIG,
         "build_environment": BUILD_ENVIRONMENT,
