@@ -53,23 +53,6 @@ jobs:
       - name: Fix permission
         run: chown -R buildbot:buildbot .
 
-      # Diagnose the exact interpreter used by the U-Boot prerequisite check.
-      # The buildworker's /opt/venv Python and STAGING_DIR_HOST Python are not
-      # necessarily the same interpreter.
-      - name: Diagnose host Python environment
-        working-directory: openwrt
-        run: |
-          set -euo pipefail
-          HOST_PYTHON="$PWD/staging_dir/host/bin/python3"
-          echo "PATH python: $(command -v python3)"
-          python3 -c 'import sys; print("PATH executable:", sys.executable); print("PATH sys.path:", sys.path)'
-          echo "Host Python link:"
-          ls -l "$HOST_PYTHON"
-          readlink -f "$HOST_PYTHON" || true
-          "$HOST_PYTHON" -c 'import sys; print("Host executable:", sys.executable); print("Host sys.path:", sys.path)'
-          "$HOST_PYTHON" -m pip --version || true
-          "$HOST_PYTHON" -c 'import setuptools; print("Host setuptools:", setuptools.__version__)'
-
       - name: Set configs for tools container
         working-directory: openwrt
         run: |
@@ -89,6 +72,23 @@ jobs:
           set -e
           make defconfig
           BUILD_SCRIPT
+
+      # Diagnose the exact interpreter used by the U-Boot prerequisite check.
+      # The buildworker's /opt/venv Python and STAGING_DIR_HOST Python are not
+      # necessarily the same interpreter.
+      - name: Diagnose host Python environment
+        working-directory: openwrt
+        run: |
+          set -euo pipefail
+          HOST_PYTHON="$PWD/staging_dir/host/bin/python3"
+          echo "PATH python: $(command -v python3)"
+          python3 -c 'import sys; print("PATH executable:", sys.executable); print("PATH sys.path:", sys.path)'
+          echo "Host Python link:"
+          ls -l "$HOST_PYTHON"
+          readlink -f "$HOST_PYTHON" || true
+          "$HOST_PYTHON" -c 'import sys; print("Host executable:", sys.executable); print("Host sys.path:", sys.path)'
+          "$HOST_PYTHON" -m pip --version || true
+          "$HOST_PYTHON" -c 'import setuptools; print("Host setuptools:", setuptools.__version__)'
 
       - name: Verify host Python setuptools
         working-directory: openwrt
