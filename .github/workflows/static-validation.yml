@@ -20,6 +20,22 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v7.0.1
 
+      - name: Create buildbot test account
+        run: sudo useradd --create-home --shell /bin/bash buildbot
+
+      - name: Validate custom sh shell template
+        shell: su buildbot -c "sh -e {0}"
+        run: |
+          test "$(id -un)" = buildbot
+          test -n "$GITHUB_WORKSPACE"
+
+      - name: Validate custom bash shell template
+        shell: su buildbot -c "bash {0}"
+        run: |
+          set -euo pipefail
+          test "$(id -un)" = buildbot
+          test -n "$GITHUB_WORKSPACE"
+
       - name: Set up pinned Go
         uses: actions/setup-go@v7.0.0
         with:
