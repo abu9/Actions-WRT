@@ -272,7 +272,7 @@ jobs:
       - name: Refresh and validate prebuilt tools
         shell: su buildbot -c "sh -e {0}"
         working-directory: openwrt
-        run: bash "${GITHUB_WORKSPACE}/.github/scripts/ext-tools-refresh.sh" --refresh
+        run: bash ../.github/scripts/ext-tools-refresh.sh --refresh
 
       - name: Compile needed host tools
         shell: su buildbot -c "sh -e {0}"
@@ -740,7 +740,7 @@ jobs:
       - name: Refresh and validate prebuilt tools
         shell: su buildbot -c "sh -e {0}"
         working-directory: openwrt
-        run: bash "${GITHUB_WORKSPACE}/.github/scripts/ext-tools-refresh.sh" --refresh
+        run: bash ../.github/scripts/ext-tools-refresh.sh --refresh
 
       - name: Build tools
         shell: su buildbot -c "sh -e {0}"
