@@ -1,5 +1,5 @@
 name: Build WRT
-run-name: Build WRT - ${{ github.event.client_payload.source_branch || inputs.source_branch || 'immortalwrt/immortalwrt@openwrt-25.12' }}/${{ github.event.client_payload.config_name || inputs.config_name || '360t7-immortalwrt-25.12-ubi.conf' }}${{ github.event_name == 'pull_request' || inputs.validate_only && ' [validation only]' || '' }}
+run-name: Build WRT - ${{ github.event.client_payload.source_branch || inputs.source_branch || 'immortalwrt/immortalwrt@openwrt-25.12' }}/${{ github.event.client_payload.config_name || inputs.config_name || '360t7-immortalwrt-25.12-ubi.conf' }}${{ (github.event_name == 'pull_request' || inputs.validate_only) && ' [validation only]' || '' }}
 
 on:
   pull_request:
