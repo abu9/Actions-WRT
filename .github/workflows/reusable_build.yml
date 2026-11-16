@@ -105,7 +105,7 @@ permissions:
 jobs:
   setup_build:
     name: Set up build ${{ inputs.target }}/${{ inputs.subtarget }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     outputs:
       container: ${{ steps.determine_container.outputs.container }}
       ccache_tag: ${{ steps.determine_container_name.outputs.ccache_tag }}
@@ -235,7 +235,7 @@ jobs:
     name: Check packages for ${{ inputs.target }}/${{ inputs.subtarget }}
     needs: setup_build
     if: inputs.check == true && ( github.event_name == 'push' || inputs.check_packages_list != '' )
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
 
     container: ghcr.io/${{ needs.setup_build.outputs.container }}
 
@@ -342,7 +342,7 @@ jobs:
   build:
     name: Build ${{ inputs.target }}/${{ inputs.subtarget }}
     needs: setup_build
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     outputs:
       push: ${{ steps.setoutput.outputs.push }}
       toolchain_hash: ${{ steps.get-toolchain-file.outputs.toolchain_hash }}
