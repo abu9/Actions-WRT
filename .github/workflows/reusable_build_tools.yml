@@ -53,7 +53,7 @@ jobs:
         run: chown -R buildbot:buildbot .
 
       - name: Set configs for tools container
-        shell: su buildbot -c "sh -e {0}"
+        shell: bash -c 'su buildbot -c "sh -e" < "$1"' -- {0}
         working-directory: openwrt
         run: |
           touch .config
@@ -63,12 +63,12 @@ jobs:
           echo CONFIG_BUILD_ALL_HOST_TOOLS=y >> .config
 
       - name: Make prereq
-        shell: su buildbot -c "sh -e {0}"
+        shell: bash -c 'su buildbot -c "sh -e" < "$1"' -- {0}
         working-directory: openwrt
         run: make defconfig
 
       - name: Build tools
-        shell: su buildbot -c "sh -e {0}"
+        shell: bash -c 'su buildbot -c "sh -e" < "$1"' -- {0}
         working-directory: openwrt
         run: |
           make tools/install -j$(nproc) BUILD_LOG=1 || ret=$? ../.github/scripts/show_build_failures.sh
@@ -89,7 +89,7 @@ jobs:
 
       - name: Archive prebuilt tools
         if: inputs.generate_prebuilt_artifacts == true
-        shell: su buildbot -c "sh -e {0}"
+        shell: bash -c 'su buildbot -c "sh -e" < "$1"' -- {0}
         working-directory: openwrt
         run: tar -cf tools.tar staging_dir/host build_dir/host
 
