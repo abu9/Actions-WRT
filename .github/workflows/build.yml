@@ -1,7 +1,16 @@
 name: Build WRT
-run-name: Build WRT - ${{ github.event.client_payload.source_branch || inputs.source_branch || 'immortalwrt/immortalwrt@openwrt-25.12' }}/${{ github.event.client_payload.config_name || inputs.config_name || '360t7-immortalwrt-25.12-ubi.conf' }}${{ (github.event_name == 'pull_request' || inputs.validate_only) && ' [validation only]' || '' }}
+run-name: Build WRT - ${{ github.event.client_payload.source_branch || inputs.source_branch || 'immortalwrt/immortalwrt@openwrt-25.12' }}/${{ (github.event_name == 'push' && '360t7-immortalwrt-25.12-kernel-min.conf') || github.event.client_payload.config_name || inputs.config_name || '360t7-immortalwrt-25.12-ubi.conf' }}${{ (github.event_name == 'pull_request' || inputs.validate_only) && ' [validation only]' || (github.event_name == 'push' && ' [kernel-only]' || '') }}
 
 on:
+  push:
+    branches:
+      - feat/360t7-openwrt-uboot-ubi-25.12
+    paths:
+      - '.github/workflows/**'
+      - '.github/scripts/**'
+      - '360t7-immortalwrt-25.12-kernel-min.conf'
+      - 'diy-part*.sh'
+      - 'files/**'
   pull_request:
     branches:
       - main
@@ -68,7 +77,7 @@ env:
   REPO_URL: hanwckf/immortalwrt-mt798x
   REPO_BRANCH: openwrt-21.02
   FEEDS_CONF:
-  CONFIG_FILE: ${{ github.event.client_payload.config_name || github.event.inputs.config_name || '360t7-immortalwrt-25.12-ubi.conf' }}
+  CONFIG_FILE: ${{ (github.event_name == 'push' && '360t7-immortalwrt-25.12-kernel-min.conf') || github.event.client_payload.config_name || github.event.inputs.config_name || '360t7-immortalwrt-25.12-ubi.conf' }}
   DIY_P1_SH: diy-part1.sh
   DIY_P2_SH: diy-part2.sh
   UPLOAD_BIN_DIR: false
@@ -84,7 +93,7 @@ jobs:
     name: Get target info
     uses: ./.github/workflows/determine-targets.yml
     with:
-      config_name: ${{ github.event.client_payload.config_name || inputs.config_name || '360t7-immortalwrt-25.12-ubi.conf' }}
+      config_name: ${{ (github.event_name == 'push' && '360t7-immortalwrt-25.12-kernel-min.conf') || github.event.client_payload.config_name || inputs.config_name || '360t7-immortalwrt-25.12-ubi.conf' }}
       source_branch: ${{ github.event.client_payload.source_branch || inputs.source_branch || 'immortalwrt/immortalwrt@openwrt-25.12' }}
       source_commit: ${{ github.event.client_payload.source_commit || inputs.source_commit || '' }}
 
@@ -266,7 +275,7 @@ jobs:
     uses: ./.github/workflows/push-containers.yml
     with:
       source_branch: ${{ github.event.client_payload.source_branch || inputs.source_branch || 'immortalwrt/immortalwrt@openwrt-25.12' }}
-      config_name: ${{ github.event.client_payload.config_name || inputs.config_name || '360t7-immortalwrt-25.12-ubi.conf' }}
+      config_name: ${{ (github.event_name == 'push' && '360t7-immortalwrt-25.12-kernel-min.conf') || github.event.client_payload.config_name || inputs.config_name || '360t7-immortalwrt-25.12-ubi.conf' }}
       source_commit: ${{ needs.tools_fingerprint.outputs.source_commit }}
       build_tools: true
       build_toolchain: false
@@ -297,10 +306,11 @@ jobs:
       author: ${{ needs.determine_targets.outputs.author }}
       # Only request the target-toolchain image when the preceding GHCR label check verified its fingerprint.
       container_name: ${{ startsWith(needs.check_tools_container.outputs.checked_image, 'toolchain:') && 'toolchain' || 'tools' }}
-      build_kernel: ${{ inputs.build_kernel }}
+      build_kernel: ${{ github.event_name == 'push' || inputs.build_kernel }}
       build_full: ${{ github.event_name == 'repository_dispatch' || inputs.build_full }}
       build_toolchain: ${{ inputs.build_toolchain }}
       debug: ${{ inputs.debug }}
-      config_name: ${{ github.event.client_payload.config_name || inputs.config_name || '360t7-immortalwrt-25.12-ubi.conf' }}
+      config_name: ${{ (github.event_name == 'push' && '360t7-immortalwrt-25.12-kernel-min.conf') || github.event.client_payload.config_name || inputs.config_name || '360t7-immortalwrt-25.12-ubi.conf' }}
       ccache_type: packages
-      use_ccache_cache: ${{ github.event_name == 'repository_dispatch' || inputs.use_ccache_cache }}
+      use_ccache_cache: ${{ github.event_name == 'repository_dispatch' || github.event_name == 'push' || inputs.use_ccache_cache }}
+      check: ${{ github.event_name != 'push' }}
