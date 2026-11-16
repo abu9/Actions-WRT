@@ -53,6 +53,14 @@ jobs:
       - name: Fix permission
         run: chown -R buildbot:buildbot .
 
+      # U-Boot checks setuptools through STAGING_DIR_HOST/bin/python3, whose
+      # sys.path includes Debian's /usr/lib/python3/dist-packages. Install the
+      # Debian package and verify it with that exact interpreter below.
+      - name: Install host Python setuptools dependency
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends python3-setuptools
+
       - name: Set configs for tools container
         working-directory: openwrt
         run: |
@@ -73,23 +81,6 @@ jobs:
           make defconfig
           BUILD_SCRIPT
 
-      # Diagnose the exact interpreter used by the U-Boot prerequisite check.
-      # The buildworker's /opt/venv Python and STAGING_DIR_HOST Python are not
-      # necessarily the same interpreter.
-      - name: Diagnose host Python environment
-        working-directory: openwrt
-        run: |
-          set -euo pipefail
-          HOST_PYTHON="$PWD/staging_dir/host/bin/python3"
-          echo "PATH python: $(command -v python3)"
-          python3 -c 'import sys; print("PATH executable:", sys.executable); print("PATH sys.path:", sys.path)'
-          echo "Host Python link:"
-          ls -l "$HOST_PYTHON"
-          readlink -f "$HOST_PYTHON" || true
-          "$HOST_PYTHON" -c 'import sys; print("Host executable:", sys.executable); print("Host sys.path:", sys.path)'
-          "$HOST_PYTHON" -m pip --version || true
-          "$HOST_PYTHON" -c 'import setuptools; print("Host setuptools:", setuptools.__version__)'
-
       - name: Verify host Python setuptools
         working-directory: openwrt
         run: |
@@ -100,6 +91,7 @@ jobs:
             ls -la staging_dir/host/bin || true
             exit 1
           fi
+          echo "Host Python resolves to: $(readlink -f "$HOST_PYTHON")"
           "$HOST_PYTHON" -c 'import setuptools; print("Host setuptools:", setuptools.__version__)'
 
       - name: Build tools
