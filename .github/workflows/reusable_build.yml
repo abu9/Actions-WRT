@@ -169,7 +169,8 @@ jobs:
             else
               TOOLCHAIN_BASE_TAG="${TARGET}-${SUBTARGET}-${CONTAINER_TAG}"
               CCACHE_TAG="$TOOLCHAIN_BASE_TAG"
-              TOOLCHAIN_TAG="${TOOLCHAIN_BASE_TAG}-${SOURCE_COMMIT}-${TOOLS_FINGERPRINT}"
+              TOOLCHAIN_CACHE_KEY="$(printf '%s\n' "$TARGET" "$SUBTARGET" "$SOURCE_COMMIT" "$TOOLS_FINGERPRINT" | sha256sum | cut -c1-32)"
+              TOOLCHAIN_TAG="${TOOLCHAIN_BASE_TAG}-${TOOLCHAIN_CACHE_KEY}"
               TOKEN="$(curl --fail --silent --show-error --user "${GHCR_USER}:${GHCR_PASSWORD}" \
                 "https://ghcr.io/token?scope=repository:${GHCR_OWNER}/toolchain:pull" | jq -r '.token // .access_token // empty')"
               if [ -z "$TOKEN" ]; then
