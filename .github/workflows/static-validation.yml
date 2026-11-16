@@ -1,12 +1,13 @@
 name: Static workflow validation
 
 on:
-  push:
-    branches:
-      - feat/360t7-openwrt-uboot-ubi-25.12
   pull_request:
     branches:
       - main
+
+concurrency:
+  group: static-validation-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
