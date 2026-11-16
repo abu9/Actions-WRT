@@ -207,8 +207,8 @@ jobs:
           # A target-specific toolchain image remains a separate cache type.
           # Its fingerprint is deliberately not conflated with generic host tools.
           if [ "$CONTAINER_NAME" = "toolchain" ]; then
-            TOOLCHAIN_TAG="${TARGET}-${SUBTARGET}-${BASE_TAG}"
-            if check_manifest_exists toolchain "$TOOLCHAIN_TAG"; then
+            TOOLCHAIN_TAG="${TARGET}-${SUBTARGET}-${BASE_TAG}-${EXPECTED_FINGERPRINT}"
+            if check_tools_fingerprint toolchain "$TOOLCHAIN_TAG"; then
               echo "Existing target toolchain image found: ghcr.io/${OWNER_LC}/toolchain:${TOOLCHAIN_TAG}"
               echo "tools_required=false" >> "$GITHUB_OUTPUT"
               echo "checked_image=toolchain:${TOOLCHAIN_TAG}" >> "$GITHUB_OUTPUT"
