@@ -218,7 +218,7 @@ jobs:
 
       - name: Get info
         id: get_info
-        if: inputs.build_full == true
+        if: inputs.build_full == true || inputs.build_kernel == true
         run: |
           mv ${{ inputs.config_name }} .config
 
@@ -664,7 +664,7 @@ jobs:
         run: ${GITHUB_WORKSPACE}/diy-part2.sh
 
       - name: Setup configuration
-        if: inputs.build_full == true
+        if: inputs.build_full == true || inputs.build_kernel == true
         shell: bash -c 'su --preserve-environment --command "sh -e" buildbot < "$1"' -- {0}     
         run: cp -f ${{ inputs.config_name }} openwrt/.config
 
