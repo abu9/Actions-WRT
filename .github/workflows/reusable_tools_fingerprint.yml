@@ -31,12 +31,12 @@ jobs:
       source_commit: ${{ steps.fingerprint.outputs.source_commit }}
     steps:
       - name: Checkout Actions-WRT workflow and fingerprint scripts
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7.0.1
         with:
           path: actions-wrt
 
       - name: Checkout OpenWrt source at a fixed commit
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7.0.1
         with:
           repository: ${{ inputs.repo_url }}
           ref: ${{ inputs.source_commit != '' && inputs.source_commit || inputs.repo_branch }}
