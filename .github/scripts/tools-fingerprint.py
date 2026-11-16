@@ -30,6 +30,7 @@ HOST_TOOLS_CONFIG = (
 BUILD_ENVIRONMENT = {
     "runner": "ubuntu-latest",
     "platform": "linux/amd64",
+    "buildworker_image": "ghcr.io/openwrt/buildbot/buildworker-v3.11.8:v28",
 }
 
 
