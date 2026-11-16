@@ -90,7 +90,7 @@ jobs:
   check_tools_container:
     name: Check whether a tools container is needed
     needs: [determine_targets, tools_fingerprint]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       contents: read
       packages: read
