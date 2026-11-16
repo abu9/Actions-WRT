@@ -72,75 +72,157 @@ jobs:
       config_name: ${{ inputs.config_name }}
       source_branch: ${{ inputs.source_branch }}
 
+  tools_fingerprint:
+    name: Calculate generic host-tools fingerprint
+    needs: determine_targets
+    uses: ./.github/workflows/reusable_tools_fingerprint.yml
+    with:
+      repo_url: \${{ needs.determine_targets.outputs.repo_url }}
+      repo_branch: \${{ needs.determine_targets.outputs.repo_branch }}
+
   check_tools_container:
     name: Check whether a tools container is needed
-    needs: determine_targets
+    needs: [determine_targets, tools_fingerprint]
     runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: read
     outputs:
-      tools_required: ${{ steps.check.outputs.tools_required }}
-      checked_image: ${{ steps.check.outputs.checked_image }}
+      tools_required: \${{ steps.check.outputs.tools_required }}
+      checked_image: \${{ steps.check.outputs.checked_image }}
+      expected_fingerprint: \${{ steps.check.outputs.expected_fingerprint }}
     steps:
-      - name: Check GHCR manifest
+      - name: Check GHCR manifest and tools fingerprint
         id: check
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          OWNER: ${{ github.repository_owner }}
-          AUTHOR: ${{ needs.determine_targets.outputs.author }}
-          REPO_BRANCH: ${{ needs.determine_targets.outputs.repo_branch }}
-          TARGET: ${{ needs.determine_targets.outputs.target }}
-          SUBTARGET: ${{ needs.determine_targets.outputs.subtarget }}
-          CONTAINER_NAME: ${{ inputs.container_name }}
+          GITHUB_TOKEN: \${{ secrets.GITHUB_TOKEN }}
+          OWNER: \${{ github.repository_owner }}
+          AUTHOR: \${{ needs.determine_targets.outputs.author }}
+          REPO_BRANCH: \${{ needs.determine_targets.outputs.repo_branch }}
+          TARGET: \${{ needs.determine_targets.outputs.target }}
+          SUBTARGET: \${{ needs.determine_targets.outputs.subtarget }}
+          CONTAINER_NAME: \${{ inputs.container_name }}
+          EXPECTED_FINGERPRINT: \${{ needs.tools_fingerprint.outputs.tools_fingerprint }}
         shell: bash
         run: |
           set -euo pipefail
-          OWNER_LC="${OWNER,,}"
-          TAG="${AUTHOR}_${REPO_BRANCH}"
+          OWNER_LC="\${OWNER,,}"
+          TAG="\${AUTHOR}_\${REPO_BRANCH}"
+          TMP_DIR="$(mktemp -d)"
+          trap 'rm -rf "$TMP_DIR"' EXIT
 
-          check_manifest() {
+          if [ -z "$EXPECTED_FINGERPRINT" ]; then
+            echo "Expected tools fingerprint is empty; refusing to reuse any image." >&2
+            exit 1
+          fi
+          echo "expected_fingerprint=$EXPECTED_FINGERPRINT" >> "$GITHUB_OUTPUT"
+
+          registry_token() {
             local image="$1"
-            local tag="$2"
             local token
-            local status
-            token="$(curl --fail --silent --show-error --user "${GITHUB_ACTOR}:${GITHUB_TOKEN}" \
-              "https://ghcr.io/token?scope=repository:${OWNER_LC}/${image}:pull" | jq -r '.token // .access_token // empty')"
+            token="$(curl --fail --silent --show-error --user "\${GITHUB_ACTOR}:\${GITHUB_TOKEN}" \
+              "https://ghcr.io/token?scope=repository:\${OWNER_LC}/\${image}:pull" | jq -r '.token // .access_token // empty')"
             if [ -z "$token" ]; then
-              echo "Unable to obtain a GHCR pull token for ${image}." >&2
+              echo "Unable to obtain a GHCR pull token for \${image}." >&2
               exit 1
             fi
-            status="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
+            printf '%s' "$token"
+          }
+
+          check_manifest_exists() {
+            local image="$1"
+            local tag="$2"
+            local token status
+            token="$(registry_token "$image")"
+            status="$(curl --silent --show-error --output "$TMP_DIR/manifest.json" --write-out '%{http_code}' \
               --header "Authorization: Bearer $token" \
               --header 'Accept: application/vnd.oci.image.index.v1+json, application/vnd.docker.distribution.manifest.list.v2+json, application/vnd.oci.image.manifest.v1+json, application/vnd.docker.distribution.manifest.v2+json' \
-              "https://ghcr.io/v2/${OWNER_LC}/${image}/manifests/${tag}")"
+              "https://ghcr.io/v2/\${OWNER_LC}/\${image}/manifests/\${tag}")"
             case "$status" in
               200) return 0 ;;
               404) return 1 ;;
-              *) echo "GHCR manifest check failed for ${image}:${tag} (HTTP $status)." >&2; exit 1 ;;
+              *) echo "GHCR manifest check failed for \${image}:\${tag} (HTTP $status)." >&2; exit 1 ;;
             esac
           }
 
-          # If the target-specific toolchain image exists, reusable_build will use it
-          # directly and does not need the generic tools image.
+          check_tools_fingerprint() {
+            local image="$1"
+            local tag="$2"
+            local token status manifest_digest config_digest image_fingerprint
+            token="$(registry_token "$image")"
+            status="$(curl --silent --show-error --output "$TMP_DIR/manifest.json" --write-out '%{http_code}' \
+              --header "Authorization: Bearer $token" \
+              --header 'Accept: application/vnd.oci.image.index.v1+json, application/vnd.docker.distribution.manifest.list.v2+json, application/vnd.oci.image.manifest.v1+json, application/vnd.docker.distribution.manifest.v2+json' \
+              "https://ghcr.io/v2/\${OWNER_LC}/\${image}/manifests/\${tag}")"
+            case "$status" in
+              200) ;;
+              404) return 1 ;;
+              *) echo "GHCR manifest check failed for \${image}:\${tag} (HTTP $status)." >&2; exit 1 ;;
+            esac
+
+            # docker/build-push-action may publish an OCI index with provenance.
+            # Read the linux/amd64 image manifest, not an attestation descriptor.
+            if jq -e '.manifests | type == "array"' "$TMP_DIR/manifest.json" >/dev/null; then
+              manifest_digest="$(jq -r '[.manifests[] | select(.platform.os == "linux" and .platform.architecture == "amd64")][0].digest // empty' "$TMP_DIR/manifest.json")"
+              if [ -z "$manifest_digest" ]; then
+                echo "No linux/amd64 image manifest found in \${image}:\${tag}; image must be rebuilt."
+                return 1
+              fi
+              status="$(curl --silent --show-error --output "$TMP_DIR/platform-manifest.json" --write-out '%{http_code}' \
+                --header "Authorization: Bearer $token" \
+                --header 'Accept: application/vnd.oci.image.manifest.v1+json, application/vnd.docker.distribution.manifest.v2+json' \
+                "https://ghcr.io/v2/\${OWNER_LC}/\${image}/manifests/\${manifest_digest}")"
+              case "$status" in
+                200) mv "$TMP_DIR/platform-manifest.json" "$TMP_DIR/manifest.json" ;;
+                404) return 1 ;;
+                *) echo "GHCR platform manifest read failed for \${image}:\${tag} (HTTP $status)." >&2; exit 1 ;;
+              esac
+            fi
+
+            config_digest="$(jq -r '.config.digest // empty' "$TMP_DIR/manifest.json")"
+            if [ -z "$config_digest" ]; then
+              echo "Image config digest missing in \${image}:\${tag}; image must be rebuilt."
+              return 1
+            fi
+            status="$(curl --silent --show-error --output "$TMP_DIR/config.json" --write-out '%{http_code}' \
+              --header "Authorization: Bearer $token" \
+              "https://ghcr.io/v2/\${OWNER_LC}/\${image}/blobs/\${config_digest}")"
+            case "$status" in
+              200) ;;
+              404) return 1 ;;
+              *) echo "GHCR image config read failed for \${image}:\${tag} (HTTP $status)." >&2; exit 1 ;;
+            esac
+
+            image_fingerprint="$(jq -r '.config.Labels["io.abu9.actions-wrt.tools-fingerprint"] // empty' "$TMP_DIR/config.json")"
+            if [ "$image_fingerprint" = "$EXPECTED_FINGERPRINT" ]; then
+              return 0
+            fi
+            echo "Stale or unlabelled tools image: \${image}:\${tag}"
+            echo "  image fingerprint: \${image_fingerprint:-<missing>}"
+            echo "  expected fingerprint: $EXPECTED_FINGERPRINT"
+            return 1
+          }
+
+          # A target-specific toolchain image remains a separate cache type.
+          # Its fingerprint is deliberately not conflated with generic host tools.
           if [ "$CONTAINER_NAME" = "toolchain" ]; then
-            TOOLCHAIN_TAG="${TARGET}-${SUBTARGET}-${TAG}"
-            if check_manifest toolchain "$TOOLCHAIN_TAG"; then
-              echo "Existing target toolchain image found: ghcr.io/${OWNER_LC}/toolchain:${TOOLCHAIN_TAG}"
+            TOOLCHAIN_TAG="\${TARGET}-\${SUBTARGET}-\${TAG}"
+            if check_manifest_exists toolchain "$TOOLCHAIN_TAG"; then
+              echo "Existing target toolchain image found: ghcr.io/\${OWNER_LC}/toolchain:\${TOOLCHAIN_TAG}"
               echo "tools_required=false" >> "$GITHUB_OUTPUT"
-              echo "checked_image=toolchain:${TOOLCHAIN_TAG}" >> "$GITHUB_OUTPUT"
+              echo "checked_image=toolchain:\${TOOLCHAIN_TAG}" >> "$GITHUB_OUTPUT"
               exit 0
             fi
           fi
 
-          if check_manifest tools "$TAG"; then
-            echo "Existing tools image found: ghcr.io/${OWNER_LC}/tools:${TAG}"
+          if check_tools_fingerprint tools "$TAG"; then
+            echo "Matching tools image found: ghcr.io/\${OWNER_LC}/tools:\${TAG}"
             echo "tools_required=false" >> "$GITHUB_OUTPUT"
-            echo "checked_image=tools:${TAG}" >> "$GITHUB_OUTPUT"
+            echo "checked_image=tools:\${TAG}" >> "$GITHUB_OUTPUT"
           else
-            echo "Tools image is missing: ghcr.io/${OWNER_LC}/tools:${TAG}"
+            echo "Tools image is missing or its fingerprint does not match: ghcr.io/\${OWNER_LC}/tools:\${TAG}"
             echo "tools_required=true" >> "$GITHUB_OUTPUT"
-            echo "checked_image=tools:${TAG}" >> "$GITHUB_OUTPUT"
+            echo "checked_image=tools:\${TAG}" >> "$GITHUB_OUTPUT"
           fi
 
   build_tools_container:
@@ -155,6 +237,7 @@ jobs:
     with:
       source_branch: ${{ inputs.source_branch }}
       config_name: ${{ inputs.config_name }}
+      source_commit: ${{ needs.tools_fingerprint.outputs.source_commit }}
       build_tools: true
       build_toolchain: false
 
@@ -177,6 +260,7 @@ jobs:
       subtarget: ${{ needs.determine_targets.outputs.subtarget }}
       repo_url: ${{ needs.determine_targets.outputs.repo_url }}
       repo_branch: ${{ needs.determine_targets.outputs.repo_branch }}
+      repo_commit: ${{ needs.tools_fingerprint.outputs.source_commit }}
       author: ${{ needs.determine_targets.outputs.author }}
       container_name: ${{ inputs.container_name }}
       build_kernel: ${{ inputs.build_kernel }}

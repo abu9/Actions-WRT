@@ -86,6 +86,9 @@ on:
       repo_branch:
         required: true
         type: string
+      repo_commit:
+        type: string
+        default: ''
       author:
         required: true
         type: string
@@ -226,7 +229,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: ${{ inputs.repo_url }}
-          ref: ${{ inputs.repo_branch }}
+          ref: ${{ inputs.repo_commit != '' && inputs.repo_commit || inputs.repo_branch }}
           path: openwrt
 
       - name: Checkout shared workflows tools
@@ -248,7 +251,7 @@ jobs:
           ln -s /prebuilt_tools/staging_dir/host staging_dir/host
           ln -s /prebuilt_tools/build_dir/host build_dir/host
 
-          ../shared-workflows/.github/workflows/scripts/ext-tools.sh --refresh
+          bash "${GITHUB_WORKSPACE}/.github/scripts/ext-tools-refresh.sh" --refresh
 
       - name: Configure all modules
         shell: su buildbot -c "sh -e {0}"
@@ -342,7 +345,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: ${{ inputs.repo_url }}
-          ref: ${{ inputs.repo_branch }}
+          ref: ${{ inputs.repo_commit != '' && inputs.repo_commit || inputs.repo_branch }}
           path: openwrt
 
       - name: Checkout shared workflows tools
@@ -411,8 +414,34 @@ jobs:
             exit 0
           fi
 
-          TOOLCHAIN_ARCHIVE="$(awk '$2 ~ /(^|\/)(immortalwrt|openwrt)-toolchain-.*\.tar\.(zst|xz)$/ {print $2; exit}' /tmp/official-sha256sums)"
-          SDK_ARCHIVE="$(awk '$2 ~ /(^|\/)(immortalwrt|openwrt)-sdk-.*\.tar\.(zst|xz)$/ {print $2; exit}' /tmp/official-sha256sums)"
+          find_official_archive() {
+            local kind="$1"
+            awk -v kind="$kind" '
+              NF >= 2 && length($1) == 64 && $1 ~ /^[[:xdigit:]]+$/ {
+                filename=$2
+                sub(/^\*/, "", filename)
+                sub(/^\.\//, "", filename)
+                sub(/^.*\//, "", filename)
+                pattern="^(immortalwrt|openwrt)-" kind "-.*\\.tar\\.(zst|xz)$"
+                if (filename ~ pattern) {
+                  print filename
+                  exit
+                }
+              }
+            ' /tmp/official-sha256sums
+          }
+
+          TOOLCHAIN_ARCHIVE="$(find_official_archive toolchain)"
+          SDK_ARCHIVE="$(find_official_archive sdk)"
+
+          if [ -z "$TOOLCHAIN_ARCHIVE" ] && grep -Eq 'toolchain-.*\.tar\.(zst|xz)' /tmp/official-sha256sums; then
+            echo "Toolchain archive entry exists but its filename could not be parsed." >&2
+            exit 1
+          fi
+          if [ -z "$SDK_ARCHIVE" ] && grep -Eq 'sdk-.*\.tar\.(zst|xz)' /tmp/official-sha256sums; then
+            echo "SDK archive entry exists but its filename could not be parsed." >&2
+            exit 1
+          fi
 
           if [ -n "$TOOLCHAIN_ARCHIVE" ]; then
             TOOLCHAIN_FILE="$(basename "$TOOLCHAIN_ARCHIVE" | sed -E 's/\.tar\.(zst|xz)$//')"
@@ -458,7 +487,7 @@ jobs:
           ln -s /prebuilt_tools/staging_dir/host staging_dir/host
           ln -s /prebuilt_tools/build_dir/host build_dir/host
 
-          ../shared-workflows/.github/workflows/scripts/ext-tools.sh --refresh
+          bash "${GITHUB_WORKSPACE}/.github/scripts/ext-tools-refresh.sh" --refresh
 
       - name: Prepare custom scripts
         if: inputs.build_full == true
@@ -521,7 +550,23 @@ jobs:
           fi
 
           gpg --verify "$SIGNATURE" sha256sums
-          grep -F "  $TOOLCHAIN_ARCHIVE" sha256sums | sha256sum --check -
+          CHECKSUM="$(awk -v wanted="$TOOLCHAIN_ARCHIVE" '
+            NF >= 2 && length($1) == 64 && $1 ~ /^[[:xdigit:]]+$/ {
+              filename=$2
+              sub(/^\*/, "", filename)
+              sub(/^\.\//, "", filename)
+              sub(/^.*\//, "", filename)
+              if (filename == wanted) {
+                print $1
+                exit
+              }
+            }
+          ' sha256sums)"
+          if [ -z "$CHECKSUM" ]; then
+            echo "No SHA256 entry found for $TOOLCHAIN_ARCHIVE." >&2
+            exit 1
+          fi
+          printf '%s  %s\n' "$CHECKSUM" "$TOOLCHAIN_ARCHIVE" | sha256sum --check -
           case "$TOOLCHAIN_ARCHIVE" in
             *.tar.zst) tar --zstd -xf "$TOOLCHAIN_ARCHIVE" ;;
             *.tar.xz)  tar -xJf "$TOOLCHAIN_ARCHIVE" ;;
