@@ -117,8 +117,6 @@ def main() -> int:
     manifest = {
         "schema": 1,
         "source_repository": args.source_repo,
-        "source_ref": args.source_ref,
-        "source_commit": source_commit,
         "shared_workflows_ref": SHARED_WORKFLOWS_REF,
         "host_tools_config": HOST_TOOLS_CONFIG,
         "build_environment": BUILD_ENVIRONMENT,
@@ -127,6 +125,7 @@ def main() -> int:
     canonical = json.dumps(manifest, sort_keys=True, separators=(",", ":")).encode("utf-8")
     fingerprint = hashlib.sha256(canonical).hexdigest()
 
+    print(f"Source ref: {args.source_ref}")
     print(f"Source commit: {source_commit}")
     print(f"Shared workflows commit: {shared_commit}")
     print(f"Fingerprint input files: {len(manifest_files)}")
