@@ -24,13 +24,13 @@ jobs:
         run: sudo useradd --no-create-home --shell /bin/bash buildbot
 
       - name: Validate custom sh shell template
-        shell: sudo -E -n bash -c 'su --preserve-environment --command "sh -e" buildbot < "$0"' -- {0}
+        shell: sudo -E -n bash -c 'su --preserve-environment --command "sh -e" buildbot < "$1"' -- {0}
         run: |
           test "$(id -un)" = buildbot
           test -n "$GITHUB_WORKSPACE"
 
       - name: Validate custom bash shell template
-        shell: sudo -E -n bash -c 'su --preserve-environment --command "bash" buildbot < "$0"' -- {0}
+        shell: sudo -E -n bash -c 'su --preserve-environment --command "bash" buildbot < "$1"' -- {0}
         run: |
           set -euo pipefail
           test "$(id -un)" = buildbot
