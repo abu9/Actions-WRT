@@ -258,7 +258,7 @@ jobs:
         run: chown -R buildbot:buildbot .
 
       - name: Attach prebuilt tools
-        shell: bash -c 'su buildbot -c "sh -e" < "$1"' -- {0}
+        shell: bash -c 'su --preserve-environment buildbot -c "sh -e" < "$1"' -- {0}
         working-directory: openwrt
         run: |
           mkdir -p staging_dir build_dir
@@ -266,7 +266,7 @@ jobs:
           ln -s /prebuilt_tools/build_dir/host build_dir/host
 
       - name: Configure all modules
-        shell: bash -c 'su buildbot -c "sh -e" < "$1"' -- {0}
+        shell: bash -c 'su --preserve-environment buildbot -c "sh -e" < "$1"' -- {0}
         working-directory: openwrt
         run: |
           echo CONFIG_ALL=y >> .config
@@ -284,24 +284,24 @@ jobs:
           make defconfig
 
       - name: Refresh and validate prebuilt tools
-        shell: bash -c 'su buildbot -c "sh -e" < "$1"' -- {0}
+        shell: bash -c 'su --preserve-environment buildbot -c "sh -e" < "$1"' -- {0}
         working-directory: openwrt
         run: bash ../.github/scripts/ext-tools-refresh.sh --refresh
 
       - name: Compile needed host tools
-        shell: bash -c 'su buildbot -c "sh -e" < "$1"' -- {0}
+        shell: bash -c 'su --preserve-environment buildbot -c "sh -e" < "$1"' -- {0}
         working-directory: openwrt
         run: make tools/tar/compile -j$(nproc) BUILD_LOG=1 || ret=$? ../.github/scripts/show_build_failures.sh
 
       - name: Download and check toolchain
         if: inputs.build_toolchain == true
-        shell: bash -c 'su buildbot -c "sh -e" < "$1"' -- {0}
+        shell: bash -c 'su --preserve-environment buildbot -c "sh -e" < "$1"' -- {0}
         working-directory: openwrt
         run: make toolchain/download toolchain/check FIXUP=1 -j$(nproc) BUILD_LOG=1 || ret=$? ../.github/scripts/show_build_failures.sh
 
       - name: Download and check packages
         if: inputs.build_all_modules == true || inputs.build_all_kmods == true || inputs.build_full == true
-        shell: bash -c 'su buildbot -c "sh -e" < "$1"' -- {0}
+        shell: bash -c 'su --preserve-environment buildbot -c "sh -e" < "$1"' -- {0}
         working-directory: openwrt
         run: |
           # With push events or check_packages_list set to all check all packages
@@ -315,7 +315,7 @@ jobs:
           fi
 
       - name: Validate checked packages
-        shell: bash -c 'su buildbot -c "sh -e" < "$1"' -- {0}
+        shell: bash -c 'su --preserve-environment buildbot -c "sh -e" < "$1"' -- {0}
         working-directory: openwrt
         run: |
           . ../.github/scripts/ci_helpers.sh
@@ -541,7 +541,7 @@ jobs:
         run: chown -R buildbot:buildbot .
 
       - name: Attach prebuilt tools
-        shell: bash -c 'su buildbot -c "sh -e" < "$1"' -- {0}
+        shell: bash -c 'su --preserve-environment buildbot -c "sh -e" < "$1"' -- {0}
         working-directory: openwrt
         run: |
           mkdir -p staging_dir build_dir
@@ -550,7 +550,7 @@ jobs:
 
       - name: Prepare custom scripts
         if: inputs.build_full == true
-        shell: bash -c 'su buildbot -c "sh -e" < "$1"' -- {0}
+        shell: bash -c 'su --preserve-environment buildbot -c "sh -e" < "$1"' -- {0}
         continue-on-error: true
         run: |
           [ -d "files" ] && mv -f files openwrt/files
@@ -559,7 +559,7 @@ jobs:
 
       - name: Load pre-custom script
         if: inputs.build_full == true
-        shell: bash -c 'su buildbot -c "bash" < "$1"' -- {0}
+        shell: bash -c 'su --preserve-environment buildbot -c "bash" < "$1"' -- {0}
         working-directory: openwrt
         env:
           REPO_URL: ${{ inputs.repo_url }}        
@@ -567,7 +567,7 @@ jobs:
 
       - name: Update & Install feeds
         if: inputs.build_full == true
-        shell: bash -c 'su buildbot -c "sh -e" < "$1"' -- {0}
+        shell: bash -c 'su --preserve-environment buildbot -c "sh -e" < "$1"' -- {0}
         working-directory: openwrt
         run: |
           ./scripts/feeds update -a
@@ -587,7 +587,7 @@ jobs:
 
       - name: Download external toolchain/sdk
         if: inputs.build_toolchain == false && steps.parse-toolchain.outputs.toolchain-type != 'internal' && steps.parse-toolchain.outputs.toolchain-type != 'external_container'
-        shell: bash -c 'su buildbot -c "bash" < "$1"' -- {0}
+        shell: bash -c 'su --preserve-environment buildbot -c "bash" < "$1"' -- {0}
         working-directory: openwrt
         run: |
           set -euo pipefail
@@ -650,14 +650,14 @@ jobs:
           rm -f "$TOOLCHAIN_ARCHIVE" sha256sums "$SIGNATURE"
 
       - name: Clean configuration
-        shell: bash -c 'su buildbot -c "sh -e" < "$1"' -- {0}
+        shell: bash -c 'su --preserve-environment buildbot -c "sh -e" < "$1"' -- {0}
         working-directory: openwrt
         run: |
           rm -rf .config
 
       - name: Load post-custom script
         if: inputs.build_full == true
-        shell: bash -c 'su buildbot -c "bash" < "$1"' -- {0}      
+        shell: bash -c 'su --preserve-environment buildbot -c "bash" < "$1"' -- {0}      
         working-directory: openwrt
         env:
           REPO_URL: ${{ inputs.repo_url }}
@@ -665,39 +665,39 @@ jobs:
 
       - name: Setup configuration
         if: inputs.build_full == true
-        shell: bash -c 'su buildbot -c "sh -e" < "$1"' -- {0}     
+        shell: bash -c 'su --preserve-environment buildbot -c "sh -e" < "$1"' -- {0}     
         run: cp -f ${{ inputs.config_name }} openwrt/.config
 
       - name: Configure testing kernel
         if: inputs.testing == true
-        shell: bash -c 'su buildbot -c "sh -e" < "$1"' -- {0}
+        shell: bash -c 'su --preserve-environment buildbot -c "sh -e" < "$1"' -- {0}
         working-directory: openwrt
         run: |
           echo CONFIG_TESTING_KERNEL=y >> .config
 
       # - name: Configure KERNEL_WERROR
-      #   shell: bash -c 'su buildbot -c "sh -e" < "$1"' -- {0}
+      #   shell: bash -c 'su --preserve-environment buildbot -c "sh -e" < "$1"' -- {0}
       #   working-directory: openwrt
       #   run: |
       #     echo CONFIG_KERNEL_WERROR=y >> .config
 
       - name: Configure all kernel modules
         if: inputs.build_all_kmods == true
-        shell: bash -c 'su buildbot -c "sh -e" < "$1"' -- {0}
+        shell: bash -c 'su --preserve-environment buildbot -c "sh -e" < "$1"' -- {0}
         working-directory: openwrt
         run: |
           echo CONFIG_ALL_KMODS=y >> .config
 
       - name: Configure all modules
         if: inputs.build_all_modules == true
-        shell: bash -c 'su buildbot -c "sh -e" < "$1"' -- {0}
+        shell: bash -c 'su --preserve-environment buildbot -c "sh -e" < "$1"' -- {0}
         working-directory: openwrt
         run: |
           echo CONFIG_ALL=y >> .config
 
       - name: Configure all boards
         if: inputs.build_all_boards == true
-        shell: bash -c 'su buildbot -c "sh -e" < "$1"' -- {0}
+        shell: bash -c 'su --preserve-environment buildbot -c "sh -e" < "$1"' -- {0}
         working-directory: openwrt
         run: |
           echo CONFIG_TARGET_MULTI_PROFILE=y >> .config
@@ -711,7 +711,7 @@ jobs:
         # To fix this force compiler type to gcc.
       - name: Configure ccache and apply fixes
         if: inputs.use_ccache_cache == true
-        shell: bash -c 'su buildbot -c "sh -e" < "$1"' -- {0}
+        shell: bash -c 'su --preserve-environment buildbot -c "sh -e" < "$1"' -- {0}
         working-directory: openwrt
         env:
           SYSTEM_CCACHE_CONF: staging_dir/host/etc/ccache.conf
@@ -728,7 +728,7 @@ jobs:
 
       - name: Configure external toolchain in container
         if: inputs.build_toolchain == false && steps.parse-toolchain.outputs.toolchain-type == 'external_container'
-        shell: bash -c 'su buildbot -c "sh -e" < "$1"' -- {0}
+        shell: bash -c 'su --preserve-environment buildbot -c "sh -e" < "$1"' -- {0}
         working-directory: openwrt
         run: |
           echo CONFIG_DEVEL=y >> .config
@@ -741,7 +741,7 @@ jobs:
 
       - name: Configure external toolchain
         if: inputs.build_toolchain == false && steps.parse-toolchain.outputs.toolchain-type == 'external_toolchain'
-        shell: bash -c 'su buildbot -c "sh -e" < "$1"' -- {0}
+        shell: bash -c 'su --preserve-environment buildbot -c "sh -e" < "$1"' -- {0}
         working-directory: openwrt
         run: |
           echo CONFIG_DEVEL=y >> .config
@@ -754,7 +754,7 @@ jobs:
 
       - name: Adapt external sdk to external toolchain format
         if: inputs.build_toolchain == false && steps.parse-toolchain.outputs.toolchain-type == 'external_sdk'
-        shell: bash -c 'su buildbot -c "sh -e" < "$1"' -- {0}
+        shell: bash -c 'su --preserve-environment buildbot -c "sh -e" < "$1"' -- {0}
         working-directory: openwrt
         run: |
           TOOLCHAIN_DIR=$TOOLCHAIN_FILE/staging_dir/$(ls $TOOLCHAIN_FILE/staging_dir | grep toolchain)
@@ -782,7 +782,7 @@ jobs:
 
       - name: Configure external toolchain with sdk
         if: inputs.build_toolchain == false && steps.parse-toolchain.outputs.toolchain-type == 'external_sdk'
-        shell: bash -c 'su buildbot -c "sh -e" < "$1"' -- {0}
+        shell: bash -c 'su --preserve-environment buildbot -c "sh -e" < "$1"' -- {0}
         working-directory: openwrt
         run: |
           echo CONFIG_DEVEL=y >> .config
@@ -795,7 +795,7 @@ jobs:
 
       - name: Configure internal toolchain
         if: inputs.build_toolchain == true || steps.parse-toolchain.outputs.toolchain-type == 'internal'
-        shell: bash -c 'su buildbot -c "sh -e" < "$1"' -- {0}
+        shell: bash -c 'su --preserve-environment buildbot -c "sh -e" < "$1"' -- {0}
         working-directory: openwrt
         run: |
           echo CONFIG_DEVEL=y >> .config
@@ -807,23 +807,23 @@ jobs:
           make defconfig
 
       - name: Show configuration
-        shell: bash -c 'su buildbot -c "sh -e" < "$1"' -- {0}
+        shell: bash -c 'su --preserve-environment buildbot -c "sh -e" < "$1"' -- {0}
         working-directory: openwrt
         run: ./scripts/diffconfig.sh
 
       - name: Refresh and validate prebuilt tools
-        shell: bash -c 'su buildbot -c "sh -e" < "$1"' -- {0}
+        shell: bash -c 'su --preserve-environment buildbot -c "sh -e" < "$1"' -- {0}
         working-directory: openwrt
         run: bash ../.github/scripts/ext-tools-refresh.sh --refresh
 
       - name: Build tools
-        shell: bash -c 'su buildbot -c "sh -e" < "$1"' -- {0}
+        shell: bash -c 'su --preserve-environment buildbot -c "sh -e" < "$1"' -- {0}
         working-directory: openwrt
         run: make tools/install -j$(nproc) BUILD_LOG=1 || ret=$? ../.github/scripts/show_build_failures.sh
 
       - name: Build toolchain
         if: inputs.build_toolchain == true || steps.parse-toolchain.outputs.toolchain-type == 'internal'
-        shell: bash -c 'su buildbot -c "sh -e" < "$1"' -- {0}
+        shell: bash -c 'su --preserve-environment buildbot -c "sh -e" < "$1"' -- {0}
         working-directory: openwrt
         run: make toolchain/install -j$(nproc) BUILD_LOG=1 || ret=$? ../.github/scripts/show_build_failures.sh
 
@@ -835,7 +835,7 @@ jobs:
 
       - name: Build Kernel
         if: inputs.build_kernel == true
-        shell: bash -c 'su buildbot -c "sh -e" < "$1"' -- {0}
+        shell: bash -c 'su --preserve-environment buildbot -c "sh -e" < "$1"' -- {0}
         working-directory: openwrt
         run: make target/compile -j$(nproc) BUILD_LOG=1 || ret=$? ../.github/scripts/show_build_failures.sh
 
@@ -848,13 +848,13 @@ jobs:
 
       - name: Build Kernel Kmods
         if: inputs.build_kernel == true
-        shell: bash -c 'su buildbot -c "sh -e" < "$1"' -- {0}
+        shell: bash -c 'su --preserve-environment buildbot -c "sh -e" < "$1"' -- {0}
         working-directory: openwrt
         run: make package/linux/compile -j$(nproc) BUILD_LOG=1 || ret=$? ../.github/scripts/show_build_failures.sh
 
       - name: Build DTBs
         if: inputs.build_dtb == true
-        shell: bash -c 'su buildbot -c "sh -e" < "$1"' -- {0}
+        shell: bash -c 'su --preserve-environment buildbot -c "sh -e" < "$1"' -- {0}
         working-directory: openwrt
         run: |
           # Check if special dtb makefile target is available
@@ -867,19 +867,19 @@ jobs:
 
       - name: Build everything
         if: inputs.build_full == true
-        shell: bash -c 'su buildbot -c "sh -e" < "$1"' -- {0}
+        shell: bash -c 'su --preserve-environment buildbot -c "sh -e" < "$1"' -- {0}
         working-directory: openwrt
         run: make -j$(nproc) BUILD_LOG=1 || ret=$? ../.github/scripts/show_build_failures.sh
 
       - name: Build external toolchain
         if: inputs.build_external_toolchain == true
-        shell: bash -c 'su buildbot -c "sh -e" < "$1"' -- {0}
+        shell: bash -c 'su --preserve-environment buildbot -c "sh -e" < "$1"' -- {0}
         working-directory: openwrt
         run: make target/toolchain/compile -j$(nproc) BUILD_LOG=1 || ret=$? ../.github/scripts/show_build_failures.sh
 
       - name: Coverity prepare toolchain
         if: inputs.coverity_check_packages != ''
-        shell: bash -c 'su buildbot -c "sh -e" < "$1"' -- {0}
+        shell: bash -c 'su --preserve-environment buildbot -c "sh -e" < "$1"' -- {0}
         working-directory: openwrt
         run: |
           wget -q https://scan.coverity.com/download/linux64 --post-data "token=${{ secrets.coverity_api_token }}&project=${{ inputs.coverity_project_name }}" -O coverity.tar.gz
@@ -897,7 +897,7 @@ jobs:
 
       - name: Clean and recompile packages with Coverity toolchain
         if: inputs.coverity_check_packages != ''
-        shell: bash -c 'su buildbot -c "bash" < "$1"' -- {0}
+        shell: bash -c 'su --preserve-environment buildbot -c "bash" < "$1"' -- {0}
         working-directory: openwrt
         run: |
           set -o pipefail -o errexit
@@ -916,7 +916,7 @@ jobs:
 
       - name: Upload build to Coverity for analysis
         if: inputs.coverity_check_packages != ''
-        shell: bash -c 'su buildbot -c "sh -e" < "$1"' -- {0}
+        shell: bash -c 'su --preserve-environment buildbot -c "sh -e" < "$1"' -- {0}
         working-directory: openwrt
         run: |
           tar czf cov-int.tar.gz ./cov-int
@@ -959,7 +959,7 @@ jobs:
 
       - name: Archive ccache
         if: inputs.use_ccache_cache == true  && inputs.upload_ccache_cache == true
-        shell: bash -c 'su buildbot -c "sh -e" < "$1"' -- {0}
+        shell: bash -c 'su --preserve-environment buildbot -c "sh -e" < "$1"' -- {0}
         working-directory: openwrt
         run: tar -cf ${{ needs.setup_build.outputs.ccache_name }}.tar .ccache
 
@@ -991,7 +991,7 @@ jobs:
 
       # - name: Archive Firmware
       #   if: inputs.build_full == true
-      #   shell: bash -c 'su buildbot -c "sh -e" < "$1"' -- {0}
+      #   shell: bash -c 'su --preserve-environment buildbot -c "sh -e" < "$1"' -- {0}
       #   working-directory: openwrt
       #   run: tar -cf tools.tar staging_dir/host build_dir/host
 
