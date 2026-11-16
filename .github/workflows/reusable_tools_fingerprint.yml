@@ -42,29 +42,15 @@ jobs:
           ref: ${{ inputs.source_commit != '' && inputs.source_commit || inputs.repo_branch }}
           path: openwrt
 
-      - name: Checkout pinned shared-workflows inputs
-        uses: actions/checkout@v4
-        with:
-          repository: abu9/actions-shared-workflows
-          ref: c3168d3fdc9d6c5f77108f94a4edff769af58016
-          path: shared-workflows
-          sparse-checkout: |
-            .github/workflows/reusable_build-tools.yml
-            .github/dockerfiles/Dockerfile.tools
-          sparse-checkout-cone-mode: false
-
       - name: Generate tools fingerprint
         id: fingerprint
         env:
           SOURCE_REPO: ${{ inputs.repo_url }}
-          SHARED_WORKFLOWS_REF: c3168d3fdc9d6c5f77108f94a4edff769af58016
         shell: bash
         run: |
           set -euo pipefail
           python3 actions-wrt/.github/scripts/tools-fingerprint.py \
             --source-dir openwrt \
             --local-repo-dir actions-wrt \
-            --shared-workflows-dir shared-workflows \
             --source-repo "$SOURCE_REPO" \
             --source-ref "${{ inputs.repo_branch }}" \
-            --shared-ref "$SHARED_WORKFLOWS_REF"
