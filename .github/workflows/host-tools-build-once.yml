@@ -1,5 +1,5 @@
 name: Build Host Tools (one-time validation)
-# Re-trigger after adding the Host Python setuptools prerequisite.
+# Re-trigger after installing setuptools in the buildworker Python environment.
 run-name: Build Host Tools - ImmortalWrt 25.12 / 360T7
 
 on:
