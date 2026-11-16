@@ -78,7 +78,7 @@ jobs:
   determine_container_info:
     name: Determine tools image tag
     needs: determine_targets
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     outputs:
       owner_lc: ${{ steps.info.outputs.owner_lc }}
       container_tag: ${{ steps.info.outputs.container_tag }}
@@ -128,7 +128,7 @@ jobs:
     name: Push generic host-tools image
     if: ${{ !cancelled() && inputs.build_tools == true && needs.build-linux-buildbot.result == 'success' && needs.compute-tools-fingerprint.result == 'success' }}
     needs: [determine_targets, determine_container_info, build-linux-buildbot, compute-tools-fingerprint]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       contents: read
       packages: write
@@ -167,7 +167,7 @@ jobs:
     name: Compute target toolchain cache key
     if: ${{ !cancelled() && inputs.build_toolchain == true && inputs.build_tools == true }}
     needs: [determine_targets, compute-tools-fingerprint]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     outputs:
       cache_key: ${{ steps.key.outputs.cache_key }}
     steps:
@@ -210,7 +210,7 @@ jobs:
     name: Push target-specific toolchain image
     if: ${{ !cancelled() && needs.build-target-toolchain.outputs.push == 'true' }}
     needs: [determine_targets, determine_container_info, compute-tools-fingerprint, compute-toolchain-cache-key, build-target-toolchain]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       contents: read
       packages: write
