@@ -119,7 +119,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7.0.1
 
       - name: Set lower case owner name
         id: lower_owner
@@ -245,10 +245,10 @@ jobs:
 
     steps:
       - name: Checkout master directory
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7.0.1
 
       - name: Checkout openwrt
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7.0.1
         with:
           repository: ${{ inputs.repo_url }}
           ref: ${{ inputs.repo_commit != '' && inputs.repo_commit || inputs.repo_branch }}
@@ -334,7 +334,7 @@ jobs:
 
       - name: Upload fixed Packages
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7.0.2
         with:
           name: ${{ inputs.target }}-${{ inputs.subtarget }}${{ inputs.testing == true && '-testing' || '' }}-packages-fixed
           path: openwrt/packages-fixed
@@ -356,10 +356,10 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7.0.1
 
       - name: Checkout openwrt
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7.0.1
         with:
           repository: ${{ inputs.repo_url }}
           ref: ${{ inputs.repo_commit != '' && inputs.repo_commit || inputs.repo_branch }}
@@ -576,7 +576,7 @@ jobs:
       - name: Restore ccache cache
         id: restore-ccache-cache
         if: inputs.use_ccache_cache == true && steps.restore-ccache-cache-s3.outputs.cache-hit != 'true'
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v6.1.0
         with:
           path: openwrt/.ccache
           key: ${{ needs.setup_build.outputs.ccache_name }}-${{ hashFiles('openwrt/include/kernel-**') }}
@@ -843,7 +843,7 @@ jobs:
 
       - name: Save ccache kernel cache
         if: inputs.use_ccache_cache == true && inputs.build_kernel == true
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@v6.1.0
         with:
           path: openwrt/.ccache
           key: ccache-kernel-${{ needs.setup_build.outputs.ccache_tag}}-${{ hashFiles('openwrt/include/kernel-**') }}
@@ -932,7 +932,7 @@ jobs:
 
       - name: Upload logs
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7.0.2
         with:
           name: ${{ inputs.target }}-${{ inputs.subtarget }}${{ inputs.testing == true && '-testing' || '' }}-logs
           path: "openwrt/logs"
@@ -954,7 +954,7 @@ jobs:
 
       - name: Save ccache cache
         if: inputs.use_ccache_cache == true
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@v6.1.0
         with:
           path: openwrt/.ccache
           key: ${{ steps.restore-ccache-cache.outputs.cache-primary-key }}
@@ -967,7 +967,7 @@ jobs:
 
       - name: Upload ccache cache
         if: inputs.use_ccache_cache == true && inputs.upload_ccache_cache == true
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7.0.2
         with:
           name: ${{ inputs.target }}-${{ inputs.subtarget }}${{ inputs.testing == true && '-testing' || '' }}-ccache-cache
           path: openwrt/${{ needs.setup_build.outputs.ccache_name }}.tar
@@ -985,7 +985,7 @@ jobs:
 
       - name: Upload prebuilt toolchain
         if: inputs.upload_external_toolchain == true
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7.0.2
         with:
           name: ${{ inputs.target }}-${{ inputs.subtarget }}-external-toolchain
           path: |
@@ -999,7 +999,7 @@ jobs:
 
       - name: Upload Firmware
         if: inputs.build_full == true
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7.0.2
         with:
           name: OpenWrt_firmware_${{ needs.setup_build.outputs.device_name }}${{ needs.setup_build.outputs.file_date }}
           path: openwrt/bin
