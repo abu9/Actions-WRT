@@ -20,17 +20,28 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v7.0.1
 
-      - name: Set up pinned Go
-        uses: actions/setup-go@v7.0.0
-        with:
-          go-version: '1.25.0'
-          cache: false
+      - name: Install pinned actionlint binary
+        env:
+          ACTIONLINT_VERSION: '1.7.12'
+          ACTIONLINT_SHA256: '8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8'
+        run: |
+          set -euo pipefail
 
-      - name: Install pinned actionlint
-        run: go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
+          archive="actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz"
+          url="https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/${archive}"
+          install_dir="${RUNNER_TEMP}/actionlint"
+          bin_dir="${RUNNER_TEMP}/bin"
+
+          mkdir -p "$install_dir" "$bin_dir"
+          curl --fail --location --silent --show-error "$url" --output "$install_dir/$archive"
+
+          echo "${ACTIONLINT_SHA256}  $install_dir/$archive" | sha256sum --check --strict
+          tar -xzf "$install_dir/$archive" -C "$install_dir" actionlint
+          install -m 0755 "$install_dir/actionlint" "$bin_dir/actionlint"
+          echo "$bin_dir" >> "$GITHUB_PATH"
 
       - name: Lint all workflow files
         run: |
           set -euo pipefail
-          "$HOME/go/bin/actionlint" -shellcheck= -color .github/workflows/*.yml
+          actionlint -shellcheck= -color .github/workflows/*.yml
           shellcheck --severity=error .github/scripts/*.sh
