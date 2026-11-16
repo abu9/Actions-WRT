@@ -53,6 +53,15 @@ jobs:
       - name: Fix permission
         run: chown -R buildbot:buildbot .
 
+      # The U-Boot prerequisite check in include/u-boot.mk imports setuptools
+      # through STAGING_DIR_HOST/bin/python3. The buildworker image does not
+      # provide this host dependency for the current Host Tools bootstrap.
+      - name: Install missing host Python dependency
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends python3-setuptools
+          python3 -c 'import setuptools; print("System setuptools:", setuptools.__version__)'
+
       - name: Set configs for tools container
         working-directory: openwrt
         run: |
@@ -73,6 +82,18 @@ jobs:
           make defconfig
           BUILD_SCRIPT
 
+      - name: Verify host Python setuptools
+        working-directory: openwrt
+        run: |
+          set -euo pipefail
+          HOST_PYTHON="$PWD/staging_dir/host/bin/python3"
+          if [ ! -x "$HOST_PYTHON" ]; then
+            echo "Expected host Python executable not found: $HOST_PYTHON" >&2
+            ls -la staging_dir/host/bin || true
+            exit 1
+          fi
+          su --preserve-environment --shell /bin/bash buildbot -c '"$1" -c '\''import setuptools; print("Host setuptools:", setuptools.__version__)'\''' -- "$HOST_PYTHON"
+
       - name: Build tools
         working-directory: openwrt
         run: |
@@ -80,7 +101,7 @@ jobs:
           set -e
           make tools/install -j"$(nproc)" BUILD_LOG=1 || {
             ret=$?
-            ../.github/scripts/show_build_failures.sh
+            bash ../.github/scripts/show_build_failures.sh
             exit "$ret"
           }
           BUILD_SCRIPT
