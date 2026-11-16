@@ -142,13 +142,15 @@ jobs:
         env:
           CCACHE_DIR: ${{ github.workspace }}/openwrt/.ccache
         run: |
+          su --preserve-environment --shell /bin/bash buildbot -c 'bash -s' <<'BUILD_SCRIPT'
           set -euo pipefail
           CCACHE_BIN="$PWD/staging_dir/host/bin/ccache"
           if [ -x "$CCACHE_BIN" ]; then
-            su --preserve-environment --shell /bin/bash buildbot -c '"$1" --show-stats' -- "$CCACHE_BIN"
+            "$CCACHE_BIN" --show-stats
           else
             echo "Host ccache executable not found; statistics unavailable."
           fi
+          BUILD_SCRIPT
 
       - name: Delete existing Host Tools ccache entry
         if: steps.restore-ccache-cache.outputs.cache-hit == 'true'
