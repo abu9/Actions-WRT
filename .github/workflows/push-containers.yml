@@ -112,7 +112,7 @@ jobs:
   build-linux-buildbot:
     name: Build host tools with upstream buildbot
     if: ${{ !cancelled() && inputs.build_tools == true }}
-    needs: [determine_targets, compute-tools-fingerprint]
+    needs: [determine_targets, determine_container_info, compute-tools-fingerprint]
     permissions:
       contents: read
       packages: read
@@ -122,6 +122,7 @@ jobs:
       generate_prebuilt_artifacts: true
       repo_url: ${{ needs.determine_targets.outputs.repo_url }}
       source_commit: ${{ needs.compute-tools-fingerprint.outputs.source_commit }}
+      ccache_tag: ${{ needs.determine_container_info.outputs.container_tag }}
 
   push-tools-container:
     name: Push generic host-tools image
