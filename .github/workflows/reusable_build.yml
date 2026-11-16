@@ -151,6 +151,7 @@ jobs:
           REPO_BRANCH: ${{ inputs.repo_branch }}
           REQUESTED_CONTAINER: ${{ inputs.container_name }}
           TOOLS_FINGERPRINT: ${{ inputs.tools_fingerprint }}
+          SOURCE_COMMIT: ${{ inputs.repo_commit }}
         shell: bash
         run: |
           set -euo pipefail
@@ -162,13 +163,13 @@ jobs:
           CCACHE_TAG="$CONTAINER_TAG"
 
           if [ "$CONTAINER_NAME" = "toolchain" ]; then
-            if [ -z "$TOOLS_FINGERPRINT" ]; then
-              echo "No tools fingerprint supplied; refusing to reuse a target toolchain image."
+            if [ -z "$TOOLS_FINGERPRINT" ] || [ -z "$SOURCE_COMMIT" ]; then
+              echo "No Host Tools fingerprint or fixed source commit supplied; refusing to reuse a target toolchain image."
               CONTAINER_NAME=tools
             else
               TOOLCHAIN_BASE_TAG="${TARGET}-${SUBTARGET}-${CONTAINER_TAG}"
               CCACHE_TAG="$TOOLCHAIN_BASE_TAG"
-              TOOLCHAIN_TAG="${TOOLCHAIN_BASE_TAG}-${TOOLS_FINGERPRINT}"
+              TOOLCHAIN_TAG="${TOOLCHAIN_BASE_TAG}-${SOURCE_COMMIT}-${TOOLS_FINGERPRINT}"
               TOKEN="$(curl --fail --silent --show-error --user "${GHCR_USER}:${GHCR_PASSWORD}" \
                 "https://ghcr.io/token?scope=repository:${GHCR_OWNER}/toolchain:pull" | jq -r '.token // .access_token // empty')"
               if [ -z "$TOKEN" ]; then
