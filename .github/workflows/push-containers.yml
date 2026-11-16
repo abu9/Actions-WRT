@@ -112,7 +112,7 @@ jobs:
       contents: read
       packages: read
       actions: write
-    uses: abu9/actions-shared-workflows/.github/workflows/reusable_build-tools.yml@c3168d3fdc9d6c5f77108f94a4edff769af58016
+    uses: ./.github/workflows/reusable_build_tools.yml
     with:
       generate_prebuilt_artifacts: true
       repo_url: ${{ needs.determine_targets.outputs.repo_url }}
@@ -127,13 +127,8 @@ jobs:
       contents: read
       packages: write
     steps:
-      - name: Checkout shared Dockerfile from its default branch
+      - name: Checkout Actions-WRT repository
         uses: actions/checkout@v4
-        with:
-          repository: abu9/actions-shared-workflows
-          ref: c3168d3fdc9d6c5f77108f94a4edff769af58016
-          sparse-checkout: .github/dockerfiles/Dockerfile.tools
-          sparse-checkout-cone-mode: false
 
       - name: Download prebuilt tools
         uses: actions/download-artifact@v4
@@ -193,13 +188,8 @@ jobs:
       contents: read
       packages: write
     steps:
-      - name: Checkout shared Dockerfile from its default branch
+      - name: Checkout Actions-WRT repository
         uses: actions/checkout@v4
-        with:
-          repository: abu9/actions-shared-workflows
-          ref: main
-          sparse-checkout: .github/dockerfiles/Dockerfile.toolchain
-          sparse-checkout-cone-mode: false
 
       - name: Download external toolchain artifact
         uses: actions/download-artifact@v4
