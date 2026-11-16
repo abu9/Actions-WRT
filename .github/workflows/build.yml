@@ -1,5 +1,5 @@
 name: Build WRT
-run-name: Build WRT - ${{ github.event.client_payload.source_branch || inputs.source_branch || 'immortalwrt/immortalwrt@openwrt-25.12' }}/${{ github.event.client_payload.config_name || inputs.config_name || '360t7-immortalwrt-25.12-ubi.conf' }}
+run-name: Build WRT - ${{ github.event.client_payload.source_branch || inputs.source_branch || 'immortalwrt/immortalwrt@openwrt-25.12' }}/${{ github.event.client_payload.config_name || inputs.config_name || '360t7-immortalwrt-25.12-ubi.conf' }}${{ inputs.validate_only && ' [validation only]' || '' }}
 
 on:
   repository_dispatch:
@@ -23,6 +23,10 @@ on:
         required: false
         default: ''
         type: string
+      validate_only:
+        description: 'Validate source, target, fingerprint and GHCR cache selection without building tools or firmware'
+        type: boolean
+        default: false
       config_name:
         description: 'Config file name'
         type: choice
@@ -248,7 +252,8 @@ jobs:
     name: Build and Push tools container (only when missing)
     needs: [determine_targets, tools_fingerprint, check_tools_container]
     if: >-
-      ${{ needs.tools_fingerprint.result == 'success' &&
+      ${{ !inputs.validate_only &&
+          needs.tools_fingerprint.result == 'success' &&
           needs.check_tools_container.outputs.tools_required == 'true' }}
     permissions:
       contents: read
@@ -267,6 +272,7 @@ jobs:
     needs: [determine_targets, tools_fingerprint, check_tools_container, build_tools_container]
     if: >-
       ${{ always() &&
+          !inputs.validate_only &&
           needs.determine_targets.result == 'success' &&
           needs.tools_fingerprint.result == 'success' &&
           needs.check_tools_container.result == 'success' &&
