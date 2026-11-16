@@ -87,8 +87,8 @@ jobs:
         run: |
           set -euo pipefail
           OWNER_LC="${OWNER,,}"
-          # Keep this identical to reusable_build.yml, which selects
-          # images using ${AUTHOR}_${REPO_BRANCH}.
+          # This is the branch-scoped base tag. The published generic tools
+          # image appends the computed content fingerprint to this value.
           CONTAINER_TAG="${AUTHOR}_${REPO_BRANCH}"
           echo "owner_lc=$OWNER_LC" >> "$GITHUB_OUTPUT"
           echo "container_tag=$CONTAINER_TAG" >> "$GITHUB_OUTPUT"

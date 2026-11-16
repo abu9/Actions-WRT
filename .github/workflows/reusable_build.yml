@@ -110,7 +110,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       container: ${{ steps.determine_container.outputs.container }}
-      ccache_tag: ${{ steps.determine_container_name.outputs.container_tag }}
+      ccache_tag: ${{ steps.determine_container_name.outputs.ccache_tag }}
       ccache_name: ${{ steps.determine_ccache_info.outputs.ccache_name }}      
       device_name: ${{ steps.get_info.outputs.device_name }}
       file_date: ${{ steps.get_info.outputs.file_date }}
@@ -185,6 +185,10 @@ jobs:
             esac
           fi
 
+          # Preserve the branch-based ccache namespace independently from the
+          # immutable image tag used to select the host-tools container.
+          CCACHE_TAG="$CONTAINER_TAG"
+
           # Generic tools images use content-addressed tags. This prevents a
           # slower build for an older source commit from overwriting the image
           # selected by a newer firmware run.
@@ -194,6 +198,7 @@ jobs:
 
           echo "Container to use: $CONTAINER_NAME:$CONTAINER_TAG"
           echo "container_tag=$CONTAINER_TAG" >> "$GITHUB_OUTPUT"
+          echo "ccache_tag=$CCACHE_TAG" >> "$GITHUB_OUTPUT"
           echo "container_name=$CONTAINER_NAME:$CONTAINER_TAG" >> "$GITHUB_OUTPUT"
 
       - name: Determine container

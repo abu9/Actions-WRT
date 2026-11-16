@@ -107,8 +107,7 @@ jobs:
         run: |
           set -euo pipefail
           OWNER_LC="${OWNER,,}"
-          BASE_TAG="${AUTHOR}_${REPO_BRANCH}"
-          TOOLS_TAG="${BASE_TAG}-${EXPECTED_FINGERPRINT}"
+          TAG="${AUTHOR}_${REPO_BRANCH}"
           TMP_DIR="$(mktemp -d)"
           trap 'rm -rf "$TMP_DIR"' EXIT
 
@@ -207,7 +206,7 @@ jobs:
           # A target-specific toolchain image remains a separate cache type.
           # Its fingerprint is deliberately not conflated with generic host tools.
           if [ "$CONTAINER_NAME" = "toolchain" ]; then
-            TOOLCHAIN_TAG="${TARGET}-${SUBTARGET}-${BASE_TAG}"
+            TOOLCHAIN_TAG="${TARGET}-${SUBTARGET}-${TAG}"
             if check_manifest_exists toolchain "$TOOLCHAIN_TAG"; then
               echo "Existing target toolchain image found: ghcr.io/${OWNER_LC}/toolchain:${TOOLCHAIN_TAG}"
               echo "tools_required=false" >> "$GITHUB_OUTPUT"
@@ -216,14 +215,14 @@ jobs:
             fi
           fi
 
-          if check_tools_fingerprint tools "$TOOLS_TAG"; then
-            echo "Matching fingerprinted tools image found: ghcr.io/${OWNER_LC}/tools:${TOOLS_TAG}"
+          if check_tools_fingerprint tools "$TAG"; then
+            echo "Matching tools image found: ghcr.io/${OWNER_LC}/tools:${TAG}"
             echo "tools_required=false" >> "$GITHUB_OUTPUT"
-            echo "checked_image=tools:${TOOLS_TAG}" >> "$GITHUB_OUTPUT"
+            echo "checked_image=tools:${TAG}" >> "$GITHUB_OUTPUT"
           else
-            echo "Fingerprint-specific tools image is missing or stale: ghcr.io/${OWNER_LC}/tools:${TOOLS_TAG}"
+            echo "Tools image is missing or its fingerprint does not match: ghcr.io/${OWNER_LC}/tools:${TAG}"
             echo "tools_required=true" >> "$GITHUB_OUTPUT"
-            echo "checked_image=tools:${TOOLS_TAG}" >> "$GITHUB_OUTPUT"
+            echo "checked_image=tools:${TAG}" >> "$GITHUB_OUTPUT"
           fi
 
   build_tools_container:
@@ -265,7 +264,6 @@ jobs:
       repo_url: ${{ needs.determine_targets.outputs.repo_url }}
       repo_branch: ${{ needs.determine_targets.outputs.repo_branch }}
       repo_commit: ${{ needs.tools_fingerprint.outputs.source_commit }}
-      tools_fingerprint: ${{ needs.tools_fingerprint.outputs.tools_fingerprint }}
       author: ${{ needs.determine_targets.outputs.author }}
       container_name: ${{ inputs.container_name }}
       build_kernel: ${{ inputs.build_kernel }}
