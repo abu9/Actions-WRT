@@ -54,25 +54,36 @@ jobs:
         run: chown -R buildbot:buildbot .
 
       - name: Set configs for tools container
-        shell: bash -c 'su --preserve-environment --command "sh -e" buildbot < "$1"' -- {0}
         working-directory: openwrt
         run: |
+          su --preserve-environment --shell /bin/bash buildbot -c 'bash -s' <<'BUILD_SCRIPT'
+          set -e
           touch .config
           echo CONFIG_DEVEL=y >> .config
           echo CONFIG_AUTOREMOVE=y >> .config
           echo CONFIG_CCACHE=y >> .config
           echo CONFIG_BUILD_ALL_HOST_TOOLS=y >> .config
+          BUILD_SCRIPT
 
       - name: Make prereq
-        shell: bash -c 'su --preserve-environment --command "sh -e" buildbot < "$1"' -- {0}
-        working-directory: openwrt
-        run: make defconfig
-
-      - name: Build tools
-        shell: bash -c 'su --preserve-environment --command "sh -e" buildbot < "$1"' -- {0}
         working-directory: openwrt
         run: |
-          make tools/install -j$(nproc) BUILD_LOG=1 || ret=$? ../.github/scripts/show_build_failures.sh
+          su --preserve-environment --shell /bin/bash buildbot -c 'bash -s' <<'BUILD_SCRIPT'
+          set -e
+          make defconfig
+          BUILD_SCRIPT
+
+      - name: Build tools
+        working-directory: openwrt
+        run: |
+          su --preserve-environment --shell /bin/bash buildbot -c 'bash -s' <<'BUILD_SCRIPT'
+          set -e
+          make tools/install -j"$(nproc)" BUILD_LOG=1 || {
+            ret=$?
+            ../.github/scripts/show_build_failures.sh
+            exit "$ret"
+          }
+          BUILD_SCRIPT
 
       - name: Upload logs
         if: always()
