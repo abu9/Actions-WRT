@@ -829,11 +829,9 @@ jobs:
 
       - name: Setup Debug Session
         if: inputs.debug == true
-        env:
-          TMATE_ENCRYPT_PASSWORD: "12345"
-          HOME: "/root"
-
-        uses: tete1030/safe-debugger-action@master
+        uses: mxschmitt/action-tmate@35b54afac29c97fb54faba5b513f8fbd1882f113 # v3.24
+        with:
+          limit-access-to-actor: true
 
       - name: Build Kernel
         if: inputs.build_kernel == true
@@ -944,7 +942,7 @@ jobs:
 
       - name: Delete already present ccache cache
         if: steps.restore-ccache-cache.outputs.cache-hit == 'true' && inputs.use_ccache_cache == true
-        uses: octokit/request-action@v2.x
+        uses: octokit/request-action@b91aabaa861c777dcdb14e2387e30eddf04619ae # v3.0.0
         with:
           route: DELETE /repos/{repository}/actions/caches?key={key}
         env:
