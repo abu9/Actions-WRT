@@ -101,9 +101,12 @@ jobs:
 
       - name: Archive prebuilt tools
         if: inputs.generate_prebuilt_artifacts == true
-        shell: bash -c 'su --preserve-environment --command "sh -e" buildbot < "$1"' -- {0}
         working-directory: openwrt
-        run: tar -cf tools.tar staging_dir/host build_dir/host
+        run: |
+          su --preserve-environment --shell /bin/bash buildbot -c 'bash -s' <<'BUILD_SCRIPT'
+          set -e
+          tar -cf tools.tar staging_dir/host build_dir/host
+          BUILD_SCRIPT
 
       - name: Upload prebuilt tools
         if: inputs.generate_prebuilt_artifacts == true
