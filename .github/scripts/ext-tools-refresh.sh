@@ -18,8 +18,8 @@ for path in "$HOST_BUILD_DIR" "$HOST_STAGING_DIR_STAMP" "$TIMESTAMP_SCRIPT"; do
   fi
 done
 
-# Prepare stamps in dependency order. OpenWrt's timestamp.pl uses whole
-# seconds, so use distinct second values rather than relying on touch order.
+# OpenWrt's timestamp.pl compares whole-second mtimes. Refresh in dependency
+# order and cross a second boundary between stamp classes so ties are avoided.
 mapfile -d '' BUILT_STAMPS < <(
   find -H "$HOST_BUILD_DIR" -type f -name .built -print0 |
     python3 -c '
@@ -37,30 +37,33 @@ if [[ "$built_count" -eq 0 ]]; then
   exit 1
 fi
 
-now_epoch="$(date +%s)"
-
-# Make every restored output newer than the original artifact timestamp.
+# The package source tree has already been checked out and all custom scripts,
+# feed changes and defconfig steps have completed before this helper is called.
 find -H "$HOST_BUILD_DIR" -type f -print0 |
-  xargs -0 -r touch -d "@$now_epoch"
+  xargs -0 -r touch
 
-# The .prepared stamp must be newer than checked-out Makefiles and
-# PKG_FILE_DEPENDS. Run this helper after all DIY/customization steps.
-prepared_epoch="$((now_epoch + 1))"
+# .prepared is checked against source Makefiles and PKG_FILE_DEPENDS.
+sleep 1
 find -H "$HOST_BUILD_DIR" -type f -name '.prepared*' -print0 |
-  xargs -0 -r touch -d "@$prepared_epoch"
+  xargs -0 -r touch
 
 # Preserve the HostBuild dependency chain: .configured newer than .prepared.
-configured_epoch="$((prepared_epoch + 1))"
+sleep 1
 find -H "$HOST_BUILD_DIR" -type f -name .configured -print0 |
-  xargs -0 -r touch -d "@$configured_epoch"
+  xargs -0 -r touch
 
-# Each .built must be newer than every file in its package tree. Deeper
-# package stamps are assigned first, so an ancestor .built is newer than
-# any nested package's outputs or .built stamp.
-stamp_epoch="$configured_epoch"
+# Give each nesting depth a distinct timestamp, deepest first. Stamps at the
+# same depth are siblings; an ancestor .built is always newer than every
+# nested package's outputs and .built stamp.
+previous_depth=""
 for stamp in "${BUILT_STAMPS[@]}"; do
-  stamp_epoch="$((stamp_epoch + 1))"
-  touch -d "@$stamp_epoch" "$stamp"
+  slash_count="${stamp//[^\/]/}"
+  depth="${#slash_count}"
+  if [[ "$depth" != "$previous_depth" ]]; then
+    sleep 1
+    previous_depth="$depth"
+  fi
+  touch "$stamp"
 done
 
 # Verify the exact newest-file test used by include/host-build.mk's rdep.
@@ -72,9 +75,10 @@ for stamp in "${BUILT_STAMPS[@]}"; do
   fi
 done
 
-# Installed-tool stamps must be newer than the .built stamps they depend on.
-staging_epoch="$((stamp_epoch + 1))"
+# Installed-tool stamps are touched after .built and remain in the past by the
+# time make tools/install starts, so a real rebuild can invalidate them.
+sleep 1
 find -H "$HOST_STAGING_DIR_STAMP" -type f -print0 |
-  xargs -0 -r touch -d "@$staging_epoch"
+  xargs -0 -r touch
 
 echo "Refreshed and verified $built_count prebuilt host package .built stamps."
