@@ -31,4 +31,5 @@ jobs:
       - name: Lint all workflow files
         run: |
           set -euo pipefail
-          "$HOME/go/bin/actionlint" -color .github/workflows/*.yml
+          "$HOME/go/bin/actionlint" -shellcheck= -color .github/workflows/*.yml
+          shellcheck --severity=error .github/scripts/*.sh
