@@ -32,15 +32,6 @@ BUILD_ENVIRONMENT = {
 }
 RUNTIME_DOCKERFILE = ".github/dockerfiles/Dockerfile.tools"
 
-# Compatibility pin for the already-built and published image. The successful
-# image was built from this exact source commit using the same buildworker,
-# config, dependency provisioning, make defconfig, make tools/install command,
-# and Dockerfile. The only intervening Host Tools workflow change was ccache
-# cache orchestration, which does not alter the archived Host Tools payload.
-LEGACY_IMAGE_FINGERPRINTS = {
-    ("immortalwrt/immortalwrt", "761b7ff22cbf7c13f28fc631bd70a84d295fd627"): "2dc421d141151ff1dac67edb7493f1ff412d75b917d4ff99d6c7fedd335eed9d",
-}
-
 
 def git_output(repo: Path, *args: str) -> str:
     result = subprocess.run(
@@ -117,20 +108,14 @@ def main() -> int:
     }
     canonical = json.dumps(manifest, sort_keys=True, separators=(",", ":")).encode("utf-8")
     fingerprint = hashlib.sha256(canonical).hexdigest()
-    image_fingerprint = LEGACY_IMAGE_FINGERPRINTS.get(
-        (args.source_repo, source_commit), fingerprint
-    )
-
     print(f"Source ref: {args.source_ref}")
     print(f"Source commit: {source_commit}")
     print(f"Fingerprint input files: {len(files)}")
     print(f"Host Tools artifact fingerprint: {fingerprint}")
-    print(f"Compatible GHCR image fingerprint: {image_fingerprint}")
 
     output_path = os.environ.get("GITHUB_OUTPUT")
     outputs = {
         "tools_fingerprint": fingerprint,
-        "tools_image_fingerprint": image_fingerprint,
         "source_commit": source_commit,
     }
     if output_path:

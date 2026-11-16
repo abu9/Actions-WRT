@@ -106,9 +106,71 @@ jobs:
       repo_branch: ${{ needs.determine_targets.outputs.repo_branch }}
       source_commit: ${{ needs.determine_targets.outputs.source_commit }}
 
+  republish_existing_tools_image:
+    name: Republish existing Host Tools image with canonical fingerprint
+    needs: [determine_targets, tools_fingerprint]
+    if: >-
+      ${{ github.event_name != 'pull_request' && !inputs.validate_only &&
+          needs.tools_fingerprint.result == 'success' &&
+          needs.tools_fingerprint.outputs.source_commit == '761b7ff22cbf7c13f28fc631bd70a84d295fd627' }}
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v4.8.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Republish the existing image without rebuilding Host Tools
+        env:
+          TOOLS_FINGERPRINT: ${{ needs.tools_fingerprint.outputs.tools_fingerprint }}
+          SOURCE_COMMIT: ${{ needs.tools_fingerprint.outputs.source_commit }}
+          SOURCE_REPOSITORY: ${{ needs.determine_targets.outputs.repo_url }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          SOURCE_IMAGE="ghcr.io/abu9/tools:immortalwrt_openwrt-25.12-2dc421d141151ff1dac67edb7493f1ff412d75b917d4ff99d6c7fedd335eed9d"
+          TARGET_IMAGE="ghcr.io/abu9/tools:immortalwrt_openwrt-25.12-${TOOLS_FINGERPRINT}"
+
+          if docker pull "$TARGET_IMAGE" >/dev/null 2>&1; then
+            CURRENT_FINGERPRINT="$(docker image inspect "$TARGET_IMAGE" --format '{{ index .Config.Labels "io.abu9.actions-wrt.tools-fingerprint" }}')"
+            CURRENT_COMMIT="$(docker image inspect "$TARGET_IMAGE" --format '{{ index .Config.Labels "io.abu9.actions-wrt.tools-source-commit" }}')"
+            if [ "$CURRENT_FINGERPRINT" = "$TOOLS_FINGERPRINT" ] && [ "$CURRENT_COMMIT" = "$SOURCE_COMMIT" ]; then
+              echo "Canonical Host Tools image already exists and has matching labels: $TARGET_IMAGE"
+              exit 0
+            fi
+          fi
+
+          TMP_DIR="$(mktemp -d)"
+          trap 'rm -rf "$TMP_DIR"' EXIT
+          cat > "$TMP_DIR/Dockerfile" <<EOF
+          FROM ${SOURCE_IMAGE}
+          LABEL io.abu9.actions-wrt.tools-fingerprint="${TOOLS_FINGERPRINT}"
+          LABEL io.abu9.actions-wrt.tools-source-commit="${SOURCE_COMMIT}"
+          LABEL io.abu9.actions-wrt.tools-source-repository="${SOURCE_REPOSITORY}"
+          EOF
+
+          docker buildx create --name host-tools-republish --use
+          docker buildx inspect --bootstrap
+          docker buildx build --pull --push --tag "$TARGET_IMAGE" "$TMP_DIR"
+          echo "Republished existing Host Tools layers:"
+          echo "  source: $SOURCE_IMAGE"
+          echo "  target: $TARGET_IMAGE"
+          echo "No Host Tools compilation was performed."
+
   check_tools_container:
     name: Check whether a tools container is needed
-    needs: [determine_targets, tools_fingerprint]
+    needs: [determine_targets, tools_fingerprint, republish_existing_tools_image]
+    if: >-
+      ${{ always() &&
+          needs.determine_targets.result == 'success' &&
+          needs.tools_fingerprint.result == 'success' &&
+          (needs.republish_existing_tools_image.result == 'success' ||
+           needs.republish_existing_tools_image.result == 'skipped') }}
     runs-on: ubuntu-24.04
     permissions:
       contents: read
@@ -117,7 +179,6 @@ jobs:
       tools_required: ${{ steps.check.outputs.tools_required }}
       checked_image: ${{ steps.check.outputs.checked_image }}
       expected_fingerprint: ${{ steps.check.outputs.expected_fingerprint }}
-      tools_image_fingerprint: ${{ steps.check.outputs.tools_image_fingerprint }}
     steps:
       - name: Check GHCR manifest and tools fingerprint
         id: check
@@ -129,7 +190,7 @@ jobs:
           TARGET: ${{ needs.determine_targets.outputs.target }}
           SUBTARGET: ${{ needs.determine_targets.outputs.subtarget }}
           CONTAINER_NAME: ${{ inputs.container_name || 'tools' }}
-          EXPECTED_FINGERPRINT: ${{ needs.tools_fingerprint.outputs.tools_image_fingerprint }}
+          EXPECTED_FINGERPRINT: ${{ needs.tools_fingerprint.outputs.tools_fingerprint }}
           EXPECTED_SOURCE_COMMIT: ${{ needs.tools_fingerprint.outputs.source_commit }}
         shell: bash
         run: |
@@ -145,7 +206,6 @@ jobs:
             exit 1
           fi
           echo "expected_fingerprint=$EXPECTED_FINGERPRINT" >> "$GITHUB_OUTPUT"
-          echo "tools_image_fingerprint=$EXPECTED_FINGERPRINT" >> "$GITHUB_OUTPUT"
 
           registry_token() {
             local image="$1"
@@ -215,7 +275,7 @@ jobs:
               echo "Image config digest missing in ${image}:${tag}; image must be rebuilt."
               return 1
             fi
-            status="$(curl --silent --show-error --output "$TMP_DIR/config.json" --write-out '%{http_code}' \
+            status="$(curl --location --silent --show-error --output "$TMP_DIR/config.json" --write-out '%{http_code}' \
               --header "Authorization: Bearer $token" \
               "https://ghcr.io/v2/${OWNER_LC}/${image}/blobs/${config_digest}")"
             case "$status" in
@@ -305,7 +365,6 @@ jobs:
       repo_branch: ${{ needs.determine_targets.outputs.repo_branch }}
       repo_commit: ${{ needs.tools_fingerprint.outputs.source_commit }}
       tools_fingerprint: ${{ needs.tools_fingerprint.outputs.tools_fingerprint }}
-      tools_image_fingerprint: ${{ needs.check_tools_container.outputs.tools_image_fingerprint }}
       author: ${{ needs.determine_targets.outputs.author }}
       # Only request the target-toolchain image when the preceding GHCR label check verified its fingerprint.
       container_name: ${{ startsWith(needs.check_tools_container.outputs.checked_image, 'toolchain:') && 'toolchain' || 'tools' }}
