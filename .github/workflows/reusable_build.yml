@@ -620,7 +620,7 @@ jobs:
             echo "GPG signature verification failed for the official checksum index." >&2
             exit 1
           fi
-          if ! grep -q '^\\[GNUPG:\\] GOODSIG ' /tmp/official-toolchain-gpg.log; then
+          if ! grep -q '^\[GNUPG:\] GOODSIG ' /tmp/official-toolchain-gpg.log; then
             echo "GPG did not report a valid signature from the pinned keyring." >&2
             exit 1
           fi
