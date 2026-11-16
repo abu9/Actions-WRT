@@ -103,6 +103,7 @@ jobs:
           SUBTARGET: ${{ needs.determine_targets.outputs.subtarget }}
           CONTAINER_NAME: ${{ inputs.container_name }}
           EXPECTED_FINGERPRINT: ${{ needs.tools_fingerprint.outputs.tools_fingerprint }}
+          EXPECTED_SOURCE_COMMIT: ${{ needs.tools_fingerprint.outputs.source_commit }}
         shell: bash
         run: |
           set -euo pipefail
@@ -149,7 +150,8 @@ jobs:
           check_tools_fingerprint() {
             local image="$1"
             local tag="$2"
-            local token status manifest_digest config_digest image_fingerprint
+            local expected_source_commit="${3:-}"
+            local token status manifest_digest config_digest image_fingerprint image_source_commit
             token="$(registry_token "$image")"
             status="$(curl --silent --show-error --output "$TMP_DIR/manifest.json" --write-out '%{http_code}' \
               --header "Authorization: Bearer $token" \
@@ -195,20 +197,26 @@ jobs:
             esac
 
             image_fingerprint="$(jq -r '.config.Labels["io.abu9.actions-wrt.tools-fingerprint"] // empty' "$TMP_DIR/config.json")"
-            if [ "$image_fingerprint" = "$EXPECTED_FINGERPRINT" ]; then
+            image_source_commit="$(jq -r '.config.Labels["io.abu9.actions-wrt.tools-source-commit"] // empty' "$TMP_DIR/config.json")"
+            if [ "$image_fingerprint" = "$EXPECTED_FINGERPRINT" ] &&
+               { [ -z "$expected_source_commit" ] || [ "$image_source_commit" = "$expected_source_commit" ]; }; then
               return 0
             fi
             echo "Stale or unlabelled tools image: ${image}:${tag}"
             echo "  image fingerprint: ${image_fingerprint:-<missing>}"
             echo "  expected fingerprint: $EXPECTED_FINGERPRINT"
+            if [ -n "$expected_source_commit" ]; then
+              echo "  image source commit: ${image_source_commit:-<missing>}"
+              echo "  expected source commit: $expected_source_commit"
+            fi
             return 1
           }
 
           # A target-specific toolchain image remains a separate cache type.
           # Its fingerprint is deliberately not conflated with generic host tools.
           if [ "$CONTAINER_NAME" = "toolchain" ]; then
-            TOOLCHAIN_TAG="${TARGET}-${SUBTARGET}-${BASE_TAG}-${EXPECTED_FINGERPRINT}"
-            if check_tools_fingerprint toolchain "$TOOLCHAIN_TAG"; then
+            TOOLCHAIN_TAG="${TARGET}-${SUBTARGET}-${BASE_TAG}-${EXPECTED_SOURCE_COMMIT}-${EXPECTED_FINGERPRINT}"
+            if check_tools_fingerprint toolchain "$TOOLCHAIN_TAG" "$EXPECTED_SOURCE_COMMIT"; then
               echo "Existing target toolchain image found: ghcr.io/${OWNER_LC}/toolchain:${TOOLCHAIN_TAG}"
               echo "tools_required=false" >> "$GITHUB_OUTPUT"
               echo "checked_image=toolchain:${TOOLCHAIN_TAG}" >> "$GITHUB_OUTPUT"
