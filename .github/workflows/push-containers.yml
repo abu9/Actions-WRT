@@ -101,7 +101,7 @@ jobs:
 
   compute-tools-fingerprint:
     name: Compute generic host-tools fingerprint
-    if: ${{ !cancelled() && inputs.build_tools == true }}
+    if: ${{ !cancelled() && needs.determine_targets.result == 'success' && inputs.build_tools == true }}
     needs: determine_targets
     uses: ./.github/workflows/reusable_tools_fingerprint.yml
     with:
@@ -111,7 +111,11 @@ jobs:
 
   build-linux-buildbot:
     name: Build host tools with upstream buildbot
-    if: ${{ !cancelled() && inputs.build_tools == true }}
+    if: ${{ !cancelled() &&
+        needs.determine_targets.result == 'success' &&
+        needs.determine_container_info.result == 'success' &&
+        needs.compute-tools-fingerprint.result == 'success' &&
+        inputs.build_tools == true }}
     needs: [determine_targets, determine_container_info, compute-tools-fingerprint]
     permissions:
       contents: read
@@ -126,7 +130,12 @@ jobs:
 
   push-tools-container:
     name: Push generic host-tools image
-    if: ${{ !cancelled() && inputs.build_tools == true && needs.build-linux-buildbot.result == 'success' && needs.compute-tools-fingerprint.result == 'success' }}
+    if: ${{ !cancelled() &&
+        needs.determine_targets.result == 'success' &&
+        needs.determine_container_info.result == 'success' &&
+        needs.build-linux-buildbot.result == 'success' &&
+        needs.compute-tools-fingerprint.result == 'success' &&
+        inputs.build_tools == true }}
     needs: [determine_targets, determine_container_info, build-linux-buildbot, compute-tools-fingerprint]
     runs-on: ubuntu-24.04
     permissions:
@@ -165,7 +174,11 @@ jobs:
 
   compute-toolchain-cache-key:
     name: Compute target toolchain cache key
-    if: ${{ !cancelled() && inputs.build_toolchain == true && inputs.build_tools == true }}
+    if: ${{ !cancelled() &&
+        needs.determine_targets.result == 'success' &&
+        needs.compute-tools-fingerprint.result == 'success' &&
+        inputs.build_toolchain == true &&
+        inputs.build_tools == true }}
     needs: [determine_targets, compute-tools-fingerprint]
     runs-on: ubuntu-24.04
     outputs:
@@ -186,7 +199,12 @@ jobs:
 
   build-target-toolchain:
     name: Build target-specific toolchain
-    if: ${{ !cancelled() && inputs.build_toolchain == true && inputs.build_tools == true && needs.compute-tools-fingerprint.result == 'success' }}
+    if: ${{ !cancelled() &&
+        needs.determine_targets.result == 'success' &&
+        needs.compute-tools-fingerprint.result == 'success' &&
+        needs.push-tools-container.result == 'success' &&
+        inputs.build_toolchain == true &&
+        inputs.build_tools == true }}
     needs: [determine_targets, compute-tools-fingerprint, push-tools-container]
     permissions:
       contents: read
@@ -208,7 +226,14 @@ jobs:
 
   push-target-toolchain:
     name: Push target-specific toolchain image
-    if: ${{ !cancelled() && needs.build-target-toolchain.outputs.push == 'true' }}
+    if: >-
+      ${{ !cancelled() &&
+          needs.determine_targets.result == 'success' &&
+          needs.determine_container_info.result == 'success' &&
+          needs.compute-tools-fingerprint.result == 'success' &&
+          needs.compute-toolchain-cache-key.result == 'success' &&
+          needs.build-target-toolchain.result == 'success' &&
+          needs.build-target-toolchain.outputs.push == 'true' }}
     needs: [determine_targets, determine_container_info, compute-tools-fingerprint, compute-toolchain-cache-key, build-target-toolchain]
     runs-on: ubuntu-24.04
     permissions:

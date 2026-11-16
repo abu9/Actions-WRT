@@ -15,6 +15,10 @@ env:
   REPO_URL: https://github.com/immortalwrt/immortalwrt
   REPO_BRANCH: openwrt-25.12
 
+permissions:
+  contents: read
+  actions: write
+
 on:
   workflow_dispatch:
 #  schedule:
@@ -41,8 +45,11 @@ jobs:
 
     - name: Save New Commit Hash
       if: steps.cacheHash.outputs.cache-hit != 'true'
+      env:
+        COMMIT_HASH: ${{ steps.getHash.outputs.commitHash }}
       run: |
-        echo ${{ steps.getHash.outputs.commitHash }} | tee .commitHash
+        set -euo pipefail
+        printf '%s\n' "$COMMIT_HASH" | tee .commitHash
 
     - name: Trigger build
       if: steps.cacheHash.outputs.cache-hit != 'true'

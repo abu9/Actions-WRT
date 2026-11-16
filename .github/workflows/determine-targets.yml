@@ -47,28 +47,73 @@ jobs:
 
       - name: Get repo info
         id: get_repo_info
+        env:
+          SOURCE_BRANCH: ${{ inputs.source_branch }}
+          SOURCE_COMMIT: ${{ inputs.source_commit }}
+          CONFIG_NAME: ${{ inputs.config_name }}
+        shell: bash
         run: |
-          REPO_URL=$(cut -d "@" -f 1 <<< "${{ inputs.source_branch }}")
-          REPO_BRANCH=$(cut -d "@" -f 2 <<< "${{ inputs.source_branch }}")
-          AUTHOR=$(cut -d "/" -f 1 <<< "$REPO_URL")
-          echo "repo_url=$REPO_URL" >> ${GITHUB_OUTPUT}
-          echo "repo_branch=$REPO_BRANCH" >> ${GITHUB_OUTPUT}
-          echo "author=$AUTHOR" >> ${GITHUB_OUTPUT}
+          set -euo pipefail
+
+          case "$SOURCE_BRANCH" in
+            openwrt/openwrt@main|coolsnowwolf/lede@master|immortalwrt/immortalwrt@openwrt-23.05|immortalwrt/immortalwrt@openwrt-24.10|immortalwrt/immortalwrt@openwrt-25.12|hanwckf/immortalwrt-mt798x@openwrt-21.02) ;;
+            *)
+              echo "Unsupported source_branch: $SOURCE_BRANCH" >&2
+              exit 1
+              ;;
+          esac
+
+          if [[ -n "$SOURCE_COMMIT" && ! "$SOURCE_COMMIT" =~ ^[[:xdigit:]]{40}$ ]]; then
+            echo "source_commit must be an exact 40-character Git commit SHA." >&2
+            exit 1
+          fi
+
+          if [[ -n "$CONFIG_NAME" ]]; then
+            case "$CONFIG_NAME" in
+              .config7981|mt7981-ax3000.config|.config7981.mtwifi-cfg|360t7-immortalwrt.conf|360t7-immortalwrt-uhttpd.conf|360t7-immortalwrt-24.10.conf|360t7-immortalwrt-25.12-ubi.conf|360t7-immortalwrt-25.12-kernel-min.conf) ;;
+              *)
+                echo "Unsupported config_name: $CONFIG_NAME" >&2
+                exit 1
+                ;;
+            esac
+          fi
+
+          REPO_URL="${SOURCE_BRANCH%@*}"
+          REPO_BRANCH="${SOURCE_BRANCH#*@}"
+          AUTHOR="${REPO_URL%%/*}"
+          SOURCE_REF="$REPO_BRANCH"
+          if [[ -n "$SOURCE_COMMIT" ]]; then
+            SOURCE_REF="$SOURCE_COMMIT"
+          fi
+
+          {
+            echo "repo_url=$REPO_URL"
+            echo "repo_branch=$REPO_BRANCH"
+            echo "author=$AUTHOR"
+            echo "source_ref=$SOURCE_REF"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Checkout openwrt source code
-        if: inputs.config_name != null
+        if: inputs.config_name != ''
         uses: actions/checkout@v7.0.1
         with:
           repository: ${{ steps.get_repo_info.outputs.repo_url }}
-          ref: ${{ inputs.source_commit != '' && inputs.source_commit || steps.get_repo_info.outputs.repo_branch }}
+          ref: ${{ steps.get_repo_info.outputs.source_ref }}
           path: openwrt
 
       - name: Get info
         id: get_info
-        if: inputs.config_name != null
+        if: inputs.config_name != ''
+        env:
+          CONFIG_NAME: ${{ inputs.config_name }}
+        shell: bash
         run: |
-          [[ -d "files" ]] && mv -f files openwrt/files
-          [[ -e ${{ inputs.config_name }} ]] && cp -f ${{ inputs.config_name }} openwrt/.config
+          set -euo pipefail
+          if [[ -d files ]]; then
+            mv -f -- files openwrt/files
+          fi
+          test -f "$CONFIG_NAME"
+          cp -f -- "$CONFIG_NAME" openwrt/.config
           cd openwrt
           make defconfig
           eval "$(grep \
@@ -87,7 +132,7 @@ jobs:
           [[ -n ${ARCH} ]] && echo "arch=$ARCH" >> ${GITHUB_OUTPUT}
 
       - name: Show configuration
-        if: inputs.config_name != null
+        if: inputs.config_name != ''
         working-directory: openwrt
         run: cat .config
     

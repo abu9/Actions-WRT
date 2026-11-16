@@ -229,8 +229,13 @@ jobs:
       - name: Get info
         id: get_info
         if: inputs.build_full == true || inputs.build_kernel == true
+        env:
+          CONFIG_NAME: ${{ inputs.config_name }}
+        shell: bash
         run: |
-          mv ${{ inputs.config_name }} .config
+          set -euo pipefail
+          test -f "$CONFIG_NAME"
+          mv -- "$CONFIG_NAME" .config
 
           if [ $(grep -ic '^CONFIG_TARGET_MULTI_PROFILE=y' .config) -eq 1 ]
           then
@@ -238,8 +243,8 @@ jobs:
           else
             DEVICE_NAME=$(grep -e '^CONFIG_TARGET.*DEVICE.*=y' .config | sed -r 's/.*DEVICE_(.*)=y/\1/')
           fi
-          [[ -n ${DEVICE_NAME} ]] && echo "DEVICE_NAME=$DEVICE_NAME" >> ${GITHUB_OUTPUT}
-          echo "FILE_DATE=_$(date +"%Y%m%d%H%M")" >> ${GITHUB_OUTPUT}
+          [[ -n ${DEVICE_NAME} ]] && echo "device_name=$DEVICE_NAME" >> "$GITHUB_OUTPUT"
+          echo "file_date=_$(date +"%Y%m%d%H%M")" >> "$GITHUB_OUTPUT"
 
   check:
     name: Check packages for ${{ inputs.target }}/${{ inputs.subtarget }}
@@ -266,6 +271,14 @@ jobs:
 
       - name: Fix permission
         run: chown -R buildbot:buildbot .
+
+      - name: Install runtime host Python setuptools dependency
+        shell: bash
+        run: |
+          set -euo pipefail
+          apt-get update
+          DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends python3-setuptools
+          rm -rf /var/lib/apt/lists/*
 
       - name: Attach prebuilt tools
         shell: bash -c 'su --preserve-environment --command "sh -e" buildbot < "$1"' -- {0}
@@ -550,6 +563,14 @@ jobs:
       - name: Fix permission
         run: chown -R buildbot:buildbot .
 
+      - name: Install runtime host Python setuptools dependency
+        shell: bash
+        run: |
+          set -euo pipefail
+          apt-get update
+          DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends python3-setuptools
+          rm -rf /var/lib/apt/lists/*
+
       - name: Attach prebuilt tools
         shell: bash -c 'su --preserve-environment --command "sh -e" buildbot < "$1"' -- {0}
         working-directory: openwrt
@@ -675,8 +696,13 @@ jobs:
 
       - name: Setup configuration
         if: inputs.build_full == true || inputs.build_kernel == true
-        shell: bash -c 'su --preserve-environment --command "sh -e" buildbot < "$1"' -- {0}     
-        run: cp -f ${{ inputs.config_name }} openwrt/.config
+        env:
+          CONFIG_NAME: ${{ inputs.config_name }}
+        shell: bash -c 'su --preserve-environment --command "sh -e" buildbot < "$1"' -- {0}
+        run: |
+          set -euo pipefail
+          test -f "$CONFIG_NAME"
+          cp -f -- "$CONFIG_NAME" openwrt/.config
 
       - name: Configure testing kernel
         if: inputs.testing == true
@@ -867,13 +893,31 @@ jobs:
         shell: bash -c 'su --preserve-environment --command "sh -e" buildbot < "$1"' -- {0}
         working-directory: openwrt
         run: |
-          # Check if special dtb makefile target is available
-          # For this to correctly work, a .config is required but this is already done by
-          # previous steps
-          TOPDIR=$(pwd) make -C target/linux dtb -q >/dev/null 2>/dev/null || ret=$?
-          [ $ret = 2 ] && exit 0
+          set -euo pipefail
+          # make -q returns 0 when up to date, 1 when a rebuild is needed,
+          # and 2 when the optional target cannot be queried.
+          set +e
+          TOPDIR="$(pwd)" make -C target/linux dtb -q >/dev/null 2>&1
+          dtb_status=$?
+          set -e
 
-          make target/linux/dtb -j$(nproc) BUILD_LOG=1 || ret=$? ../.github/scripts/show_build_failures.sh
+          case "$dtb_status" in
+            0|1) ;;
+            2)
+              echo "No usable target/linux dtb query target; skipping optional DTB build."
+              exit 0
+              ;;
+            *)
+              echo "DTB query failed with exit code $dtb_status." >&2
+              exit "$dtb_status"
+              ;;
+          esac
+
+          make target/linux/dtb -j"$(nproc)" BUILD_LOG=1 || {
+            ret=$?
+            bash ../.github/scripts/show_build_failures.sh
+            exit "$ret"
+          }
 
       - name: Build everything
         if: inputs.build_full == true

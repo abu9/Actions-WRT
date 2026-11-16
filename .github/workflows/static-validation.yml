@@ -40,8 +40,14 @@ jobs:
           install -m 0755 "$install_dir/actionlint" "$bin_dir/actionlint"
           echo "$bin_dir" >> "$GITHUB_PATH"
 
-      - name: Lint all workflow files
+      - name: Install ShellCheck
         run: |
           set -euo pipefail
-          actionlint -shellcheck= -color .github/workflows/*.yml
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends shellcheck
+
+      - name: Lint all workflow files and embedded shell
+        run: |
+          set -euo pipefail
+          actionlint -shellcheck=shellcheck -color .github/workflows/*.yml
           shellcheck --severity=error .github/scripts/*.sh
