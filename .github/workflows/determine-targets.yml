@@ -43,7 +43,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7.0.1
 
       - name: Get repo info
         id: get_repo_info
@@ -57,7 +57,7 @@ jobs:
 
       - name: Checkout openwrt source code
         if: inputs.config_name != null
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7.0.1
         with:
           repository: ${{ steps.get_repo_info.outputs.repo_url }}
           ref: ${{ inputs.source_commit != '' && inputs.source_commit || steps.get_repo_info.outputs.repo_branch }}
