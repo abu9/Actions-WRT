@@ -79,6 +79,7 @@ jobs:
     with:
       repo_url: ${{ needs.determine_targets.outputs.repo_url }}
       repo_branch: ${{ needs.determine_targets.outputs.repo_branch }}
+      source_commit: ${{ needs.determine_targets.outputs.source_commit }}
 
   check_tools_container:
     name: Check whether a tools container is needed
