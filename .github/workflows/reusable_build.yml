@@ -89,6 +89,9 @@ on:
       repo_commit:
         type: string
         default: ''
+      tools_fingerprint:
+        type: string
+        default: ''
       author:
         required: true
         type: string
@@ -149,6 +152,7 @@ jobs:
           AUTHOR: ${{ inputs.author }}
           REPO_BRANCH: ${{ inputs.repo_branch }}
           REQUESTED_CONTAINER: ${{ inputs.container_name }}
+          TOOLS_FINGERPRINT: ${{ inputs.tools_fingerprint }}
         shell: bash
         run: |
           set -euo pipefail
@@ -179,6 +183,13 @@ jobs:
                 exit 1
                 ;;
             esac
+          fi
+
+          # Generic tools images use content-addressed tags. This prevents a
+          # slower build for an older source commit from overwriting the image
+          # selected by a newer firmware run.
+          if [ "$CONTAINER_NAME" = "tools" ] && [ -n "$TOOLS_FINGERPRINT" ]; then
+            CONTAINER_TAG="${CONTAINER_TAG}-${TOOLS_FINGERPRINT}"
           fi
 
           echo "Container to use: $CONTAINER_NAME:$CONTAINER_TAG"
