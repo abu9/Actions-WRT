@@ -157,6 +157,27 @@ jobs:
             io.abu9.actions-wrt.tools-source-repository=${{ needs.determine_targets.outputs.repo_url }}
           file: .github/dockerfiles/Dockerfile.tools
 
+  compute-toolchain-cache-key:
+    name: Compute target toolchain cache key
+    if: ${{ !cancelled() && inputs.build_toolchain == true && inputs.build_tools == true }}
+    needs: [determine_targets, compute-tools-fingerprint]
+    runs-on: ubuntu-latest
+    outputs:
+      cache_key: ${{ steps.key.outputs.cache_key }}
+    steps:
+      - name: Compute cache key
+        id: key
+        env:
+          TARGET: ${{ needs.determine_targets.outputs.target }}
+          SUBTARGET: ${{ needs.determine_targets.outputs.subtarget }}
+          SOURCE_COMMIT: ${{ needs.compute-tools-fingerprint.outputs.source_commit }}
+          TOOLS_FINGERPRINT: ${{ needs.compute-tools-fingerprint.outputs.tools_fingerprint }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          KEY="$(printf '%s\\n' "$TARGET" "$SUBTARGET" "$SOURCE_COMMIT" "$TOOLS_FINGERPRINT" | sha256sum | cut -c1-32)"
+          echo "cache_key=$KEY" >> "$GITHUB_OUTPUT"
+
   build-target-toolchain:
     name: Build target-specific toolchain
     if: ${{ !cancelled() && inputs.build_toolchain == true && inputs.build_tools == true && needs.compute-tools-fingerprint.result == 'success' }}
@@ -182,7 +203,7 @@ jobs:
   push-target-toolchain:
     name: Push target-specific toolchain image
     if: ${{ !cancelled() && needs.build-target-toolchain.outputs.push == 'true' }}
-    needs: [determine_targets, determine_container_info, compute-tools-fingerprint, build-target-toolchain]
+    needs: [determine_targets, determine_container_info, compute-tools-fingerprint, compute-toolchain-cache-key, build-target-toolchain]
     runs-on: ubuntu-latest
     permissions:
       contents: read
