@@ -208,7 +208,7 @@ jobs:
       - name: Determine ccache info
         id: determine_ccache_info
         run: |
-          echo "ccache_name=ccache-${{ inputs.ccache_type }}-${{ steps.determine_container_name.outputs.container_tag }}" >> $GITHUB_OUTPUT
+          echo "ccache_name=ccache-${{ inputs.ccache_type }}-${{ steps.determine_container_name.outputs.ccache_tag }}" >> $GITHUB_OUTPUT
 
       - name: Get info
         id: get_info
