@@ -29,7 +29,7 @@ HOST_TOOLS_CONFIG = (
     "CONFIG_BUILD_ALL_HOST_TOOLS=y\n"
 )
 BUILD_ENVIRONMENT = {
-    "runner": "ubuntu-latest",
+    "runner": "ubuntu-24.04",
     "platform": "linux/amd64",
     "buildworker_image": "ghcr.io/openwrt/buildbot/buildworker-v3.11.8:v28",
 }
