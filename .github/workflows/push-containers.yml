@@ -122,7 +122,7 @@ jobs:
     with:
       generate_prebuilt_artifacts: true
       repo_url: ${{ needs.determine_targets.outputs.repo_url }}
-      repo_branch: ${{ needs.compute-tools-fingerprint.outputs.source_commit }}
+      source_commit: ${{ needs.compute-tools-fingerprint.outputs.source_commit }}
 
   push-tools-container:
     name: Push generic host-tools image
