@@ -92,7 +92,7 @@ jobs:
             ls -la staging_dir/host/bin || true
             exit 1
           fi
-          su --preserve-environment --shell /bin/bash buildbot -c '"$1" -c '\''import setuptools; print("Host setuptools:", setuptools.__version__)'\''' -- "$HOST_PYTHON"
+          "$HOST_PYTHON" -c 'import setuptools; print("Host setuptools:", setuptools.__version__)'
 
       - name: Build tools
         working-directory: openwrt
