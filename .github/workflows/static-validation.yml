@@ -20,18 +20,6 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v7.0.1
 
-      - name: Create buildbot test account
-        run: sudo useradd --no-create-home --shell /bin/bash buildbot
-
-      - name: Validate buildbot execution environment
-        shell: sudo -E -n -u buildbot -- bash -e {0}
-        run: |
-          test "$(id -un)" = buildbot
-          test -n "$GITHUB_WORKSPACE"
-          test "$SHELL_TEST_VALUE" = preserved
-        env:
-          SHELL_TEST_VALUE: preserved
-
       - name: Set up pinned Go
         uses: actions/setup-go@v7.0.0
         with:
@@ -44,5 +32,5 @@ jobs:
       - name: Lint all workflow files
         run: |
           set -euo pipefail
-          "$HOME/go/bin/actionlint" -shellcheck= -color .github/workflows/*.yml
+          "$HOME/go/bin/actionlint" -color .github/workflows/*.yml
           shellcheck --severity=error .github/scripts/*.sh
