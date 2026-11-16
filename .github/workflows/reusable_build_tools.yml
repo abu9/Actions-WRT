@@ -21,7 +21,7 @@ permissions:
 jobs:
   build:
     name: Build tools
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     container: ghcr.io/openwrt/buildbot/buildworker-v3.11.8:v28
     outputs:
       tools-hash: ${{ steps.gen_tools_hash.outputs.tools-hash }}
