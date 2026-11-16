@@ -127,7 +127,7 @@ jobs:
   push-tools-container:
     name: Push generic host-tools image
     if: ${{ !cancelled() && inputs.build_tools == true && needs.build-linux-buildbot.result == 'success' && needs.compute-tools-fingerprint.result == 'success' }}
-    needs: [determine_container_info, build-linux-buildbot, compute-tools-fingerprint]
+    needs: [determine_targets, determine_container_info, build-linux-buildbot, compute-tools-fingerprint]
     runs-on: ubuntu-latest
     permissions:
       contents: read
