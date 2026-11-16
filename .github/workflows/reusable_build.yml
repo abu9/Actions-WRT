@@ -158,38 +158,41 @@ jobs:
           CONTAINER_TAG="${AUTHOR}_${REPO_BRANCH}"
 
           if [ "$CONTAINER_NAME" = "toolchain" ]; then
-            TOOLCHAIN_TAG="${TARGET}-${SUBTARGET}-${CONTAINER_TAG}"
-            TOKEN="$(curl --fail --silent --show-error --user "${GHCR_USER}:${GHCR_PASSWORD}" \
-              "https://ghcr.io/token?scope=repository:${GHCR_OWNER}/toolchain:pull" | jq -r '.token // .access_token // empty')"
-            if [ -z "$TOKEN" ]; then
-              echo "Unable to obtain a GHCR pull token for the target toolchain image." >&2
-              exit 1
-            fi
-            STATUS="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
-              --header "Authorization: Bearer $TOKEN" \
-              --header 'Accept: application/vnd.oci.image.index.v1+json, application/vnd.docker.distribution.manifest.list.v2+json, application/vnd.oci.image.manifest.v1+json, application/vnd.docker.distribution.manifest.v2+json' \
-              "https://ghcr.io/v2/${GHCR_OWNER}/toolchain/manifests/${TOOLCHAIN_TAG}")"
-
-            case "$STATUS" in
-              200) CONTAINER_TAG="$TOOLCHAIN_TAG" ;;
-              404)
-                echo "Target toolchain image not found; falling back to tools image."
-                CONTAINER_NAME=tools
-                ;;
-              *)
-                echo "GHCR target toolchain manifest check failed (HTTP $STATUS)." >&2
+            if [ -z "$TOOLS_FINGERPRINT" ]; then
+              echo "No tools fingerprint supplied; refusing to reuse a target toolchain image."
+              CONTAINER_NAME=tools
+            else
+              TOOLCHAIN_TAG="${TARGET}-${SUBTARGET}-${CONTAINER_TAG}-${TOOLS_FINGERPRINT}"
+              TOKEN="$(curl --fail --silent --show-error --user "${GHCR_USER}:${GHCR_PASSWORD}" \
+                "https://ghcr.io/token?scope=repository:${GHCR_OWNER}/toolchain:pull" | jq -r '.token // .access_token // empty')"
+              if [ -z "$TOKEN" ]; then
+                echo "Unable to obtain a GHCR pull token for the target toolchain image." >&2
                 exit 1
-                ;;
-            esac
+              fi
+              STATUS="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
+                --header "Authorization: Bearer $TOKEN" \
+                --header 'Accept: application/vnd.oci.image.index.v1+json, application/vnd.docker.distribution.manifest.list.v2+json, application/vnd.oci.image.manifest.v1+json, application/vnd.docker.distribution.manifest.v2+json' \
+                "https://ghcr.io/v2/${GHCR_OWNER}/toolchain/manifests/${TOOLCHAIN_TAG}")"
+
+              case "$STATUS" in
+                200) CONTAINER_TAG="$TOOLCHAIN_TAG" ;;
+                404)
+                  echo "Fingerprint-matched target toolchain image not found; falling back to tools image."
+                  CONTAINER_NAME=tools
+                  ;;
+                *)
+                  echo "GHCR target toolchain manifest check failed (HTTP $STATUS)." >&2
+                  exit 1
+                  ;;
+              esac
+            fi
           fi
 
-          # Preserve the branch-based ccache namespace independently from the
-          # immutable image tag used to select the host-tools container.
+          # Keep ccache names independent from content-addressed image tags.
           CCACHE_TAG="$CONTAINER_TAG"
 
-          # Generic tools images use content-addressed tags. This prevents a
-          # slower build for an older source commit from overwriting the image
-          # selected by a newer firmware run.
+          # Both generic host-tools and target-toolchain images are selected
+          # with the exact Host Tools fingerprint.
           if [ "$CONTAINER_NAME" = "tools" ] && [ -n "$TOOLS_FINGERPRINT" ]; then
             CONTAINER_TAG="${CONTAINER_TAG}-${TOOLS_FINGERPRINT}"
           fi
