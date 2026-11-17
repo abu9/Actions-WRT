@@ -10,7 +10,7 @@ import subprocess
 import tempfile
 import unittest
 from unittest import mock
-from urllib.error import HTTPError
+from urllib.error import HTTPError, URLError
 from pathlib import Path
 
 SCRIPT = Path(__file__).resolve().parents[1] / "fingerprint.py"
@@ -642,6 +642,88 @@ class GHCRCheckTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 FINGERPRINT_MODULE.ghcr_check("owner", "image", "tag", {})
             mocked.assert_not_called()
+
+    def test_token_endpoint_http_errors_never_become_cache_misses(self) -> None:
+        for status in (401, 403, 404, 429, 500, 503):
+            with self.subTest(status=status):
+                error = HTTPError(
+                    "https://ghcr.io/token?scope=repository:owner/image:pull",
+                    status, "registry error", {}, None,
+                )
+                with mock.patch.object(
+                    FINGERPRINT_MODULE, "urlopen", side_effect=error
+                ):
+                    with self.assertRaisesRegex(
+                        RuntimeError, f"GHCR token request failed: HTTP {status}"
+                    ):
+                        FINGERPRINT_MODULE.ghcr_check(
+                            "owner", "image", "tag", {"fingerprint": "expected"}
+                        )
+
+    def test_token_endpoint_network_errors_never_become_cache_misses(self) -> None:
+        with mock.patch.object(
+            FINGERPRINT_MODULE, "urlopen",
+            side_effect=URLError("simulated registry connection failure"),
+        ):
+            with self.assertRaises(URLError):
+                FINGERPRINT_MODULE.ghcr_check(
+                    "owner", "image", "tag", {"fingerprint": "expected"}
+                )
+
+    def test_manifest_auth_or_server_errors_are_not_cache_misses(self) -> None:
+        for status in (401, 403, 429, 500, 503):
+            with self.subTest(status=status):
+                error = HTTPError(
+                    "https://ghcr.io/v2/owner/image/manifests/tag",
+                    status, "registry error", {}, None,
+                )
+                with mock.patch.object(
+                    FINGERPRINT_MODULE, "urlopen",
+                    side_effect=[self.response({"token": "pull-token"}), error],
+                ):
+                    with self.assertRaisesRegex(
+                        RuntimeError, f"GHCR request failed: HTTP {status}"
+                    ):
+                        FINGERPRINT_MODULE.ghcr_check(
+                            "owner", "image", "tag", {"fingerprint": "expected"}
+                        )
+
+    def test_missing_referenced_platform_manifest_is_a_registry_error(self) -> None:
+        index = {
+            "manifests": [
+                {
+                    "digest": "sha256:" + "e" * 64,
+                    "platform": {"os": "linux", "architecture": "amd64"},
+                }
+            ]
+        }
+        missing = HTTPError(
+            "https://ghcr.io/v2/owner/image/manifests/sha256:missing",
+            404, "referenced manifest not found", {}, None,
+        )
+        with mock.patch.object(
+            FINGERPRINT_MODULE, "urlopen",
+            side_effect=[self.response({"token": "pull-token"}), self.response(index), missing],
+        ):
+            with self.assertRaisesRegex(RuntimeError, "GHCR request failed: HTTP 404"):
+                FINGERPRINT_MODULE.ghcr_check(
+                    "owner", "image", "tag", {"fingerprint": "expected"}
+                )
+
+    def test_missing_config_blob_is_a_registry_error(self) -> None:
+        manifest = {"config": {"digest": "sha256:" + "c" * 64}}
+        missing = HTTPError(
+            "https://ghcr.io/v2/owner/image/blobs/sha256:missing",
+            404, "config blob not found", {}, None,
+        )
+        with mock.patch.object(
+            FINGERPRINT_MODULE, "urlopen",
+            side_effect=[self.response({"token": "pull-token"}), self.response(manifest), missing],
+        ):
+            with self.assertRaisesRegex(RuntimeError, "GHCR request failed: HTTP 404"):
+                FINGERPRINT_MODULE.ghcr_check(
+                    "owner", "image", "tag", {"fingerprint": "expected"}
+                )
 
     def test_missing_manifest_returns_false(self) -> None:
         not_found = HTTPError(
