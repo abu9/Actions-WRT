@@ -1,17 +1,7 @@
 name: Build WRT
-run-name: Build WRT - ${{ github.event.client_payload.source_branch || inputs.source_branch || 'immortalwrt/immortalwrt@openwrt-25.12' }}/${{ (github.event_name == 'push' && '360t7-immortalwrt-25.12-kernel-min.conf') || github.event.client_payload.config_name || inputs.config_name || '360t7-immortalwrt-25.12-ubi.conf' }}${{ (github.event_name == 'pull_request' || inputs.validate_only) && ' [validation only]' || (github.event_name == 'push' && ' [kernel-only]' || '') }}
+run-name: Build WRT - ${{ github.event.client_payload.source_branch || inputs.source_branch || 'immortalwrt/immortalwrt@openwrt-25.12' }}/${{ github.event.client_payload.config_name || inputs.config_name || '360t7-immortalwrt-25.12-ubi.conf' }}${{ (github.event_name == 'pull_request' || inputs.validate_only) && ' [validation only]' || '' }}
 
 on:
-  push:
-    branches:
-      - feat/360t7-openwrt-uboot-ubi-25.12
-    paths:
-      - '.github/workflows/**'
-      - '.github/scripts/**'
-      - '.github/dockerfiles/**'
-      - '360t7-immortalwrt-25.12-kernel-min.conf'
-      - 'diy-part*.sh'
-      - 'files/**'
   pull_request:
     branches:
       - main
@@ -50,7 +40,6 @@ on:
           - '360t7-immortalwrt-uhttpd.conf'
           - '360t7-immortalwrt-24.10.conf'
           - '360t7-immortalwrt-25.12-ubi.conf'
-          - '360t7-immortalwrt-25.12-kernel-min.conf'
         default: '360t7-immortalwrt-25.12-ubi.conf'
       build_toolchain:
         description: 'Build the target toolchain from source; disable to use the official prebuilt toolchain/SDK when available'
@@ -79,7 +68,7 @@ concurrency:
 
 env:
   FEEDS_CONF:
-  CONFIG_FILE: ${{ (github.event_name == 'push' && '360t7-immortalwrt-25.12-kernel-min.conf') || github.event.client_payload.config_name || github.event.inputs.config_name || '360t7-immortalwrt-25.12-ubi.conf' }}
+  CONFIG_FILE: ${{ github.event.client_payload.config_name || inputs.config_name || '360t7-immortalwrt-25.12-ubi.conf' }}
   DIY_P1_SH: diy-part1.sh
   DIY_P2_SH: diy-part2.sh
   UPLOAD_BIN_DIR: false
@@ -95,7 +84,7 @@ jobs:
     name: Get target info
     uses: ./.github/workflows/determine-targets.yml
     with:
-      config_name: ${{ (github.event_name == 'push' && '360t7-immortalwrt-25.12-kernel-min.conf') || github.event.client_payload.config_name || inputs.config_name || '360t7-immortalwrt-25.12-ubi.conf' }}
+      config_name: ${{ github.event.client_payload.config_name || inputs.config_name || '360t7-immortalwrt-25.12-ubi.conf' }}
       source_branch: ${{ github.event.client_payload.source_branch || inputs.source_branch || 'immortalwrt/immortalwrt@openwrt-25.12' }}
       source_commit: ${{ github.event.client_payload.source_commit || inputs.source_commit || '' }}
 
@@ -158,121 +147,6 @@ jobs:
           fi
           echo "checked_image=tools:$TAG" >> "$GITHUB_OUTPUT"
 
-  diagnose_host_tools:
-    name: Diagnose Host Tools Python environment (PR only; no image publish)
-    if: ${{ github.event_name == 'pull_request' }}
-    needs: [determine_targets]
-    runs-on: ubuntu-24.04
-    container: ghcr.io/openwrt/buildbot/buildworker-v3.11.8:v23
-    permissions:
-      contents: read
-    steps:
-      - name: Checkout Actions-WRT
-        uses: actions/checkout@v7.0.1
-
-      - name: Checkout OpenWrt source
-        uses: actions/checkout@v7.0.1
-        with:
-          repository: ${{ needs.determine_targets.outputs.repo_url }}
-          ref: ${{ needs.determine_targets.outputs.source_commit }}
-          path: openwrt
-
-      - name: Verify checked out source commit
-        shell: bash
-        working-directory: openwrt
-        env:
-          EXPECTED_SOURCE_COMMIT: ${{ needs.determine_targets.outputs.source_commit }}
-        run: |
-          set -euo pipefail
-          test "$(git rev-parse HEAD)" = "$EXPECTED_SOURCE_COMMIT"
-
-      - name: Fix permission
-        working-directory: openwrt
-        run: chown -R buildbot:buildbot .
-
-      - name: Set Host Tools configuration
-        working-directory: openwrt
-        shell: su buildbot -c "sh -e {0}"
-        run: |
-          touch .config
-          echo CONFIG_DEVEL=y >> .config
-          echo CONFIG_AUTOREMOVE=y >> .config
-          echo CONFIG_CCACHE=y >> .config
-          echo CONFIG_BUILD_ALL_HOST_TOOLS=y >> .config
-          make defconfig
-      - name: Build Host Tools
-        working-directory: openwrt
-        shell: su buildbot -c "sh -e {0}"
-        run: |
-          set -e
-          make tools/install -j"$(nproc)" BUILD_LOG=1
-
-      - name: Diagnose Host Python and staged setuptools
-        if: always()
-        working-directory: openwrt
-        shell: su buildbot -c "sh -e {0}"
-        run: |
-          set -u
-          echo "=== identity and PATH ==="
-          id
-          printf 'PATH=%s\\n' "$PATH"
-          echo "=== python3 selected from PATH ==="
-          command -v python3 || true
-          python3 - <<'PY'
-          import importlib.util, sys
-          print("sys.executable:", sys.executable)
-          print("sys.prefix:", sys.prefix)
-          print("sys.base_prefix:", sys.base_prefix)
-          print("setuptools spec:", importlib.util.find_spec("setuptools"))
-          try:
-              import setuptools
-              print("setuptools file:", setuptools.__file__)
-          except Exception as exc:
-              print("setuptools import failed:", repr(exc))
-          print("sys.path:")
-          for item in sys.path:
-              print(" ", item)
-          PY
-          echo "=== /opt/venv Python ==="
-          if [ -x /opt/venv/bin/python3 ]; then
-            /opt/venv/bin/python3 - <<'PY'
-          import importlib.util, sys
-          print("sys.executable:", sys.executable)
-          print("sys.prefix:", sys.prefix)
-          print("sys.base_prefix:", sys.base_prefix)
-          print("setuptools spec:", importlib.util.find_spec("setuptools"))
-          try:
-              import setuptools
-              print("setuptools file:", setuptools.__file__)
-          except Exception as exc:
-              print("setuptools import failed:", repr(exc))
-          PY
-          else
-            echo "/opt/venv/bin/python3 is absent or not executable"
-          fi
-          echo "=== staged Host Python ==="
-          if [ -e staging_dir/host/bin/python3 ] || [ -L staging_dir/host/bin/python3 ]; then
-            ls -l staging_dir/host/bin/python3
-            readlink -f staging_dir/host/bin/python3 || true
-            staging_dir/host/bin/python3 - <<'PY'
-          import importlib.util, sys
-          print("sys.executable:", sys.executable)
-          print("sys.prefix:", sys.prefix)
-          print("sys.base_prefix:", sys.base_prefix)
-          print("setuptools spec:", importlib.util.find_spec("setuptools"))
-          try:
-              import setuptools
-              print("setuptools file:", setuptools.__file__)
-          except Exception as exc:
-              print("setuptools import failed:", repr(exc))
-          print("sys.path:")
-          for item in sys.path:
-              print(" ", item)
-          PY
-          else
-            echo "staging_dir/host/bin/python3 does not exist after make tools/install"
-          fi
-
   build_tools_container:
     name: Build and Push tools container (only when missing)
     needs: [determine_targets, tools_fingerprint, check_tools_container]
@@ -281,7 +155,7 @@ jobs:
     uses: ./.github/workflows/push-containers.yml
     with:
       source_branch: ${{ github.event.client_payload.source_branch || inputs.source_branch || 'immortalwrt/immortalwrt@openwrt-25.12' }}
-      config_name: ${{ (github.event_name == 'push' && '360t7-immortalwrt-25.12-kernel-min.conf') || github.event.client_payload.config_name || inputs.config_name || '360t7-immortalwrt-25.12-ubi.conf' }}
+      config_name: ${{ github.event.client_payload.config_name || inputs.config_name || '360t7-immortalwrt-25.12-ubi.conf' }}
       source_commit: ${{ needs.tools_fingerprint.outputs.source_commit }}
       build_tools: true
       build_toolchain: false
@@ -338,7 +212,7 @@ jobs:
       subtarget: ${{ needs.determine_targets.outputs.subtarget }}
       tools_fingerprint: ${{ needs.tools_fingerprint.outputs.tools_fingerprint }}
       tools_image: ${{ needs.tools_ready.outputs.tools_image }}
-      use_ccache_cache: ${{ github.event_name == 'repository_dispatch' || github.event_name == 'push' || inputs.use_ccache_cache == true }}
+      use_ccache_cache: ${{ github.event_name == 'repository_dispatch' || inputs.use_ccache_cache == true }}
 
   check_toolchain_container:
     name: Check target Toolchain image
@@ -402,11 +276,11 @@ jobs:
       toolchain_fingerprint: ${{ needs.toolchain_fingerprint.outputs.toolchain_fingerprint }}
       author: ${{ needs.determine_targets.outputs.author }}
       container_name: ${{ (inputs.build_toolchain == true && needs.check_toolchain_container.outputs.use_toolchain == 'true') && 'toolchain' || 'tools' }}
-      build_kernel: ${{ github.event_name == 'push' || inputs.build_kernel == true }}
+      build_kernel: ${{ inputs.build_kernel == true }}
       build_full: ${{ github.event_name == 'repository_dispatch' || inputs.build_full == true }}
       build_toolchain: ${{ inputs.build_toolchain == true && needs.check_toolchain_container.outputs.use_toolchain != 'true' }}
       debug: ${{ inputs.debug == true }}
-      config_name: ${{ (github.event_name == 'push' && '360t7-immortalwrt-25.12-kernel-min.conf') || github.event.client_payload.config_name || inputs.config_name || '360t7-immortalwrt-25.12-ubi.conf' }}
+      config_name: ${{ github.event.client_payload.config_name || inputs.config_name || '360t7-immortalwrt-25.12-ubi.conf' }}
       ccache_type: packages
-      use_ccache_cache: ${{ github.event_name == 'repository_dispatch' || github.event_name == 'push' || inputs.use_ccache_cache == true }}
-      check: ${{ github.event_name != 'push' }}
+      use_ccache_cache: ${{ github.event_name == 'repository_dispatch' || inputs.use_ccache_cache == true }}
+      check: true
