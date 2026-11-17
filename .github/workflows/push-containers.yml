@@ -210,10 +210,13 @@ jobs:
       repo_branch: ${{ needs.determine_targets.outputs.repo_branch }}
       repo_commit: ${{ needs.compute-tools-fingerprint.outputs.source_commit }}
       tools_fingerprint: ${{ needs.compute-tools-fingerprint.outputs.tools_fingerprint }}
+      tools_image_fingerprint: ${{ needs.compute-tools-fingerprint.outputs.tools_fingerprint }}
       toolchain_fingerprint: ${{ needs.compute-toolchain-fingerprint.outputs.toolchain_fingerprint }}
       author: ${{ needs.determine_targets.outputs.author }}
       container_name: tools
       build_toolchain: true
+      use_ccache_cache: true
+      ccache_type: toolchain
       build_external_toolchain: true
       upload_external_toolchain: true
 

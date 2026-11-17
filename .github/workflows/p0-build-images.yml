@@ -1,0 +1,29 @@
+name: Bootstrap Host Tools and Toolchain images
+run-name: Bootstrap OpenWrt 25.12 Host Tools and Toolchain images
+
+on:
+  push:
+    branches:
+      - feat/360t7-openwrt-uboot-ubi-25.12
+    paths:
+      - '.github/workflows/p0-build-images.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+  actions: write
+
+jobs:
+  build_prebuilt_images:
+    name: Build and publish fingerprinted images
+    permissions:
+      contents: read
+      packages: write
+      actions: write
+    uses: ./.github/workflows/push-containers.yml
+    with:
+      source_branch: immortalwrt/immortalwrt@openwrt-25.12
+      config_name: 360t7-immortalwrt-25.12-ubi.conf
+      build_tools: true
+      build_toolchain: true
