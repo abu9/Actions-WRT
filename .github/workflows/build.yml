@@ -162,18 +162,120 @@ jobs:
 
   diagnose_host_tools:
     name: Diagnose Host Tools Python environment (PR only; no image publish)
-    if: github.event_name == 'pull_request'
+    if: ${{ github.event_name == 'pull_request' }}
     needs: [determine_targets]
+    runs-on: ubuntu-24.04
+    container: ghcr.io/openwrt/buildbot/buildworker-v3.11.8:v28
     permissions:
       contents: read
-      packages: read
-      actions: write
-    uses: ./.github/workflows/reusable_build_tools.yml
-    with:
-      generate_prebuilt_artifacts: false
-      repo_url: ${{ needs.determine_targets.outputs.repo_url }}
-      source_commit: ${{ needs.determine_targets.outputs.source_commit }}
-      ccache_tag: host-tools-diagnostic-${{ github.sha }}
+    steps:
+      - name: Checkout Actions-WRT
+        uses: actions/checkout@v7.0.1
+
+      - name: Checkout OpenWrt source
+        uses: actions/checkout@v7.0.1
+        with:
+          repository: ${{ needs.determine_targets.outputs.repo_url }}
+          ref: ${{ needs.determine_targets.outputs.source_commit }}
+          path: openwrt
+
+      - name: Verify checked out source commit
+        working-directory: openwrt
+        env:
+          EXPECTED_SOURCE_COMMIT: ${{ needs.determine_targets.outputs.source_commit }}
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SOURCE_COMMIT"
+
+      - name: Set Host Tools configuration
+        working-directory: openwrt
+        run: |
+          set -euo pipefail
+          chown -R buildbot:buildbot .
+          su --preserve-environment --shell /bin/bash buildbot -c 'bash -s' <<'BUILD_SCRIPT'
+          set -e
+          touch .config
+          echo CONFIG_DEVEL=y >> .config
+          echo CONFIG_AUTOREMOVE=y >> .config
+          echo CONFIG_CCACHE=y >> .config
+          echo CONFIG_BUILD_ALL_HOST_TOOLS=y >> .config
+          make defconfig
+          BUILD_SCRIPT
+
+      - name: Build Host Tools
+        working-directory: openwrt
+        run: |
+          su --preserve-environment --shell /bin/bash buildbot -c 'bash -s' <<'BUILD_SCRIPT'
+          set -e
+          make tools/install -j"$(nproc)" BUILD_LOG=1
+          BUILD_SCRIPT
+
+      - name: Diagnose Host Python and staged setuptools
+        if: always()
+        working-directory: openwrt
+        run: |
+          su --preserve-environment --shell /bin/bash buildbot -c 'bash -s' <<'DIAGNOSTIC_SCRIPT'
+          set -u
+          echo "=== identity and PATH ==="
+          id
+          printf 'PATH=%s\\n' "$PATH"
+          echo "=== python3 selected from PATH ==="
+          type -a python3 || true
+          python3 - <<'PY'
+          import importlib.util, sys
+          print("sys.executable:", sys.executable)
+          print("sys.prefix:", sys.prefix)
+          print("sys.base_prefix:", sys.base_prefix)
+          print("setuptools spec:", importlib.util.find_spec("setuptools"))
+          try:
+              import setuptools
+              print("setuptools file:", setuptools.__file__)
+          except Exception as exc:
+              print("setuptools import failed:", repr(exc))
+          print("sys.path:")
+          for item in sys.path:
+              print(" ", item)
+          PY
+          echo "=== /opt/venv Python ==="
+          if [ -x /opt/venv/bin/python3 ]; then
+            /opt/venv/bin/python3 - <<'PY'
+          import importlib.util, sys
+          print("sys.executable:", sys.executable)
+          print("sys.prefix:", sys.prefix)
+          print("sys.base_prefix:", sys.base_prefix)
+          print("setuptools spec:", importlib.util.find_spec("setuptools"))
+          try:
+              import setuptools
+              print("setuptools file:", setuptools.__file__)
+          except Exception as exc:
+              print("setuptools import failed:", repr(exc))
+          PY
+          else
+            echo "/opt/venv/bin/python3 is absent or not executable"
+          fi
+          echo "=== staged Host Python ==="
+          if [ -e staging_dir/host/bin/python3 ] || [ -L staging_dir/host/bin/python3 ]; then
+            ls -l staging_dir/host/bin/python3
+            readlink -f staging_dir/host/bin/python3 || true
+            staging_dir/host/bin/python3 - <<'PY'
+          import importlib.util, sys
+          print("sys.executable:", sys.executable)
+          print("sys.prefix:", sys.prefix)
+          print("sys.base_prefix:", sys.base_prefix)
+          print("setuptools spec:", importlib.util.find_spec("setuptools"))
+          try:
+              import setuptools
+              print("setuptools file:", setuptools.__file__)
+          except Exception as exc:
+              print("setuptools import failed:", repr(exc))
+          print("sys.path:")
+          for item in sys.path:
+              print(" ", item)
+          PY
+          else
+            echo "staging_dir/host/bin/python3 does not exist after make tools/install"
+          fi
+          DIAGNOSTIC_SCRIPT
 
   build_tools_container:
     name: Build and Push tools container (only when missing)
