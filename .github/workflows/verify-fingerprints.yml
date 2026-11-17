@@ -1,43 +1,23 @@
 name: Build-free fingerprint verification
 
 on:
+  push:
+    branches:
+      - feat/360t7-openwrt-uboot-ubi-25.12
+    paths:
+      - '.github/workflows/**'
+      - '.github/scripts/**'
+      - '.github/dockerfiles/**'
+      - '360t7-immortalwrt-25.12-ubi.conf'
   workflow_dispatch:
-    inputs:
-      tools_image:
-        description: "Existing GHCR Host Tools image name (without ghcr.io/owner/)"
-        required: true
-        type: string
-      tools_tag:
-        description: "Existing Host Tools image tag"
-        required: true
-        type: string
-      tools_fingerprint:
-        description: "Expected full Host Tools fingerprint"
-        required: true
-        type: string
-      toolchain_image:
-        description: "Existing GHCR Toolchain image name (without ghcr.io/owner/)"
-        required: true
-        type: string
-      toolchain_tag:
-        description: "Existing Toolchain image tag"
-        required: true
-        type: string
-      toolchain_fingerprint:
-        description: "Expected full Toolchain fingerprint"
-        required: true
-        type: string
-      source_commit:
-        description: "OpenWrt source commit for the Host Tools source-commit label"
-        required: true
-        type: string
 
 permissions:
   contents: read
   packages: read
 
 jobs:
-  verify:
+  validate:
+    name: Validate workflow and fingerprint implementation
     runs-on: ubuntu-24.04
     steps:
       - name: Checkout repository
@@ -92,55 +72,162 @@ jobs:
           test -f .github/scripts/tests/test_fingerprint.py
           test -f .github/workflows/fingerprint.yml
 
+  determine_targets:
+    name: Resolve OpenWrt source and target
+    needs: validate
+    uses: ./.github/workflows/determine-targets.yml
+    with:
+      source_branch: immortalwrt/immortalwrt@openwrt-25.12
+      config_name: 360t7-immortalwrt-25.12-ubi.conf
+
+  tools_fingerprint:
+    name: Calculate current Host Tools fingerprint
+    needs: [validate, determine_targets]
+    uses: ./.github/workflows/fingerprint.yml
+    with:
+      mode: tools
+      repo_url: ${{ needs.determine_targets.outputs.repo_url }}
+      repo_branch: ${{ needs.determine_targets.outputs.repo_branch }}
+      source_commit: ${{ needs.determine_targets.outputs.source_commit }}
+
+  check_tools_image:
+    name: Check current Host Tools image in GHCR
+    needs: [determine_targets, tools_fingerprint]
+    runs-on: ubuntu-24.04
+    outputs:
+      exists: ${{ steps.check.outputs.exists }}
+      image: ${{ steps.check.outputs.image }}
+      tag: ${{ steps.check.outputs.tag }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7.0.1
+
       - name: Verify existing Host Tools image labels
+        id: check
         env:
           GITHUB_ACTOR: ${{ github.actor }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           OWNER: ${{ github.repository_owner }}
-          IMAGE: ${{ inputs.tools_image }}
-          TAG: ${{ inputs.tools_tag }}
-          FINGERPRINT: ${{ inputs.tools_fingerprint }}
-          SOURCE_COMMIT: ${{ inputs.source_commit }}
+          AUTHOR: ${{ needs.determine_targets.outputs.author }}
+          REPO_BRANCH: ${{ needs.determine_targets.outputs.repo_branch }}
+          FINGERPRINT: ${{ needs.tools_fingerprint.outputs.tools_fingerprint }}
+          SOURCE_COMMIT: ${{ needs.tools_fingerprint.outputs.source_commit }}
+          SOURCE_REPOSITORY: ${{ needs.determine_targets.outputs.repo_url }}
         shell: bash
         run: |
           set -euo pipefail
+          OWNER_LC="${OWNER,,}"
+          TAG="${AUTHOR}_${REPO_BRANCH}-${FINGERPRINT}"
+          IMAGE="ghcr.io/${OWNER_LC}/tools:${TAG}"
+          set +e
           python3 .github/scripts/fingerprint.py ghcr-check \
             --owner "$OWNER" \
-            --image "$IMAGE" \
+            --image tools \
             --tag "$TAG" \
             --label "io.abu9.actions-wrt.tools-fingerprint=$FINGERPRINT" \
             --label "io.abu9.actions-wrt.tools-source-commit=$SOURCE_COMMIT" \
-            --label "io.abu9.actions-wrt.tools-source-repository=immortalwrt/immortalwrt"
+            --label "io.abu9.actions-wrt.tools-source-repository=$SOURCE_REPOSITORY"
+          rc=$?
+          set -e
+          if [ "$rc" -eq 0 ]; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+            echo "Host Tools image exists and all expected labels match: $IMAGE"
+          elif [ "$rc" -eq 1 ]; then
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+            echo "Host Tools image is missing or its labels do not match: $IMAGE"
+          else
+            exit "$rc"
+          fi
+          echo "image=$IMAGE" >> "$GITHUB_OUTPUT"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+
+  toolchain_fingerprint:
+    name: Calculate current target Toolchain fingerprint
+    needs: [determine_targets, tools_fingerprint, check_tools_image]
+    if: ${{ needs.check_tools_image.outputs.exists == 'true' }}
+    uses: ./.github/workflows/fingerprint.yml
+    with:
+      mode: toolchain
+      repo_url: ${{ needs.determine_targets.outputs.repo_url }}
+      repo_branch: ${{ needs.determine_targets.outputs.repo_branch }}
+      source_commit: ${{ needs.tools_fingerprint.outputs.source_commit }}
+      target: ${{ needs.determine_targets.outputs.target }}
+      subtarget: ${{ needs.determine_targets.outputs.subtarget }}
+      tools_fingerprint: ${{ needs.tools_fingerprint.outputs.tools_fingerprint }}
+      tools_image: ${{ needs.check_tools_image.outputs.image }}
+      use_ccache_cache: true
+
+  check_toolchain_image:
+    name: Check current Toolchain image in GHCR
+    needs: [determine_targets, tools_fingerprint, toolchain_fingerprint]
+    if: ${{ needs.toolchain_fingerprint.result == 'success' }}
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7.0.1
 
       - name: Verify existing Toolchain image labels
         env:
           GITHUB_ACTOR: ${{ github.actor }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           OWNER: ${{ github.repository_owner }}
-          IMAGE: ${{ inputs.toolchain_image }}
-          TAG: ${{ inputs.toolchain_tag }}
-          TOOLCHAIN_FINGERPRINT: ${{ inputs.toolchain_fingerprint }}
-          TOOLS_FINGERPRINT: ${{ inputs.tools_fingerprint }}
+          TARGET: ${{ needs.determine_targets.outputs.target }}
+          SUBTARGET: ${{ needs.determine_targets.outputs.subtarget }}
+          AUTHOR: ${{ needs.determine_targets.outputs.author }}
+          REPO_BRANCH: ${{ needs.determine_targets.outputs.repo_branch }}
+          TOOLCHAIN_FINGERPRINT: ${{ needs.toolchain_fingerprint.outputs.toolchain_fingerprint }}
+          TOOLS_FINGERPRINT: ${{ needs.tools_fingerprint.outputs.tools_fingerprint }}
         shell: bash
         run: |
           set -euo pipefail
+          TAG="${TARGET}-${SUBTARGET}-${AUTHOR}_${REPO_BRANCH}-${TOOLCHAIN_FINGERPRINT:0:32}"
+          set +e
           python3 .github/scripts/fingerprint.py ghcr-check \
             --owner "$OWNER" \
-            --image "$IMAGE" \
+            --image toolchain \
             --tag "$TAG" \
             --label "io.abu9.actions-wrt.toolchain-fingerprint=$TOOLCHAIN_FINGERPRINT" \
             --label "io.abu9.actions-wrt.tools-fingerprint=$TOOLS_FINGERPRINT"
+          rc=$?
+          set -e
+          if [ "$rc" -eq 0 ]; then
+            echo "Toolchain image exists and all expected labels match: ghcr.io/${OWNER,,}/toolchain:$TAG"
+          elif [ "$rc" -eq 1 ]; then
+            echo "Toolchain image is missing or its labels do not match: ghcr.io/${OWNER,,}/toolchain:$TAG"
+            echo "A Toolchain build/publish is required before it can be reused."
+          else
+            exit "$rc"
+          fi
 
-      - name: Verification summary
+  summary:
+    name: Fingerprint verification summary
+    needs: [determine_targets, tools_fingerprint, check_tools_image, toolchain_fingerprint, check_toolchain_image]
+    if: ${{ always() }}
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Write verification summary
+        env:
+          TARGET_RESULT: ${{ needs.determine_targets.result }}
+          TOOLS_FP_RESULT: ${{ needs.tools_fingerprint.result }}
+          TOOLS_EXISTS: ${{ needs.check_tools_image.outputs.exists }}
+          TOOLCHAIN_FP_RESULT: ${{ needs.toolchain_fingerprint.result }}
+          TOOLCHAIN_CHECK_RESULT: ${{ needs.check_toolchain_image.result }}
         shell: bash
         run: |
           {
             echo "## Build-free fingerprint verification"
             echo ""
-            echo "- Python unit tests: passed"
-            echo "- Workflow YAML parsing: passed"
-            echo "- Local ownership/reference checks: passed"
-            echo "- Existing Host Tools GHCR labels: passed"
-            echo "- Existing Toolchain GHCR labels: passed"
-            echo "- No build job was started by this workflow."
+            echo "- OpenWrt target resolution: $TARGET_RESULT"
+            echo "- Host Tools fingerprint calculation: $TOOLS_FP_RESULT"
+            if [ "$TOOLS_EXISTS" = "true" ]; then
+              echo "- Host Tools GHCR image: present; expected labels match"
+            elif [ "$TOOLS_EXISTS" = "false" ]; then
+              echo "- Host Tools GHCR image: missing or labels mismatch"
+            else
+              echo "- Host Tools GHCR image: not checked"
+            fi
+            echo "- Toolchain fingerprint calculation: $TOOLCHAIN_FP_RESULT"
+            echo "- Toolchain GHCR verification: $TOOLCHAIN_CHECK_RESULT"
+            echo ""
+            echo "- This workflow does not build or publish images or firmware."
           } >> "$GITHUB_STEP_SUMMARY"
