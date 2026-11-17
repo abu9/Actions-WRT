@@ -66,17 +66,18 @@ def ghcr_check(owner: str,image: str,tag: str,labels: dict[str,str]) -> bool:
     try:
         with urlopen(Request(f"https://ghcr.io/token?scope=repository:{owner}/{image}:pull",headers={"Authorization":f"Basic {basic}"}),timeout=30) as r: payload=json.load(r)
     except HTTPError as e:
-        if e.code==404:return False
+        # A cache miss is established only by a 404 for the requested tag
+        # manifest, after the registry token has been acquired successfully.
         raise RuntimeError(f"GHCR token request failed: HTTP {e.code}") from e
     bearer=payload.get("token") or payload.get("access_token")
     if not bearer: raise RuntimeError("GHCR returned an empty pull token.")
-    def get(path,accept):
+    def get(path,accept, *, missing_ok=False):
         try:
             with urlopen(Request(f"https://ghcr.io/v2/{owner}/{image}/{path}",headers={"Authorization":f"Bearer {bearer}","Accept":accept}),timeout=30) as r:return json.load(r)
         except HTTPError as e:
-            if e.code==404:return None
+            if e.code==404 and missing_ok:return None
             raise RuntimeError(f"GHCR request failed: HTTP {e.code}") from e
-    manifest=get(f"manifests/{tag}","application/vnd.oci.image.index.v1+json, application/vnd.docker.distribution.manifest.list.v2+json, application/vnd.oci.image.manifest.v1+json, application/vnd.docker.distribution.manifest.v2+json")
+    manifest=get(f"manifests/{tag}","application/vnd.oci.image.index.v1+json, application/vnd.docker.distribution.manifest.list.v2+json, application/vnd.oci.image.manifest.v1+json, application/vnd.docker.distribution.manifest.v2+json", missing_ok=True)
     if manifest is None:return False
     if isinstance(manifest.get("manifests"),list):
         digest=next((m.get("digest") for m in manifest["manifests"] if (m.get("platform") or {}).get("os")=="linux" and (m.get("platform") or {}).get("architecture")=="amd64"),None)
