@@ -68,7 +68,7 @@ jobs:
           test ! -e .github/scripts/ghcr-check-fingerprint.sh
           test ! -e .github/workflows/reusable_tools_fingerprint.yml
           test ! -e .github/workflows/reusable_toolchain_fingerprint.yml
-          if grep -RInE 'actions-shared-workflows|abu9/actions-shared-workflows' .github; then
+          if grep -RInE 'actions-shared-workflows|abu9/actions-shared-workflows' .github --exclude='verify-fingerprints.yml'; then
             echo "Unexpected shared-workflows runtime reference found." >&2
             exit 1
           fi
