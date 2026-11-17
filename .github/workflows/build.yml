@@ -116,6 +116,9 @@ jobs:
   tools_fingerprint:
     name: Calculate generic host-tools fingerprint
     needs: [determine_targets, test_fingerprints]
+    permissions:
+      contents: read
+      packages: read
     uses: ./.github/workflows/fingerprint.yml
     with:
       mode: tools
@@ -329,6 +332,9 @@ jobs:
     name: Calculate target Toolchain fingerprint
     if: ${{ inputs.build_toolchain == true }}
     needs: [determine_targets, tools_fingerprint, tools_ready]
+    permissions:
+      contents: read
+      packages: read
     uses: ./.github/workflows/fingerprint.yml
     with:
       mode: toolchain
