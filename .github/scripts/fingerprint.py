@@ -1,18 +1,71 @@
 #!/usr/bin/env python3
-"""Content fingerprint for an OpenWrt target toolchain and exported SDK archive."""
-
+"""Unified content fingerprint and GHCR verification entry point."""
 from __future__ import annotations
-
-import argparse
-import gzip
-import hashlib
-import json
-import os
-import re
-import subprocess
-import sys
+import argparse, base64, gzip, hashlib, json, os, re, subprocess, sys
 from pathlib import Path, PurePosixPath
+from urllib.error import HTTPError, URLError
+from urllib.request import Request, urlopen
 
+def run_git(repo: Path, *args: str) -> bytes:
+    result=subprocess.run(["git","-C",str(repo),*args],check=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE); return result.stdout
+def tracked_paths(repo: Path) -> list[str]:
+    return sorted(item.decode("utf-8") for item in run_git(repo,"ls-files","-z").split(b"\0") if item)
+def sha256_file(path: Path) -> str: return hashlib.sha256(path.read_bytes()).hexdigest()
+def canonical_sha256(value: dict, *, ensure_ascii: bool = False) -> str: return hashlib.sha256(json.dumps(value,sort_keys=True,separators=(",",":"),ensure_ascii=ensure_ascii).encode("utf-8")).hexdigest()
+def write_outputs(values: dict[str,str]) -> None:
+    path=os.environ.get("GITHUB_OUTPUT")
+    if path:
+        with open(path,"a",encoding="utf-8") as f:
+            for k,v in values.items(): f.write(f"{k}={v}\n")
+def ghcr_check(owner: str,image: str,tag: str,labels: dict[str,str]) -> bool:
+    owner=owner.lower(); actor=os.environ.get("GITHUB_ACTOR"); token=os.environ.get("GITHUB_TOKEN")
+    if not actor or not token: raise RuntimeError("GITHUB_ACTOR and GITHUB_TOKEN are required for GHCR verification.")
+    basic=base64.b64encode(f"{actor}:{token}".encode()).decode()
+    try:
+        with urlopen(Request(f"https://ghcr.io/token?scope=repository:{owner}/{image}:pull",headers={"Authorization":f"Basic {basic}"}),timeout=30) as r: payload=json.load(r)
+    except HTTPError as e:
+        if e.code==404:return False
+        raise RuntimeError(f"GHCR token request failed: HTTP {e.code}") from e
+    bearer=payload.get("token") or payload.get("access_token")
+    if not bearer: raise RuntimeError("GHCR returned an empty pull token.")
+    def get(path,accept):
+        try:
+            with urlopen(Request(f"https://ghcr.io/v2/{owner}/{image}/{path}",headers={"Authorization":f"Bearer {bearer}","Accept":accept}),timeout=30) as r:return json.load(r)
+        except HTTPError as e:
+            if e.code==404:return None
+            raise RuntimeError(f"GHCR request failed: HTTP {e.code}") from e
+    manifest=get(f"manifests/{tag}","application/vnd.oci.image.index.v1+json, application/vnd.docker.distribution.manifest.list.v2+json, application/vnd.oci.image.manifest.v1+json, application/vnd.docker.distribution.manifest.v2+json")
+    if manifest is None:return False
+    if isinstance(manifest.get("manifests"),list):
+        digest=next((m.get("digest") for m in manifest["manifests"] if (m.get("platform") or {}).get("os")=="linux" and (m.get("platform") or {}).get("architecture")=="amd64"),None)
+        if not digest:return False
+        manifest=get(f"manifests/{digest}","application/vnd.oci.image.manifest.v1+json, application/vnd.docker.distribution.manifest.v2+json")
+        if manifest is None:return False
+    digest=(manifest.get("config") or {}).get("digest")
+    if not digest:return False
+    config=get(f"blobs/{digest}","application/json")
+    return config is not None and all((config.get("config",{}).get("Labels") or {}).get(k)==v for k,v in labels.items())
+
+HOST_TOOLS_BUILD_RECIPE=("host-tools-v1; config:DEVEL,AUTOREMOVE,CCACHE,BUILD_ALL_HOST_TOOLS; commands:make-defconfig,make-tools-install")
+HOST_TOOLS_CONFIG="CONFIG_DEVEL=y\nCONFIG_AUTOREMOVE=y\nCONFIG_CCACHE=y\nCONFIG_BUILD_ALL_HOST_TOOLS=y\n"
+HOST_TOOLS_BUILD_ENVIRONMENT={"runner":"ubuntu-24.04","platform":"linux/amd64","buildworker_image":"ghcr.io/openwrt/buildbot/buildworker-v3.11.8:v28"}
+RUNTIME_DOCKERFILE=".github/dockerfiles/Dockerfile.tools"
+def is_host_tool_input(path: str) -> bool:
+    if path in {"Makefile","rules.mk","Config.in"}: return True
+    if path.startswith(("include/","tools/","toolchain/","scripts/","config/")): return True
+    parts=PurePosixPath(path).parts
+    return bool(parts and parts[0] in {"package","target"} and PurePosixPath(path).name in {"Makefile","Config.in"})
+def compute_tools_fingerprint(source_dir: Path,local_repo_dir: Path,source_repo: str,source_ref: str) -> tuple[str,dict]:
+    source_dir=source_dir.resolve(); local_repo_dir=local_repo_dir.resolve()
+    source_files=sorted(p for p in run_git(source_dir,"ls-files","-z").decode().split("\0") if p and is_host_tool_input(p))
+    if not source_files: raise RuntimeError("No tracked host-tools source inputs were found.")
+    worker=HOST_TOOLS_BUILD_ENVIRONMENT["buildworker_image"]
+    builder=(local_repo_dir/".github/workflows/reusable_build_tools.yml").read_text(encoding="utf-8"); dockerfile=local_repo_dir/RUNTIME_DOCKERFILE
+    if f"container: {worker}" not in builder: raise RuntimeError("Host Tools builder image does not match the fingerprinted build environment.")
+    if not dockerfile.read_text(encoding="utf-8").startswith(f"FROM {worker}\n"): raise RuntimeError("Host Tools runtime image does not match the fingerprinted build environment.")
+    files=[{"scope":"source","path":p,"sha256":sha256_file(source_dir/p)} for p in source_files]+[{"scope":"runtime-image","path":RUNTIME_DOCKERFILE,"sha256":sha256_file(dockerfile)}]
+    manifest={"schema":3,"source_repository":source_repo,"host_tools_config":HOST_TOOLS_CONFIG,"host_tools_build_recipe":HOST_TOOLS_BUILD_RECIPE,"build_environment":HOST_TOOLS_BUILD_ENVIRONMENT,"files":files}
+    return canonical_sha256(manifest, ensure_ascii=True), manifest
 TOOLCHAIN_BUILD_RECIPE = (
     "toolchain-v1;"
     "config:CCACHE,DEVEL,AUTOREMOVE,TARGET,SUBTARGET;"
@@ -101,22 +154,6 @@ PATCH_PATH_RE = re.compile(
     r"scripts/(?:headers_install\.sh|Makefile\.headersinst|unifdef\.c)|"
     r"(?:Makefile|Kbuild)$)"
 )
-
-
-def run_git(repo: Path, *args: str) -> bytes:
-    result = subprocess.run(
-        ["git", "-C", str(repo), *args],
-        check=True,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-    )
-    return result.stdout
-
-
-def tracked_paths(repo: Path) -> list[str]:
-    raw = run_git(repo, "ls-files", "-z")
-    return sorted(item.decode("utf-8") for item in raw.split(b"\0") if item)
-
 
 def normalize_config_value(value: str) -> str:
     if len(value) >= 2 and value[0] == '"' and value[-1] == '"':
@@ -372,68 +409,28 @@ def compute_manifest(
         },
         "toolchain_config": resolved_config,
         "toolchain_build_recipe": TOOLCHAIN_BUILD_RECIPE,
-        "build_environment": BUILD_ENVIRONMENT,
+        "build_environment": TOOLCHAIN_BUILD_ENVIRONMENT,
         "files": file_records,
     }
 
 
-def compute_fingerprint(*args, **kwargs) -> tuple[str, dict]:
-    manifest = compute_manifest(*args, **kwargs)
-    canonical = json.dumps(
-        manifest, sort_keys=True, separators=(",", ":"), ensure_ascii=False
-    ).encode("utf-8")
-    return hashlib.sha256(canonical).hexdigest(), manifest
-
-
-def main() -> int:
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--source-dir", required=True, type=Path)
-    parser.add_argument("--local-repo-dir", required=True, type=Path)
-    parser.add_argument("--source-repo", required=True)
-    parser.add_argument("--source-ref", required=True)
-    parser.add_argument("--target", required=True)
-    parser.add_argument("--subtarget", required=True)
-    parser.add_argument("--tools-fingerprint", required=True)
-    args = parser.parse_args()
-
-    source_dir = args.source_dir.resolve()
-    source_commit = run_git(source_dir, "rev-parse", "HEAD").decode().strip()
-    fingerprint, manifest = compute_fingerprint(
-        source_dir=source_dir,
-        local_repo_dir=args.local_repo_dir,
-        source_repo=args.source_repo,
-        source_ref=args.source_ref,
-        target=args.target,
-        subtarget=args.subtarget,
-        tools_fingerprint=args.tools_fingerprint,
-    )
-    cache_key = fingerprint[:32]
-
-    print(f"Source ref: {args.source_ref}")
-    print(f"Source commit (informational only): {source_commit}")
-    print(f"Toolchain fingerprint input files: {len(manifest['files'])}")
-    print(f"Resolved Toolchain config symbols: {len(manifest['toolchain_config'])}")
-    print(f"Toolchain content fingerprint: {fingerprint}")
-    print(f"Toolchain cache key: {cache_key}")
-
-    output_path = os.environ.get("GITHUB_OUTPUT")
-    outputs = {
-        "toolchain_fingerprint": fingerprint,
-        "toolchain_cache_key": cache_key,
-        "source_commit": source_commit,
-    }
-    if output_path:
-        with open(output_path, "a", encoding="utf-8") as output:
-            for key, value in outputs.items():
-                output.write(f"{key}={value}\n")
-    else:
-        print(json.dumps(outputs))
-    return 0
-
-
-if __name__ == "__main__":
-    try:
-        raise SystemExit(main())
-    except (OSError, RuntimeError, subprocess.CalledProcessError) as exc:
-        print(f"toolchain-fingerprint: {exc}", file=sys.stderr)
-        raise SystemExit(1)
+def compute_toolchain_fingerprint(*args,**kwargs):
+    manifest=compute_manifest(*args,**kwargs); return canonical_sha256(manifest, ensure_ascii=False),manifest
+def main():
+    p=argparse.ArgumentParser(); s=p.add_subparsers(dest="command",required=True)
+    q=s.add_parser("tools"); q.add_argument("--source-dir",required=True,type=Path); q.add_argument("--local-repo-dir",required=True,type=Path); q.add_argument("--source-repo",required=True); q.add_argument("--source-ref",required=True)
+    q=s.add_parser("toolchain"); q.add_argument("--source-dir",required=True,type=Path); q.add_argument("--local-repo-dir",required=True,type=Path); q.add_argument("--source-repo",required=True); q.add_argument("--source-ref",required=True); q.add_argument("--target",required=True); q.add_argument("--subtarget",required=True); q.add_argument("--tools-fingerprint",required=True)
+    q=s.add_parser("ghcr-check"); q.add_argument("--owner",required=True); q.add_argument("--image",required=True); q.add_argument("--tag",required=True); q.add_argument("--label",action="append",default=[])
+    a=p.parse_args()
+    if a.command=="tools":
+        f,_=compute_tools_fingerprint(a.source_dir,a.local_repo_dir,a.source_repo,a.source_ref); write_outputs({"tools_fingerprint":f,"source_commit":run_git(a.source_dir,"rev-parse","HEAD").decode().strip()}); print(f); return 0
+    if a.command=="toolchain":
+        f,_=compute_toolchain_fingerprint(a.source_dir,a.local_repo_dir,a.source_repo,a.source_ref,a.target,a.subtarget,a.tools_fingerprint); write_outputs({"toolchain_fingerprint":f,"toolchain_cache_key":f[:32],"source_commit":run_git(a.source_dir,"rev-parse","HEAD").decode().strip()}); print(f); return 0
+    labels={}; 
+    for item in a.label:
+        if "=" not in item: raise ValueError("Invalid label")
+        k,v=item.split("=",1); labels[k]=v
+    return 0 if ghcr_check(a.owner,a.image,a.tag,labels) else 1
+if __name__=="__main__":
+    try: raise SystemExit(main())
+    except (OSError,RuntimeError,ValueError,subprocess.CalledProcessError,URLError) as e: print(f"fingerprint: {e}",file=sys.stderr); raise SystemExit(2)

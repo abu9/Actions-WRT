@@ -102,253 +102,183 @@ jobs:
       source_branch: ${{ github.event.client_payload.source_branch || inputs.source_branch || 'immortalwrt/immortalwrt@openwrt-25.12' }}
       source_commit: ${{ github.event.client_payload.source_commit || inputs.source_commit || '' }}
 
+jobs:
+  determine_targets:
+    name: Get target info
+    uses: ./.github/workflows/determine-targets.yml
+    with:
+      config_name: ${{ (github.event_name == 'push' && '360t7-immortalwrt-25.12-kernel-min.conf') || github.event.client_payload.config_name || inputs.config_name || '360t7-immortalwrt-25.12-ubi.conf' }}
+      source_branch: ${{ github.event.client_payload.source_branch || inputs.source_branch || 'immortalwrt/immortalwrt@openwrt-25.12' }}
+      source_commit: ${{ github.event.client_payload.source_commit || inputs.source_commit || '' }}
+
   tools_fingerprint:
     name: Calculate generic host-tools fingerprint
     needs: determine_targets
-    uses: ./.github/workflows/reusable_tools_fingerprint.yml
+    uses: ./.github/workflows/fingerprint.yml
     with:
-      repo_url: ${{ needs.determine_targets.outputs.repo_url }}
-      repo_branch: ${{ needs.determine_targets.outputs.repo_branch }}
-      source_commit: ${{ needs.determine_targets.outputs.source_commit }}
+      mode: tools
+      repo_url: ${ needs.determine_targets.outputs.repo_url }
+      repo_branch: ${ needs.determine_targets.outputs.repo_branch }
+      source_commit: ${ needs.determine_targets.outputs.source_commit }
 
   check_tools_container:
-    name: Check whether a tools container is needed
+    name: Check Host Tools image
     needs: [determine_targets, tools_fingerprint]
     runs-on: ubuntu-24.04
-    permissions:
-      contents: read
-      packages: read
+    permissions: {contents: read, packages: read}
     outputs:
-      tools_required: ${{ steps.check.outputs.tools_required }}
-      checked_image: ${{ steps.check.outputs.checked_image }}
-      expected_fingerprint: ${{ steps.check.outputs.expected_fingerprint }}
+      tools_required: ${ steps.check.outputs.tools_required }
+      checked_image: ${ steps.check.outputs.checked_image }
+      expected_fingerprint: ${ steps.check.outputs.expected_fingerprint }
     steps:
-      - name: Check GHCR manifest and tools fingerprint
-        id: check
+      - uses: actions/checkout@v7.0.1
+      - id: check
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          OWNER: ${{ github.repository_owner }}
-          AUTHOR: ${{ needs.determine_targets.outputs.author }}
-          REPO_BRANCH: ${{ needs.determine_targets.outputs.repo_branch }}
-          TARGET: ${{ needs.determine_targets.outputs.target }}
-          SUBTARGET: ${{ needs.determine_targets.outputs.subtarget }}
-          CONTAINER_NAME: ${{ inputs.container_name || 'tools' }}
-          EXPECTED_FINGERPRINT: ${{ needs.tools_fingerprint.outputs.tools_fingerprint }}
-          EXPECTED_SOURCE_COMMIT: ${{ needs.tools_fingerprint.outputs.source_commit }}
-        shell: bash
+          GITHUB_TOKEN: ${ secrets.GITHUB_TOKEN }
+          GITHUB_ACTOR: ${ github.actor }
+          OWNER: ${ github.repository_owner }
+          AUTHOR: ${ needs.determine_targets.outputs.author }
+          REPO_BRANCH: ${ needs.determine_targets.outputs.repo_branch }
+          EXPECTED_FINGERPRINT: ${ needs.tools_fingerprint.outputs.tools_fingerprint }
+          EXPECTED_SOURCE_COMMIT: ${ needs.tools_fingerprint.outputs.source_commit }
+          SOURCE_REPOSITORY: ${ needs.determine_targets.outputs.repo_url }
         run: |
-          set -euo pipefail
-          OWNER_LC="${OWNER,,}"
-          BASE_TAG="${AUTHOR}_${REPO_BRANCH}"
-          TOOLS_TAG="${BASE_TAG}-${EXPECTED_FINGERPRINT}"
-          TMP_DIR="$(mktemp -d)"
-          trap 'rm -rf "$TMP_DIR"' EXIT
-
-          if [ -z "$EXPECTED_FINGERPRINT" ]; then
-            echo "Expected tools fingerprint is empty; refusing to reuse any image." >&2
-            exit 1
-          fi
-          echo "expected_fingerprint=$EXPECTED_FINGERPRINT" >> "$GITHUB_OUTPUT"
-
-          registry_token() {
-            local image="$1"
-            local token
-            token="$(curl --fail --silent --show-error --user "${GITHUB_ACTOR}:${GITHUB_TOKEN}" \
-              "https://ghcr.io/token?scope=repository:${OWNER_LC}/${image}:pull" | jq -r '.token // .access_token // empty')"
-            if [ -z "$token" ]; then
-              echo "Unable to obtain a GHCR pull token for ${image}." >&2
-              exit 1
-            fi
-            printf '%s' "$token"
-          }
-
-          check_manifest_exists() {
-            local image="$1"
-            local tag="$2"
-            local token status
-            token="$(registry_token "$image")"
-            status="$(curl --silent --show-error --output "$TMP_DIR/manifest.json" --write-out '%{http_code}' \
-              --header "Authorization: Bearer $token" \
-              --header 'Accept: application/vnd.oci.image.index.v1+json, application/vnd.docker.distribution.manifest.list.v2+json, application/vnd.oci.image.manifest.v1+json, application/vnd.docker.distribution.manifest.v2+json' \
-              "https://ghcr.io/v2/${OWNER_LC}/${image}/manifests/${tag}")"
-            case "$status" in
-              200) return 0 ;;
-              404) return 1 ;;
-              *) echo "GHCR manifest check failed for ${image}:${tag} (HTTP $status)." >&2; exit 1 ;;
-            esac
-          }
-
-          check_tools_fingerprint() {
-            local image="$1"
-            local tag="$2"
-            local expected_source_commit="${3:-}"
-            local token status manifest_digest config_digest image_fingerprint image_source_commit
-            token="$(registry_token "$image")"
-            status="$(curl --silent --show-error --output "$TMP_DIR/manifest.json" --write-out '%{http_code}' \
-              --header "Authorization: Bearer $token" \
-              --header 'Accept: application/vnd.oci.image.index.v1+json, application/vnd.docker.distribution.manifest.list.v2+json, application/vnd.oci.image.manifest.v1+json, application/vnd.docker.distribution.manifest.v2+json' \
-              "https://ghcr.io/v2/${OWNER_LC}/${image}/manifests/${tag}")"
-            case "$status" in
-              200) ;;
-              404) return 1 ;;
-              *) echo "GHCR manifest check failed for ${image}:${tag} (HTTP $status)." >&2; exit 1 ;;
-            esac
-
-            # docker/build-push-action may publish an OCI index with provenance.
-            # Read the linux/amd64 image manifest, not an attestation descriptor.
-            if jq -e '.manifests | type == "array"' "$TMP_DIR/manifest.json" >/dev/null; then
-              manifest_digest="$(jq -r '[.manifests[] | select(.platform.os == "linux" and .platform.architecture == "amd64")][0].digest // empty' "$TMP_DIR/manifest.json")"
-              if [ -z "$manifest_digest" ]; then
-                echo "No linux/amd64 image manifest found in ${image}:${tag}; image must be rebuilt."
-                return 1
-              fi
-              status="$(curl --silent --show-error --output "$TMP_DIR/platform-manifest.json" --write-out '%{http_code}' \
-                --header "Authorization: Bearer $token" \
-                --header 'Accept: application/vnd.oci.image.manifest.v1+json, application/vnd.docker.distribution.manifest.v2+json' \
-                "https://ghcr.io/v2/${OWNER_LC}/${image}/manifests/${manifest_digest}")"
-              case "$status" in
-                200) mv "$TMP_DIR/platform-manifest.json" "$TMP_DIR/manifest.json" ;;
-                404) return 1 ;;
-                *) echo "GHCR platform manifest read failed for ${image}:${tag} (HTTP $status)." >&2; exit 1 ;;
-              esac
-            fi
-
-            config_digest="$(jq -r '.config.digest // empty' "$TMP_DIR/manifest.json")"
-            if [ -z "$config_digest" ]; then
-              echo "Image config digest missing in ${image}:${tag}; image must be rebuilt."
-              return 1
-            fi
-            status="$(curl --location --silent --show-error --output "$TMP_DIR/config.json" --write-out '%{http_code}' \
-              --header "Authorization: Bearer $token" \
-              "https://ghcr.io/v2/${OWNER_LC}/${image}/blobs/${config_digest}")"
-            case "$status" in
-              200) ;;
-              404) return 1 ;;
-              *) echo "GHCR image config read failed for ${image}:${tag} (HTTP $status)." >&2; exit 1 ;;
-            esac
-
-            image_fingerprint="$(jq -r '.config.Labels["io.abu9.actions-wrt.tools-fingerprint"] // empty' "$TMP_DIR/config.json")"
-            image_source_commit="$(jq -r '.config.Labels["io.abu9.actions-wrt.tools-source-commit"] // empty' "$TMP_DIR/config.json")"
-            if [ "$image_fingerprint" = "$EXPECTED_FINGERPRINT" ] &&
-               { [ -z "$expected_source_commit" ] || [ "$image_source_commit" = "$expected_source_commit" ]; }; then
-              return 0
-            fi
-            echo "Stale or unlabelled tools image: ${image}:${tag}"
-            echo "  image fingerprint: ${image_fingerprint:-<missing>}"
-            echo "  expected fingerprint: $EXPECTED_FINGERPRINT"
-            if [ -n "$expected_source_commit" ]; then
-              echo "  image source commit: ${image_source_commit:-<missing>}"
-              echo "  expected source commit: $expected_source_commit"
-            fi
-            return 1
-          }
-
-          # A target-specific toolchain image remains a separate cache type.
-          # Its fingerprint is deliberately not conflated with generic host tools.
-          if [ "$CONTAINER_NAME" = "toolchain" ]; then
-            TOOLCHAIN_CACHE_KEY="$(printf '%s\n' "$TARGET" "$SUBTARGET" "$EXPECTED_SOURCE_COMMIT" "$EXPECTED_FINGERPRINT" | sha256sum | cut -c1-32)"
-            TOOLCHAIN_TAG="${TARGET}-${SUBTARGET}-${BASE_TAG}-${TOOLCHAIN_CACHE_KEY}"
-            if check_tools_fingerprint toolchain "$TOOLCHAIN_TAG" "$EXPECTED_SOURCE_COMMIT"; then
-              echo "Existing target toolchain image found: ghcr.io/${OWNER_LC}/toolchain:${TOOLCHAIN_TAG}"
-              echo "tools_required=false" >> "$GITHUB_OUTPUT"
-              echo "checked_image=toolchain:${TOOLCHAIN_TAG}" >> "$GITHUB_OUTPUT"
-              exit 0
-            fi
-          fi
-
-          if check_tools_fingerprint tools "$TOOLS_TAG"; then
-            echo "Matching fingerprinted tools image found: ghcr.io/${OWNER_LC}/tools:${TOOLS_TAG}"
+          set +e
+          TAG="$AUTHOR"_"$REPO_BRANCH-$EXPECTED_FINGERPRINT"
+          python3 .github/scripts/fingerprint.py ghcr-check --owner "$OWNER" --image tools --tag "$TAG"             --label "io.abu9.actions-wrt.tools-fingerprint=$EXPECTED_FINGERPRINT"             --label "io.abu9.actions-wrt.tools-source-commit=$EXPECTED_SOURCE_COMMIT"             --label "io.abu9.actions-wrt.tools-source-repository=$SOURCE_REPOSITORY"
+          rc=$?
+          set -e
+          if [ "$rc" -eq 0 ]; then
             echo "tools_required=false" >> "$GITHUB_OUTPUT"
-            echo "checked_image=tools:${TOOLS_TAG}" >> "$GITHUB_OUTPUT"
-          else
-            echo "Fingerprint-specific tools image is missing or stale: ghcr.io/${OWNER_LC}/tools:${TOOLS_TAG}"
+          elif [ "$rc" -eq 1 ]; then
             echo "tools_required=true" >> "$GITHUB_OUTPUT"
-            echo "checked_image=tools:${TOOLS_TAG}" >> "$GITHUB_OUTPUT"
+          else
+            exit "$rc"
           fi
+          echo "checked_image=tools:$TAG" >> "$GITHUB_OUTPUT"
+          echo "expected_fingerprint=$EXPECTED_FINGERPRINT" >> "$GITHUB_OUTPUT"
 
   build_tools_container:
     name: Build and Push tools container (only when missing)
     needs: [determine_targets, tools_fingerprint, check_tools_container]
-    if: >-
-      ${{ github.event_name != 'pull_request' && inputs.validate_only != true &&
-          needs.tools_fingerprint.result == 'success' &&
-          needs.check_tools_container.outputs.tools_required == 'true' }}
-    permissions:
-      contents: read
-      packages: write
-      actions: write
+    if: ${ github.event_name != 'pull_request' && inputs.validate_only != true && needs.check_tools_container.outputs.tools_required == 'true' }
+    permissions: {contents: read, packages: write, actions: write}
     uses: ./.github/workflows/push-containers.yml
     with:
-      source_branch: ${{ github.event.client_payload.source_branch || inputs.source_branch || 'immortalwrt/immortalwrt@openwrt-25.12' }}
-      config_name: ${{ (github.event_name == 'push' && '360t7-immortalwrt-25.12-kernel-min.conf') || github.event.client_payload.config_name || inputs.config_name || '360t7-immortalwrt-25.12-ubi.conf' }}
-      source_commit: ${{ needs.tools_fingerprint.outputs.source_commit }}
+      source_branch: ${ github.event.client_payload.source_branch || inputs.source_branch || 'immortalwrt/immortalwrt@openwrt-25.12' }
+      config_name: ${ (github.event_name == 'push' && '360t7-immortalwrt-25.12-kernel-min.conf') || github.event.client_payload.config_name || inputs.config_name || '360t7-immortalwrt-25.12-ubi.conf' }
+      source_commit: ${ needs.tools_fingerprint.outputs.source_commit }
       build_tools: true
       build_toolchain: false
 
   tools_ready:
     name: Verify Host Tools image is ready
     needs: [determine_targets, tools_fingerprint, check_tools_container, build_tools_container]
-    if: >-
-      ${{ !cancelled() &&
-          needs.determine_targets.result == 'success' &&
-          needs.tools_fingerprint.result == 'success' &&
-          needs.check_tools_container.result == 'success' &&
-          (needs.build_tools_container.result == 'success' ||
-           needs.build_tools_container.result == 'skipped') }}
+    if: ${ !cancelled() && needs.check_tools_container.result == 'success' && (needs.build_tools_container.result == 'success' || needs.build_tools_container.result == 'skipped') }
     runs-on: ubuntu-24.04
-    permissions:
-      contents: read
     outputs:
-      checked_image: ${{ needs.check_tools_container.outputs.checked_image }}
-      expected_fingerprint: ${{ needs.check_tools_container.outputs.expected_fingerprint }}
+      checked_image: ${ needs.check_tools_container.outputs.checked_image }
+      expected_fingerprint: ${ needs.check_tools_container.outputs.expected_fingerprint }
+      tools_image: ${ steps.image.outputs.tools_image }
     steps:
-      - name: Confirm selected Host Tools image
+      - id: image
         env:
-          CHECKED_IMAGE: ${{ needs.check_tools_container.outputs.checked_image }}
-          EXPECTED_FINGERPRINT: ${{ needs.check_tools_container.outputs.expected_fingerprint }}
-          TOOLS_REQUIRED: ${{ needs.check_tools_container.outputs.tools_required }}
-          BUILD_RESULT: ${{ needs.build_tools_container.result }}
-        shell: bash
+          OWNER: ${ github.repository_owner }
+          CHECKED_IMAGE: ${ needs.check_tools_container.outputs.checked_image }
+        run: |
+          OWNER_LC="$(printf '%s' "$OWNER" | tr '[:upper:]' '[:lower:]')"
+          IMAGE_TAG="$(printf '%s' "$CHECKED_IMAGE" | cut -d: -f2-)"
+          echo "tools_image=ghcr.io/$OWNER_LC/tools:$IMAGE_TAG" >> "$GITHUB_OUTPUT"
+      - name: Verify selected image
+        env:
+          GITHUB_TOKEN: ${ secrets.GITHUB_TOKEN }
+          GITHUB_ACTOR: ${ github.actor }
+          OWNER: ${ github.repository_owner }
+          EXPECTED_FINGERPRINT: ${ needs.tools_fingerprint.outputs.tools_fingerprint }
+          EXPECTED_SOURCE_COMMIT: ${ needs.tools_fingerprint.outputs.source_commit }
+          SOURCE_REPOSITORY: ${ needs.determine_targets.outputs.repo_url }
+          CHECKED_IMAGE: ${ needs.check_tools_container.outputs.checked_image }
+          TOOLS_REQUIRED: ${ needs.check_tools_container.outputs.tools_required }
+          BUILD_RESULT: ${ needs.build_tools_container.result }
         run: |
           set -euo pipefail
-          test -n "$CHECKED_IMAGE"
-          test -n "$EXPECTED_FINGERPRINT"
-          if [ "$TOOLS_REQUIRED" = "true" ] && [ "$BUILD_RESULT" != "success" ]; then
-            echo "Host Tools image was required but was not built successfully." >&2
-            exit 1
+          if [ "$TOOLS_REQUIRED" = "true" ]; then test "$BUILD_RESULT" = success; fi
+          TAG="$(printf '%s' "$CHECKED_IMAGE" | cut -d: -f2-)"
+          python3 .github/scripts/fingerprint.py ghcr-check --owner "$OWNER" --image tools --tag "$TAG"             --label "io.abu9.actions-wrt.tools-fingerprint=$EXPECTED_FINGERPRINT"             --label "io.abu9.actions-wrt.tools-source-commit=$EXPECTED_SOURCE_COMMIT"             --label "io.abu9.actions-wrt.tools-source-repository=$SOURCE_REPOSITORY"
+
+  toolchain_fingerprint:
+    name: Calculate target Toolchain fingerprint
+    if: ${ inputs.build_toolchain == true }
+    needs: [determine_targets, tools_fingerprint, tools_ready]
+    uses: ./.github/workflows/fingerprint.yml
+    with:
+      mode: toolchain
+      repo_url: ${ needs.determine_targets.outputs.repo_url }
+      repo_branch: ${ needs.determine_targets.outputs.repo_branch }
+      source_commit: ${ needs.tools_fingerprint.outputs.source_commit }
+      target: ${ needs.determine_targets.outputs.target }
+      subtarget: ${ needs.determine_targets.outputs.subtarget }
+      tools_fingerprint: ${ needs.tools_fingerprint.outputs.tools_fingerprint }
+      tools_image: ${ needs.tools_ready.outputs.tools_image }
+
+  check_toolchain_container:
+    name: Check target Toolchain image
+    needs: [determine_targets, tools_ready, toolchain_fingerprint]
+    if: ${ inputs.build_toolchain == true }
+    runs-on: ubuntu-24.04
+    permissions: {contents: read, packages: read}
+    outputs:
+      use_toolchain: ${ steps.check.outputs.use_toolchain }
+      image: ${ steps.check.outputs.image }
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - id: check
+        env:
+          GITHUB_TOKEN: ${ secrets.GITHUB_TOKEN }
+          GITHUB_ACTOR: ${ github.actor }
+          OWNER: ${ github.repository_owner }
+          TARGET: ${ needs.determine_targets.outputs.target }
+          SUBTARGET: ${ needs.determine_targets.outputs.subtarget }
+          AUTHOR: ${ needs.determine_targets.outputs.author }
+          REPO_BRANCH: ${ needs.determine_targets.outputs.repo_branch }
+          FINGERPRINT: ${ needs.toolchain_fingerprint.outputs.toolchain_fingerprint }
+        run: |
+          set +e
+          TAG="$TARGET-$SUBTARGET-$AUTHOR"_"$REPO_BRANCH-$FINGERPRINT"
+          python3 .github/scripts/fingerprint.py ghcr-check --owner "$OWNER" --image toolchain --tag "$TAG"             --label "io.abu9.actions-wrt.toolchain-fingerprint=$FINGERPRINT"
+          rc=$?
+          set -e
+          if [ "$rc" -eq 0 ]; then
+            echo "use_toolchain=true" >> "$GITHUB_OUTPUT"
+          elif [ "$rc" -eq 1 ]; then
+            echo "use_toolchain=false" >> "$GITHUB_OUTPUT"
+          else
+            exit "$rc"
           fi
-          echo "Host Tools image is ready: $CHECKED_IMAGE"
+          echo "image=toolchain:$TAG" >> "$GITHUB_OUTPUT"
 
   build_firmware:
     name: Build firmware
-    needs: [determine_targets, tools_fingerprint, tools_ready]
-    if: >-
-      ${{ !cancelled() &&
-          github.event_name != 'pull_request' &&
-          inputs.validate_only != true &&
-          needs.determine_targets.result == 'success' &&
-          needs.tools_fingerprint.result == 'success' &&
-          needs.tools_ready.result == 'success' }}
-    permissions:
-      contents: read
-      packages: read
-      actions: write
+    needs: [determine_targets, tools_fingerprint, tools_ready, toolchain_fingerprint, check_toolchain_container]
+    if: ${ !cancelled() && github.event_name != 'pull_request' && inputs.validate_only != true && needs.determine_targets.result == 'success' && needs.tools_ready.result == 'success' && (needs.toolchain_fingerprint.result == 'success' || needs.toolchain_fingerprint.result == 'skipped') && (needs.check_toolchain_container.result == 'success' || needs.check_toolchain_container.result == 'skipped') }
+    permissions: {contents: read, packages: read, actions: write}
     uses: ./.github/workflows/reusable_build.yml
     with:
-      target: ${{ needs.determine_targets.outputs.target }}
-      subtarget: ${{ needs.determine_targets.outputs.subtarget }}
-      repo_url: ${{ needs.determine_targets.outputs.repo_url }}
-      repo_branch: ${{ needs.determine_targets.outputs.repo_branch }}
-      repo_commit: ${{ needs.tools_fingerprint.outputs.source_commit }}
-      tools_fingerprint: ${{ needs.tools_fingerprint.outputs.tools_fingerprint }}
-      tools_image_fingerprint: ${{ needs.tools_ready.outputs.expected_fingerprint }}
-      author: ${{ needs.determine_targets.outputs.author }}
-      container_name: ${{ startsWith(needs.tools_ready.outputs.checked_image, 'toolchain:') && 'toolchain' || 'tools' }}
-      build_kernel: ${{ github.event_name == 'push' || inputs.build_kernel == true }}
-      build_full: ${{ github.event_name == 'repository_dispatch' || inputs.build_full == true }}
-      build_toolchain: ${{ inputs.build_toolchain == true }}
-      debug: ${{ inputs.debug == true }}
-      config_name: ${{ (github.event_name == 'push' && '360t7-immortalwrt-25.12-kernel-min.conf') || github.event.client_payload.config_name || inputs.config_name || '360t7-immortalwrt-25.12-ubi.conf' }}
+      target: ${ needs.determine_targets.outputs.target }
+      subtarget: ${ needs.determine_targets.outputs.subtarget }
+      repo_url: ${ needs.determine_targets.outputs.repo_url }
+      repo_branch: ${ needs.determine_targets.outputs.repo_branch }
+      repo_commit: ${ needs.tools_fingerprint.outputs.source_commit }
+      tools_fingerprint: ${ needs.tools_fingerprint.outputs.tools_fingerprint }
+      tools_image_fingerprint: ${ needs.tools_ready.outputs.expected_fingerprint }
+      toolchain_fingerprint: ${ needs.toolchain_fingerprint.outputs.toolchain_fingerprint }
+      author: ${ needs.determine_targets.outputs.author }
+      container_name: ${ (inputs.build_toolchain == true && needs.check_toolchain_container.outputs.use_toolchain == 'true') && 'toolchain' || 'tools' }
+      build_kernel: ${ github.event_name == 'push' || inputs.build_kernel == true }
+      build_full: ${ github.event_name == 'repository_dispatch' || inputs.build_full == true }
+      build_toolchain: ${ inputs.build_toolchain == true && needs.check_toolchain_container.outputs.use_toolchain != 'true' }
+      debug: ${ inputs.debug == true }
+      config_name: ${ (github.event_name == 'push' && '360t7-immortalwrt-25.12-kernel-min.conf') || github.event.client_payload.config_name || inputs.config_name || '360t7-immortalwrt-25.12-ubi.conf' }
       ccache_type: packages
-      use_ccache_cache: ${{ github.event_name == 'repository_dispatch' || github.event_name == 'push' || inputs.use_ccache_cache == true }}
-      check: ${{ github.event_name != 'push' }}
+      use_ccache_cache: ${ github.event_name == 'repository_dispatch' || github.event_name == 'push' || inputs.use_ccache_cache == true }
+      check: ${ github.event_name != 'push' }

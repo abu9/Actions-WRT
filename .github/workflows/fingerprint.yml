@@ -1,0 +1,62 @@
+name: Compute build fingerprints
+on:
+  workflow_call:
+    inputs:
+      mode: {required: true, type: string}
+      repo_url: {required: true, type: string}
+      repo_branch: {required: true, type: string}
+      source_commit: {required: false, type: string, default: ''}
+      target: {required: false, type: string, default: ''}
+      subtarget: {required: false, type: string, default: ''}
+      tools_fingerprint: {required: false, type: string, default: ''}
+      tools_image: {required: false, type: string, default: ''}
+    outputs:
+      tools_fingerprint: {value: ${ jobs.tools.outputs.tools_fingerprint }}
+      toolchain_fingerprint: {value: ${ jobs.toolchain.outputs.toolchain_fingerprint }}
+      toolchain_cache_key: {value: ${ jobs.toolchain.outputs.toolchain_cache_key }}
+      source_commit: {value: ${ jobs.tools.outputs.source_commit || jobs.toolchain.outputs.source_commit }}
+permissions: {contents: read, packages: read}
+jobs:
+  tools:
+    if: ${ inputs.mode == 'tools' }
+    runs-on: ubuntu-24.04
+    outputs: {tools_fingerprint: ${ steps.fp.outputs.tools_fingerprint }, source_commit: ${ steps.fp.outputs.source_commit }}
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with: {path: actions-wrt}
+      - uses: actions/checkout@v7.0.1
+        with: {repository: ${ inputs.repo_url }, ref: ${ inputs.source_commit != '' && inputs.source_commit || inputs.repo_branch }, path: openwrt}
+      - id: fp
+        env: {SOURCE_REPO: ${ inputs.repo_url }, SOURCE_REF: ${ inputs.repo_branch }}
+        run: python3 actions-wrt/.github/scripts/fingerprint.py tools --source-dir openwrt --local-repo-dir actions-wrt --source-repo "$SOURCE_REPO" --source-ref "$SOURCE_REF"
+  toolchain:
+    if: ${ inputs.mode == 'toolchain' }
+    runs-on: ubuntu-24.04
+    container: ${ inputs.tools_image }
+    outputs: {toolchain_fingerprint: ${ steps.fp.outputs.toolchain_fingerprint }, toolchain_cache_key: ${ steps.fp.outputs.toolchain_cache_key }, source_commit: ${ steps.fp.outputs.source_commit }}
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with: {path: actions-wrt}
+      - uses: actions/checkout@v7.0.1
+        with: {repository: ${ inputs.repo_url }, ref: ${ inputs.source_commit }, path: openwrt}
+      - name: Configure internal Toolchain inputs
+        working-directory: openwrt
+        env: {TARGET: ${ inputs.target }, SUBTARGET: ${ inputs.subtarget }}
+        run: |
+          set -euo pipefail
+          chown -R buildbot:buildbot actions-wrt openwrt
+          mkdir -p staging_dir build_dir
+          ln -s /prebuilt_tools/staging_dir/host staging_dir/host
+          ln -s /prebuilt_tools/build_dir/host build_dir/host
+          su --preserve-environment --shell /bin/bash buildbot -c 'sh -e' <<'EOF'
+          rm -f .config
+          echo CONFIG_CCACHE=y >> .config
+          echo CONFIG_DEVEL=y >> .config
+          echo CONFIG_AUTOREMOVE=y >> .config
+          echo "CONFIG_TARGET_${TARGET}=y" >> .config
+          echo "CONFIG_TARGET_${TARGET}_${SUBTARGET}=y" >> .config
+          make defconfig
+          EOF
+      - id: fp
+        env: {SOURCE_REPO: ${ inputs.repo_url }, SOURCE_REF: ${ inputs.repo_branch }, TARGET: ${ inputs.target }, SUBTARGET: ${ inputs.subtarget }, TOOLS_FINGERPRINT: ${ inputs.tools_fingerprint }}
+        run: python3 actions-wrt/.github/scripts/fingerprint.py toolchain --source-dir openwrt --local-repo-dir actions-wrt --source-repo "$SOURCE_REPO" --source-ref "$SOURCE_REF" --target "$TARGET" --subtarget "$SUBTARGET" --tools-fingerprint "$TOOLS_FINGERPRINT"

@@ -172,53 +172,44 @@ jobs:
             io.abu9.actions-wrt.tools-source-repository=${{ needs.determine_targets.outputs.repo_url }}
           file: .github/dockerfiles/Dockerfile.tools
 
-  compute-toolchain-cache-key:
-    name: Compute target toolchain cache key
-    if: ${{ !cancelled() &&
-        needs.determine_targets.result == 'success' &&
-        needs.compute-tools-fingerprint.result == 'success' &&
-        inputs.build_toolchain == true &&
-        inputs.build_tools == true }}
-    needs: [determine_targets, compute-tools-fingerprint]
-    runs-on: ubuntu-24.04
-    outputs:
-      cache_key: ${{ steps.key.outputs.cache_key }}
-    steps:
-      - name: Compute cache key
-        id: key
-        env:
-          TARGET: ${{ needs.determine_targets.outputs.target }}
-          SUBTARGET: ${{ needs.determine_targets.outputs.subtarget }}
-          SOURCE_COMMIT: ${{ needs.compute-tools-fingerprint.outputs.source_commit }}
-          TOOLS_FINGERPRINT: ${{ needs.compute-tools-fingerprint.outputs.tools_fingerprint }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          KEY="$(printf '%s\n' "$TARGET" "$SUBTARGET" "$SOURCE_COMMIT" "$TOOLS_FINGERPRINT" | sha256sum | cut -c1-32)"
-          echo "cache_key=$KEY" >> "$GITHUB_OUTPUT"
+  compute-toolchain-fingerprint:
+    name: Compute target Toolchain fingerprint
+    if: ${ !cancelled() && needs.determine_targets.result == 'success' && needs.push-tools-container.result == 'success' && inputs.build_toolchain == true && inputs.build_tools == true }
+    needs: [determine_targets, compute-tools-fingerprint, push-tools-container]
+    uses: ./.github/workflows/fingerprint.yml
+    with:
+      mode: toolchain
+      repo_url: ${ needs.determine_targets.outputs.repo_url }
+      repo_branch: ${ needs.determine_targets.outputs.repo_branch }
+      source_commit: ${ needs.compute-tools-fingerprint.outputs.source_commit }
+      target: ${ needs.determine_targets.outputs.target }
+      subtarget: ${ needs.determine_targets.outputs.subtarget }
+      tools_fingerprint: ${ needs.compute-tools-fingerprint.outputs.tools_fingerprint }
+      tools_image: ghcr.io/${ needs.determine_container_info.outputs.owner_lc }/tools:${ needs.determine_container_info.outputs.container_tag }-${ needs.compute-tools-fingerprint.outputs.tools_fingerprint }
 
   build-target-toolchain:
     name: Build target-specific toolchain
-    if: ${{ !cancelled() &&
+    if: ${ !cancelled() &&
         needs.determine_targets.result == 'success' &&
         needs.compute-tools-fingerprint.result == 'success' &&
-        needs.push-tools-container.result == 'success' &&
+        needs.compute-toolchain-fingerprint.result == 'success' &&
         inputs.build_toolchain == true &&
-        inputs.build_tools == true }}
-    needs: [determine_targets, compute-tools-fingerprint, push-tools-container]
+        inputs.build_tools == true }
+    needs: [determine_targets, compute-tools-fingerprint, push-tools-container, compute-toolchain-fingerprint]
     permissions:
       contents: read
       packages: read
       actions: write
     uses: ./.github/workflows/reusable_build.yml
     with:
-      target: ${{ needs.determine_targets.outputs.target }}
-      subtarget: ${{ needs.determine_targets.outputs.subtarget }}
-      repo_url: ${{ needs.determine_targets.outputs.repo_url }}
-      repo_branch: ${{ needs.determine_targets.outputs.repo_branch }}
-      repo_commit: ${{ needs.compute-tools-fingerprint.outputs.source_commit }}
-      tools_fingerprint: ${{ needs.compute-tools-fingerprint.outputs.tools_fingerprint }}
-      author: ${{ needs.determine_targets.outputs.author }}
+      target: ${ needs.determine_targets.outputs.target }
+      subtarget: ${ needs.determine_targets.outputs.subtarget }
+      repo_url: ${ needs.determine_targets.outputs.repo_url }
+      repo_branch: ${ needs.determine_targets.outputs.repo_branch }
+      repo_commit: ${ needs.compute-tools-fingerprint.outputs.source_commit }
+      tools_fingerprint: ${ needs.compute-tools-fingerprint.outputs.tools_fingerprint }
+      toolchain_fingerprint: ${ needs.compute-toolchain-fingerprint.outputs.toolchain_fingerprint }
+      author: ${ needs.determine_targets.outputs.author }
       container_name: tools
       build_toolchain: true
       build_external_toolchain: true
@@ -231,7 +222,7 @@ jobs:
           needs.determine_targets.result == 'success' &&
           needs.determine_container_info.result == 'success' &&
           needs.compute-tools-fingerprint.result == 'success' &&
-          needs.compute-toolchain-cache-key.result == 'success' &&
+          needs.compute-toolchain-fingerprint.result == 'success' &&
           needs.build-target-toolchain.result == 'success' &&
           needs.build-target-toolchain.outputs.push == 'true' }}
     needs: [determine_targets, determine_container_info, compute-tools-fingerprint, compute-toolchain-cache-key, build-target-toolchain]
@@ -269,7 +260,7 @@ jobs:
         with:
           context: .
           push: true
-          tags: ghcr.io/${{ needs.determine_container_info.outputs.owner_lc }}/toolchain:${{ needs.determine_targets.outputs.target }}-${{ needs.determine_targets.outputs.subtarget }}-${{ needs.determine_container_info.outputs.container_tag }}-${{ needs.compute-toolchain-cache-key.outputs.cache_key }}
+          tags: ghcr.io/${{ needs.determine_container_info.outputs.owner_lc }}/toolchain:${{ needs.determine_targets.outputs.target }}-${{ needs.determine_targets.outputs.subtarget }}-${{ needs.determine_container_info.outputs.container_tag }}-${{ needs.compute-toolchain-fingerprint.outputs.toolchain_fingerprint }}
           file: .github/dockerfiles/Dockerfile.toolchain
           build-args: |
             OWNER_LC=${{ needs.determine_container_info.outputs.owner_lc }}
@@ -277,3 +268,4 @@ jobs:
             TOOLS_FINGERPRINT=${{ needs.compute-tools-fingerprint.outputs.tools_fingerprint }}
             SOURCE_COMMIT=${{ needs.compute-tools-fingerprint.outputs.source_commit }}
             TOOLCHAIN_NAME=${{ steps.get-toolchain-name.outputs.toolchain_name }}
+            TOOLCHAIN_FINGERPRINT=${{ needs.compute-toolchain-fingerprint.outputs.toolchain_fingerprint }}

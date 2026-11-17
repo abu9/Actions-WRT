@@ -92,6 +92,10 @@ on:
         description: 'Exact verified GHCR Host Tools image fingerprint/tag component'
         type: string
         default: ''
+      toolchain_fingerprint:
+        description: 'Full verified target Toolchain content fingerprint'
+        type: string
+        default: ''
       author:
         required: true
         type: string
@@ -155,6 +159,7 @@ jobs:
           TOOLS_FINGERPRINT: ${{ inputs.tools_fingerprint }}
           TOOLS_IMAGE_FINGERPRINT: ${{ inputs.tools_image_fingerprint }}
           SOURCE_COMMIT: ${{ inputs.repo_commit }}
+          TOOLCHAIN_FINGERPRINT: ${{ inputs.toolchain_fingerprint }}
         shell: bash
         run: |
           set -euo pipefail
@@ -166,35 +171,24 @@ jobs:
           CCACHE_TAG="$CONTAINER_TAG"
 
           if [ "$CONTAINER_NAME" = "toolchain" ]; then
-            if [ -z "$TOOLS_FINGERPRINT" ] || [ -z "$SOURCE_COMMIT" ]; then
-              echo "No Host Tools fingerprint or fixed source commit supplied; refusing to reuse a target toolchain image."
+            if [ -z "$TOOLCHAIN_FINGERPRINT" ] || [ -z "$SOURCE_COMMIT" ]; then
+              echo "No target Toolchain fingerprint or fixed source commit supplied; refusing to reuse a target toolchain image."
               CONTAINER_NAME=tools
             else
-              TOOLCHAIN_BASE_TAG="${TARGET}-${SUBTARGET}-${CONTAINER_TAG}"
+              TOOLCHAIN_BASE_TAG="$TARGET-$SUBTARGET-$CONTAINER_TAG"
               CCACHE_TAG="$TOOLCHAIN_BASE_TAG"
-              TOOLCHAIN_CACHE_KEY="$(printf '%s\n' "$TARGET" "$SUBTARGET" "$SOURCE_COMMIT" "$TOOLS_FINGERPRINT" | sha256sum | cut -c1-32)"
-              TOOLCHAIN_TAG="${TOOLCHAIN_BASE_TAG}-${TOOLCHAIN_CACHE_KEY}"
-              TOKEN="$(curl --fail --silent --show-error --user "${GHCR_USER}:${GHCR_PASSWORD}" \
-                "https://ghcr.io/token?scope=repository:${GHCR_OWNER}/toolchain:pull" | jq -r '.token // .access_token // empty')"
-              if [ -z "$TOKEN" ]; then
-                echo "Unable to obtain a GHCR pull token for the target toolchain image." >&2
-                exit 1
-              fi
-              STATUS="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
-                --header "Authorization: Bearer $TOKEN" \
-                --header 'Accept: application/vnd.oci.image.index.v1+json, application/vnd.docker.distribution.manifest.list.v2+json, application/vnd.oci.image.manifest.v1+json, application/vnd.docker.distribution.manifest.v2+json' \
-                "https://ghcr.io/v2/${GHCR_OWNER}/toolchain/manifests/${TOOLCHAIN_TAG}")"
-
-              case "$STATUS" in
-                200) CONTAINER_TAG="$TOOLCHAIN_TAG" ;;
-                404)
+              TOOLCHAIN_TAG="$TOOLCHAIN_BASE_TAG-$TOOLCHAIN_FINGERPRINT"
+              set +e
+              python3 .github/scripts/fingerprint.py ghcr-check                 --owner "$GHCR_OWNER" --image toolchain --tag "$TOOLCHAIN_TAG"                 --label "io.abu9.actions-wrt.toolchain-fingerprint=$TOOLCHAIN_FINGERPRINT"
+              rc=$?
+              set -e
+              case "$rc" in
+                0) CONTAINER_TAG="$TOOLCHAIN_TAG" ;;
+                1)
                   echo "Fingerprint-matched target toolchain image not found; falling back to tools image."
                   CONTAINER_NAME=tools
                   ;;
-                *)
-                  echo "GHCR target toolchain manifest check failed (HTTP $STATUS)." >&2
-                  exit 1
-                  ;;
+                *) echo "GHCR target toolchain fingerprint verification failed." >&2; exit "$rc" ;;
               esac
             fi
           fi

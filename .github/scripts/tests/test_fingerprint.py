@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build-free regression tests for toolchain-fingerprint.py."""
+"""Build-free regression tests for fingerprint.py."""
 
 from __future__ import annotations
 
@@ -143,7 +143,7 @@ class ToolchainFingerprintTests(unittest.TestCase):
         )
 
     def fingerprint(self, tools_fingerprint: str = "a" * 64) -> str:
-        return FINGERPRINT_MODULE.compute_fingerprint(
+        return FINGERPRINT_MODULE.compute_toolchain_fingerprint(
             source_dir=self.source,
             local_repo_dir=self.local,
             source_repo="immortalwrt/immortalwrt",
@@ -237,6 +237,23 @@ class ToolchainFingerprintTests(unittest.TestCase):
             "@@ -1 +1 @@\n-old\n+changed\n",
         )
         self.assertNotEqual(self.fingerprint(), baseline)
+
+
+
+class HostToolsFingerprintTests(unittest.TestCase):
+    def test_unrelated_package_file_does_not_change_host_tools_fingerprint(self):
+        with tempfile.TemporaryDirectory(prefix="host-tools-fingerprint-") as d:
+            root=Path(d); source=root/"openwrt"; local=root/"actions-wrt"; source.mkdir(); local.mkdir()
+            for rel in ["Makefile","rules.mk","Config.in","include/a","tools/a","toolchain/a","scripts/a","config/a","package/foo/Makefile","target/x/Config.in"]:
+                p=source/rel; p.parent.mkdir(parents=True,exist_ok=True); p.write_text(rel,encoding="utf-8")
+            (local/".github/workflows").mkdir(parents=True); (local/".github/dockerfiles").mkdir(parents=True)
+            (local/".github/workflows/reusable_build_tools.yml").write_text("container: ghcr.io/openwrt/buildbot/buildworker-v3.11.8:v28\n",encoding="utf-8")
+            (local/".github/dockerfiles/Dockerfile.tools").write_text("FROM ghcr.io/openwrt/buildbot/buildworker-v3.11.8:v28\n",encoding="utf-8")
+            subprocess.run(["git","init","-q",str(source)],check=True); subprocess.run(["git","-C",str(source),"config","user.email","test@example.invalid"],check=True); subprocess.run(["git","-C",str(source),"config","user.name","Fingerprint Test"],check=True); subprocess.run(["git","-C",str(source),"add","-A"],check=True); subprocess.run(["git","-C",str(source),"commit","-qm","fixture"],check=True)
+            a,_=FINGERPRINT_MODULE.compute_tools_fingerprint(source,local,"test/repo","main")
+            (source/"package/foo/Makefile").write_text("changed",encoding="utf-8")
+            b,_=FINGERPRINT_MODULE.compute_tools_fingerprint(source,local,"test/repo","main")
+            self.assertEqual(a,b)
 
 
 if __name__ == "__main__":
