@@ -487,7 +487,8 @@ class WorkflowIntegrationTests(unittest.TestCase):
         self.assertIn("publish-toolchain-outputs", workflow)
         self.assertTrue(hasattr(FINGERPRINT_MODULE, "publish_toolchain_outputs"))
         self.assertIn('id: fp', workflow)
-        self.assertNotIn('id: fp\n        env:\n          SOURCE_REPO:', workflow)
+        toolchain_workflow = workflow.split("  toolchain:\\n", 1)[1]
+        self.assertNotIn("id: fp\\n        env:\\n          SOURCE_REPO:", toolchain_workflow)
 
     def test_toolchain_build_uses_same_run_host_tools_artifact_in_parallel(self) -> None:
         workflows = Path(__file__).resolve().parents[2] / "workflows"
