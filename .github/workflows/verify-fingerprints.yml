@@ -1,0 +1,126 @@
+name: Build-free fingerprint verification
+
+on:
+  workflow_dispatch:
+    inputs:
+      tools_image:
+        description: "Existing GHCR Host Tools image name (without ghcr.io/owner/)"
+        required: true
+        type: string
+      tools_tag:
+        description: "Existing Host Tools image tag"
+        required: true
+        type: string
+      tools_fingerprint:
+        description: "Expected full Host Tools fingerprint"
+        required: true
+        type: string
+      toolchain_image:
+        description: "Existing GHCR Toolchain image name (without ghcr.io/owner/)"
+        required: true
+        type: string
+      toolchain_tag:
+        description: "Existing Toolchain image tag"
+        required: true
+        type: string
+      toolchain_fingerprint:
+        description: "Expected full Toolchain fingerprint"
+        required: true
+        type: string
+      source_commit:
+        description: "OpenWrt source commit for the Host Tools source-commit label"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  packages: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7.0.1
+
+      - name: Validate workflow YAML syntax
+        shell: bash
+        run: |
+          set -euo pipefail
+          ruby -e 'require "yaml"; Dir[".github/workflows/*.{yml,yaml}"].sort.each { |f| YAML.load_file(f, aliases: true); puts "YAML OK: #{f}" }'
+
+      - name: Validate Python fingerprint implementation
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile .github/scripts/fingerprint.py
+          python3 -m unittest discover \
+            -s .github/scripts/tests \
+            -p 'test_fingerprint.py' \
+            -v
+
+      - name: Validate workflow references and local ownership
+        shell: bash
+        run: |
+          set -euo pipefail
+          test ! -e .github/scripts/tools-fingerprint.py
+          test ! -e .github/scripts/toolchain-fingerprint.py
+          test ! -e .github/scripts/ghcr-check-fingerprint.sh
+          test ! -e .github/workflows/reusable_tools_fingerprint.yml
+          test ! -e .github/workflows/reusable_toolchain_fingerprint.yml
+          if grep -RInE 'actions-shared-workflows|abu9/actions-shared-workflows' .github; then
+            echo "Unexpected shared-workflows runtime reference found." >&2
+            exit 1
+          fi
+          test -f .github/scripts/fingerprint.py
+          test -f .github/scripts/tests/test_fingerprint.py
+          test -f .github/workflows/fingerprint.yml
+
+      - name: Verify existing Host Tools image labels
+        env:
+          OWNER: ${{ github.repository_owner }}
+          IMAGE: ${{ inputs.tools_image }}
+          TAG: ${{ inputs.tools_tag }}
+          FINGERPRINT: ${{ inputs.tools_fingerprint }}
+          SOURCE_COMMIT: ${{ inputs.source_commit }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 .github/scripts/fingerprint.py ghcr-check \
+            --owner "$OWNER" \
+            --image "$IMAGE" \
+            --tag "$TAG" \
+            --label "io.abu9.actions-wrt.tools-fingerprint=$FINGERPRINT" \
+            --label "io.abu9.actions-wrt.tools-source-commit=$SOURCE_COMMIT" \
+            --label "io.abu9.actions-wrt.tools-source-repository=immortalwrt/immortalwrt"
+
+      - name: Verify existing Toolchain image labels
+        env:
+          OWNER: ${{ github.repository_owner }}
+          IMAGE: ${{ inputs.toolchain_image }}
+          TAG: ${{ inputs.toolchain_tag }}
+          TOOLCHAIN_FINGERPRINT: ${{ inputs.toolchain_fingerprint }}
+          TOOLS_FINGERPRINT: ${{ inputs.tools_fingerprint }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 .github/scripts/fingerprint.py ghcr-check \
+            --owner "$OWNER" \
+            --image "$IMAGE" \
+            --tag "$TAG" \
+            --label "io.abu9.actions-wrt.toolchain-fingerprint=$TOOLCHAIN_FINGERPRINT" \
+            --label "io.abu9.actions-wrt.tools-fingerprint=$TOOLS_FINGERPRINT"
+
+      - name: Verification summary
+        shell: bash
+        run: |
+          {
+            echo "## Build-free fingerprint verification"
+            echo ""
+            echo "- Python unit tests: passed"
+            echo "- Workflow YAML parsing: passed"
+            echo "- Local ownership/reference checks: passed"
+            echo "- Existing Host Tools GHCR labels: passed"
+            echo "- Existing Toolchain GHCR labels: passed"
+            echo "- No build job was started by this workflow."
+          } >> "$GITHUB_STEP_SUMMARY"

@@ -4,9 +4,12 @@
 from __future__ import annotations
 
 import importlib.util
+import json
+import os
 import subprocess
 import tempfile
 import unittest
+from unittest import mock
 from pathlib import Path
 
 SCRIPT = Path(__file__).resolve().parents[1] / "fingerprint.py"
@@ -254,6 +257,72 @@ class HostToolsFingerprintTests(unittest.TestCase):
             (source/"package/foo/Makefile").write_text("changed",encoding="utf-8")
             b,_=FINGERPRINT_MODULE.compute_tools_fingerprint(source,local,"test/repo","main")
             self.assertEqual(a,b)
+
+
+class GHCRCheckTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.old_actor = os.environ.get("GITHUB_ACTOR")
+        self.old_token = os.environ.get("GITHUB_TOKEN")
+        os.environ["GITHUB_ACTOR"] = "test-actor"
+        os.environ["GITHUB_TOKEN"] = "test-token"
+
+    def tearDown(self) -> None:
+        if self.old_actor is None:
+            os.environ.pop("GITHUB_ACTOR", None)
+        else:
+            os.environ["GITHUB_ACTOR"] = self.old_actor
+        if self.old_token is None:
+            os.environ.pop("GITHUB_TOKEN", None)
+        else:
+            os.environ["GITHUB_TOKEN"] = self.old_token
+
+    @staticmethod
+    def response(payload: dict):
+        class Response:
+            def __enter__(self):
+                return self
+            def __exit__(self, exc_type, exc, tb):
+                return False
+            def read(self):
+                return json.dumps(payload).encode("utf-8")
+        return Response()
+
+    def test_matching_labels_pass(self) -> None:
+        digest = "sha256:" + "a" * 64
+        responses = [
+            self.response({"token": "pull-token"}),
+            self.response({"config": {"digest": digest}}),
+            self.response({"config": {"Labels": {"fingerprint": "abc", "dependency": "def"}}}),
+        ]
+        with mock.patch.object(FINGERPRINT_MODULE, "urlopen", side_effect=responses):
+            self.assertTrue(
+                FINGERPRINT_MODULE.ghcr_check(
+                    "owner", "image", "tag",
+                    {"fingerprint": "abc", "dependency": "def"},
+                )
+            )
+
+    def test_label_mismatch_fails(self) -> None:
+        digest = "sha256:" + "b" * 64
+        responses = [
+            self.response({"token": "pull-token"}),
+            self.response({"config": {"digest": digest}}),
+            self.response({"config": {"Labels": {"fingerprint": "wrong"}}}),
+        ]
+        with mock.patch.object(FINGERPRINT_MODULE, "urlopen", side_effect=responses):
+            self.assertFalse(
+                FINGERPRINT_MODULE.ghcr_check(
+                    "owner", "image", "tag", {"fingerprint": "expected"}
+                )
+            )
+
+    def test_invalid_inputs_fail_before_network(self) -> None:
+        with mock.patch.object(FINGERPRINT_MODULE, "urlopen") as mocked:
+            with self.assertRaises(ValueError):
+                FINGERPRINT_MODULE.ghcr_check(
+                    "OWNER/invalid", "image", "tag", {"fingerprint": "abc"}
+                )
+            mocked.assert_not_called()
 
 
 if __name__ == "__main__":
