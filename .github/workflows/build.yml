@@ -130,12 +130,11 @@ jobs:
           AUTHOR: ${{ needs.determine_targets.outputs.author }}
           REPO_BRANCH: ${{ needs.determine_targets.outputs.repo_branch }}
           EXPECTED_FINGERPRINT: ${{ needs.tools_fingerprint.outputs.tools_fingerprint }}
-          EXPECTED_SOURCE_COMMIT: ${{ needs.tools_fingerprint.outputs.source_commit }}
           SOURCE_REPOSITORY: ${{ needs.determine_targets.outputs.repo_url }}
         run: |
           set +e
           TAG="$AUTHOR"_"$REPO_BRANCH-$EXPECTED_FINGERPRINT"
-          python3 .github/scripts/fingerprint.py ghcr-check --owner "$OWNER" --image tools --tag "$TAG"             --label "io.abu9.actions-wrt.tools-fingerprint=$EXPECTED_FINGERPRINT"             --label "io.abu9.actions-wrt.tools-source-commit=$EXPECTED_SOURCE_COMMIT"             --label "io.abu9.actions-wrt.tools-source-repository=$SOURCE_REPOSITORY"
+          python3 .github/scripts/fingerprint.py ghcr-check --owner "$OWNER" --image tools --tag "$TAG"             --label "io.abu9.actions-wrt.tools-fingerprint=$EXPECTED_FINGERPRINT"             --label "io.abu9.actions-wrt.tools-source-repository=$SOURCE_REPOSITORY"
           rc=$?
           set -e
           if [ "$rc" -eq 0 ]; then
@@ -184,7 +183,6 @@ jobs:
           GITHUB_ACTOR: ${{ github.actor }}
           OWNER: ${{ github.repository_owner }}
           EXPECTED_FINGERPRINT: ${{ needs.tools_fingerprint.outputs.tools_fingerprint }}
-          EXPECTED_SOURCE_COMMIT: ${{ needs.tools_fingerprint.outputs.source_commit }}
           SOURCE_REPOSITORY: ${{ needs.determine_targets.outputs.repo_url }}
           CHECKED_IMAGE: ${{ needs.check_tools_container.outputs.checked_image }}
           TOOLS_REQUIRED: ${{ needs.check_tools_container.outputs.tools_required }}
@@ -193,7 +191,7 @@ jobs:
           set -euo pipefail
           if [ "$TOOLS_REQUIRED" = "true" ]; then test "$BUILD_RESULT" = success; fi
           TAG="$(printf '%s' "$CHECKED_IMAGE" | cut -d: -f2-)"
-          python3 .github/scripts/fingerprint.py ghcr-check --owner "$OWNER" --image tools --tag "$TAG"             --label "io.abu9.actions-wrt.tools-fingerprint=$EXPECTED_FINGERPRINT"             --label "io.abu9.actions-wrt.tools-source-commit=$EXPECTED_SOURCE_COMMIT"             --label "io.abu9.actions-wrt.tools-source-repository=$SOURCE_REPOSITORY"
+          python3 .github/scripts/fingerprint.py ghcr-check --owner "$OWNER" --image tools --tag "$TAG"             --label "io.abu9.actions-wrt.tools-fingerprint=$EXPECTED_FINGERPRINT"             --label "io.abu9.actions-wrt.tools-source-repository=$SOURCE_REPOSITORY"
 
   toolchain_fingerprint:
     name: Calculate target Toolchain fingerprint
@@ -236,7 +234,6 @@ jobs:
           REPO_BRANCH: ${{ needs.determine_targets.outputs.repo_branch }}
           FINGERPRINT: ${{ needs.toolchain_fingerprint.outputs.toolchain_fingerprint }}
           TOOLS_FINGERPRINT: ${{ needs.tools_fingerprint.outputs.tools_fingerprint }}
-          SOURCE_COMMIT: ${{ needs.tools_fingerprint.outputs.source_commit }}
         shell: bash
         run: |
           set -euo pipefail
@@ -248,7 +245,7 @@ jobs:
             --tag "$TAG" \
             --label "io.abu9.actions-wrt.toolchain-fingerprint=$FINGERPRINT" \
             --label "io.abu9.actions-wrt.tools-fingerprint=$TOOLS_FINGERPRINT" \
-            --label "io.abu9.actions-wrt.tools-source-commit=$SOURCE_COMMIT"
+
           rc=$?
           set -e
           if [ "$rc" -eq 0 ]; then

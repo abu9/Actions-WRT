@@ -54,7 +54,6 @@ jobs:
           AUTHOR: ${{ needs.determine_targets.outputs.author }}
           REPO_BRANCH: ${{ needs.determine_targets.outputs.repo_branch }}
           FINGERPRINT: ${{ needs.tools_fingerprint.outputs.tools_fingerprint }}
-          SOURCE_COMMIT: ${{ needs.tools_fingerprint.outputs.source_commit }}
           SOURCE_REPOSITORY: ${{ needs.determine_targets.outputs.repo_url }}
         shell: bash
         run: |
@@ -68,7 +67,6 @@ jobs:
             --image tools \
             --tag "$TAG" \
             --label "io.abu9.actions-wrt.tools-fingerprint=$FINGERPRINT" \
-            --label "io.abu9.actions-wrt.tools-source-commit=$SOURCE_COMMIT" \
             --label "io.abu9.actions-wrt.tools-source-repository=$SOURCE_REPOSITORY"
           rc=$?
           set -e
@@ -120,7 +118,6 @@ jobs:
           REPO_BRANCH: ${{ needs.determine_targets.outputs.repo_branch }}
           TOOLCHAIN_FINGERPRINT: ${{ needs.toolchain_fingerprint.outputs.toolchain_fingerprint }}
           TOOLS_FINGERPRINT: ${{ needs.tools_fingerprint.outputs.tools_fingerprint }}
-          SOURCE_COMMIT: ${{ needs.tools_fingerprint.outputs.source_commit }}
         shell: bash
         run: |
           set -euo pipefail
@@ -132,7 +129,6 @@ jobs:
             --tag "$TAG" \
             --label "io.abu9.actions-wrt.toolchain-fingerprint=$TOOLCHAIN_FINGERPRINT" \
             --label "io.abu9.actions-wrt.tools-fingerprint=$TOOLS_FINGERPRINT" \
-            --label "io.abu9.actions-wrt.tools-source-commit=$SOURCE_COMMIT"
           rc=$?
           set -e
           if [ "$rc" -eq 0 ]; then

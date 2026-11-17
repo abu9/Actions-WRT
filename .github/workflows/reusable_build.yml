@@ -153,7 +153,6 @@ jobs:
           REPO_BRANCH: ${{ inputs.repo_branch }}
           REQUESTED_CONTAINER: ${{ inputs.container_name }}
           TOOLS_FINGERPRINT: ${{ inputs.tools_fingerprint }}
-          SOURCE_COMMIT: ${{ inputs.repo_commit }}
           TOOLCHAIN_FINGERPRINT: ${{ inputs.toolchain_fingerprint }}
         shell: bash
         run: |
@@ -166,8 +165,8 @@ jobs:
           CCACHE_TAG="$CONTAINER_TAG"
 
           if [ "$CONTAINER_NAME" = "toolchain" ]; then
-            if [ -z "$TOOLCHAIN_FINGERPRINT" ] || [ -z "$SOURCE_COMMIT" ]; then
-              echo "No target Toolchain fingerprint or fixed source commit supplied; refusing to reuse a target toolchain image."
+            if [ -z "$TOOLCHAIN_FINGERPRINT" ]; then
+              echo "No target Toolchain fingerprint supplied; refusing to reuse a target toolchain image."
               CONTAINER_NAME=tools
             else
               TOOLCHAIN_BASE_TAG="$TARGET-$SUBTARGET-$CONTAINER_TAG"
@@ -180,7 +179,6 @@ jobs:
                 --tag "$TOOLCHAIN_TAG" \
                 --label "io.abu9.actions-wrt.toolchain-fingerprint=$TOOLCHAIN_FINGERPRINT" \
                 --label "io.abu9.actions-wrt.tools-fingerprint=$TOOLS_FINGERPRINT" \
-                --label "io.abu9.actions-wrt.tools-source-commit=$SOURCE_COMMIT"
               rc=$?
               set -e
               case "$rc" in

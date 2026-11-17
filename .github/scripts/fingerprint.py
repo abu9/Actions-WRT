@@ -63,8 +63,12 @@ def is_host_tool_input(path: str) -> bool:
         return False
     if path in {"Makefile", "rules.mk", "Config.in"}:
         return True
-    return path.startswith(
-        ("include/", "tools/", "toolchain/", "scripts/", "config/")
+    if path.startswith(("include/", "tools/", "scripts/", "config/")):
+        return True
+    # Host Tools run make defconfig, so retain toolchain Kconfig definitions.
+    # Toolchain component implementation files are not built by make tools/install.
+    return path == "toolchain/Config.in" or (
+        path.startswith("toolchain/") and path.endswith("/Config.in")
     )
 def compute_tools_fingerprint(source_dir: Path,local_repo_dir: Path,source_repo: str,source_ref: str) -> tuple[str,dict]:
     source_dir=source_dir.resolve(); local_repo_dir=local_repo_dir.resolve()

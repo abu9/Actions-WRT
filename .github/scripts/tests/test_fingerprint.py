@@ -268,6 +268,44 @@ class WorkflowIntegrationTests(unittest.TestCase):
             self.assertNotIn("openwrt-21.02", source)
             self.assertNotIn("hanwckf/immortalwrt-mt798x", source)
 
+    def test_build_workflows_match_fingerprint_recipes(self) -> None:
+        root = Path(__file__).resolve().parents[2]
+        tools_workflow = (root / "workflows" / "reusable_build_tools.yml").read_text(
+            encoding="utf-8"
+        )
+        for setting in (
+            "CONFIG_DEVEL=y",
+            "CONFIG_AUTOREMOVE=y",
+            "CONFIG_CCACHE=y",
+            "CONFIG_BUILD_ALL_HOST_TOOLS=y",
+        ):
+            self.assertIn(f"echo {setting} >> .config", tools_workflow)
+            self.assertIn(setting, FINGERPRINT_MODULE.HOST_TOOLS_CONFIG)
+        self.assertIn("make defconfig", tools_workflow)
+        self.assertIn("make tools/install", tools_workflow)
+        self.assertIn("make-defconfig", FINGERPRINT_MODULE.HOST_TOOLS_BUILD_RECIPE)
+        self.assertIn("make-tools-install", FINGERPRINT_MODULE.HOST_TOOLS_BUILD_RECIPE)
+
+        reusable = (root / "workflows" / "reusable_build.yml").read_text(
+            encoding="utf-8"
+        )
+        for command in (
+            "make defconfig",
+            "make tools/install",
+            "make toolchain/install",
+            "make target/toolchain/compile",
+            "./scripts/ext-tools.sh --refresh",
+        ):
+            self.assertIn(command, reusable)
+        for recipe_command in (
+            "make-defconfig",
+            "make-tools-install",
+            "make-toolchain-install",
+            "make-target-toolchain-compile",
+            "./scripts/ext-tools.sh --refresh",
+        ):
+            self.assertIn(recipe_command, FINGERPRINT_MODULE.TOOLCHAIN_BUILD_RECIPE)
+
     def test_prebuilt_tools_prepare_uses_upstream_refresh_script(self) -> None:
         workflow = (
             Path(__file__).resolve().parents[2]
@@ -312,17 +350,22 @@ class WorkflowIntegrationTests(unittest.TestCase):
             self.assertIn("GITHUB_ACTOR: ${{ github.actor }}", block)
             self.assertIn("GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}", block)
 
-    def test_toolchain_image_reuse_checks_source_commit_everywhere(self) -> None:
+    def test_ghcr_reuse_is_content_addressed_not_source_commit_addressed(self) -> None:
         root = Path(__file__).resolve().parents[2] / "workflows"
 
+        for name in ("build.yml", "verify-fingerprints.yml", "reusable_build.yml"):
+            workflow = (root / name).read_text(encoding="utf-8")
+            self.assertNotIn("io.abu9.actions-wrt.tools-source-commit=", workflow)
+            self.assertNotIn(
+                "SOURCE_COMMIT: ${{ needs.tools_fingerprint.outputs.source_commit }}",
+                workflow,
+            )
+
         build_workflow = (root / "build.yml").read_text(encoding="utf-8")
-        self.assertIn("SOURCE_COMMIT: ${{ needs.tools_fingerprint.outputs.source_commit }}", build_workflow)
-        self.assertIn('io.abu9.actions-wrt.tools-source-commit=$SOURCE_COMMIT', build_workflow)
-
-        verifier = (root / "verify-fingerprints.yml").read_text(encoding="utf-8")
-        self.assertIn("SOURCE_COMMIT: ${{ needs.tools_fingerprint.outputs.source_commit }}", verifier)
-        self.assertIn('io.abu9.actions-wrt.tools-source-commit=$SOURCE_COMMIT', verifier)
-
+        self.assertIn(
+            'io.abu9.actions-wrt.tools-source-repository=$SOURCE_REPOSITORY',
+            build_workflow,
+        )
         reusable = (root / "reusable_build.yml").read_text(encoding="utf-8")
         workflow_lines = reusable.splitlines()
         start = workflow_lines.index("      - name: Determine container name")
@@ -330,7 +373,7 @@ class WorkflowIntegrationTests(unittest.TestCase):
         block = "\n".join(workflow_lines[start:end])
         self.assertIn("GITHUB_ACTOR: ${{ github.actor }}", block)
         self.assertIn("GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}", block)
-        self.assertIn('io.abu9.actions-wrt.tools-source-commit=$SOURCE_COMMIT', block)
+        self.assertNotIn("SOURCE_COMMIT", block)
         self.assertNotIn("GHCR_USER:", block)
         self.assertNotIn("GHCR_PASSWORD:", block)
         self.assertNotIn("tools_image_fingerprint", reusable)
@@ -340,7 +383,7 @@ class HostToolsFingerprintTests(unittest.TestCase):
     def test_unrelated_package_and_target_files_do_not_change_host_tools_fingerprint(self):
         with tempfile.TemporaryDirectory(prefix="host-tools-fingerprint-") as d:
             root=Path(d); source=root/"openwrt"; local=root/"actions-wrt"; source.mkdir(); local.mkdir()
-            for rel in ["Makefile","rules.mk","Config.in","include/a","tools/a","toolchain/a","scripts/a","scripts/ext-tools.sh","config/a","package/foo/Makefile","target/x/Config.in"]:
+            for rel in ["Makefile","rules.mk","Config.in","include/a","tools/a","toolchain/Config.in","toolchain/gcc/Config.in","toolchain/gcc/Makefile","scripts/a","scripts/ext-tools.sh","config/a","package/foo/Makefile","target/x/Config.in"]:
                 p=source/rel; p.parent.mkdir(parents=True,exist_ok=True); p.write_text(rel,encoding="utf-8")
             (local/".github/workflows").mkdir(parents=True); (local/".github/dockerfiles").mkdir(parents=True)
             (local/".github/workflows/reusable_build_tools.yml").write_text("container: ghcr.io/openwrt/buildbot/buildworker-v3.11.8:v23\n",encoding="utf-8")
@@ -349,10 +392,25 @@ class HostToolsFingerprintTests(unittest.TestCase):
             baseline,manifest=FINGERPRINT_MODULE.compute_tools_fingerprint(source,local,"test/repo","main")
             self.assertFalse(any(item["path"] == "scripts/ext-tools.sh" for item in manifest["files"]))
             (source/"scripts/ext-tools.sh").write_text("changed refresh implementation",encoding="utf-8")
+            (source/"toolchain/gcc/Makefile").write_text("changed toolchain implementation",encoding="utf-8")
             (source/"package/foo/Makefile").write_text("changed package",encoding="utf-8")
             (source/"target/x/Config.in").write_text("changed target",encoding="utf-8")
             updated,_=FINGERPRINT_MODULE.compute_tools_fingerprint(source,local,"test/repo","main")
             self.assertEqual(baseline,updated)
+
+    def test_toolchain_kconfig_changes_invalidate_host_tools_fingerprint(self):
+        with tempfile.TemporaryDirectory(prefix="host-tools-kconfig-") as d:
+            root=Path(d); source=root/"openwrt"; local=root/"actions-wrt"; source.mkdir(); local.mkdir()
+            for rel in ["Makefile","rules.mk","Config.in","include/a","tools/a","toolchain/Config.in","toolchain/gcc/Config.in","scripts/a","config/a"]:
+                p=source/rel; p.parent.mkdir(parents=True,exist_ok=True); p.write_text(rel,encoding="utf-8")
+            (local/".github/workflows").mkdir(parents=True); (local/".github/dockerfiles").mkdir(parents=True)
+            (local/".github/workflows/reusable_build_tools.yml").write_text("container: ghcr.io/openwrt/buildbot/buildworker-v3.11.8:v23\\n",encoding="utf-8")
+            (local/".github/dockerfiles/Dockerfile.tools").write_text("FROM ghcr.io/openwrt/buildbot/buildworker-v3.11.8:v23\\n",encoding="utf-8")
+            subprocess.run(["git","init","-q",str(source)],check=True); subprocess.run(["git","-C",str(source),"config","user.email","test@example.invalid"],check=True); subprocess.run(["git","-C",str(source),"config","user.name","Fingerprint Test"],check=True); subprocess.run(["git","-C",str(source),"add","-A"],check=True); subprocess.run(["git","-C",str(source),"commit","-qm","fixture"],check=True)
+            baseline,_=FINGERPRINT_MODULE.compute_tools_fingerprint(source,local,"test/repo","main")
+            (source/"toolchain/gcc/Config.in").write_text("changed Kconfig definition",encoding="utf-8")
+            updated,_=FINGERPRINT_MODULE.compute_tools_fingerprint(source,local,"test/repo","main")
+            self.assertNotEqual(baseline,updated)
 
 
 class GHCRCheckTests(unittest.TestCase):
