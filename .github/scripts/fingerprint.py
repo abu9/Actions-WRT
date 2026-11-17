@@ -54,8 +54,8 @@ def ghcr_check(owner: str,image: str,tag: str,labels: dict[str,str]) -> bool:
     config=get(f"blobs/{digest}","application/json")
     return config is not None and all((config.get("config",{}).get("Labels") or {}).get(k)==v for k,v in labels.items())
 
-HOST_TOOLS_BUILD_RECIPE=("host-tools-v1; config:DEVEL,AUTOREMOVE,CCACHE,BUILD_ALL_HOST_TOOLS; commands:make-defconfig,make-tools-install")
-HOST_TOOLS_CONFIG="CONFIG_DEVEL=y\nCONFIG_AUTOREMOVE=y\nCONFIG_CCACHE=y\nCONFIG_BUILD_ALL_HOST_TOOLS=y\n"
+HOST_TOOLS_BUILD_RECIPE=("host-tools-v2; config:DEVEL,AUTOREMOVE,CCACHE; commands:make-defconfig,make-tools-install")
+HOST_TOOLS_CONFIG="CONFIG_DEVEL=y\nCONFIG_AUTOREMOVE=y\nCONFIG_CCACHE=y\n"
 HOST_TOOLS_BUILD_ENVIRONMENT={"runner":"ubuntu-24.04","platform":"linux/amd64","buildworker_image":"ghcr.io/openwrt/buildbot/buildworker-v3.11.8:v23"}
 RUNTIME_DOCKERFILE=".github/dockerfiles/Dockerfile.tools"
 def is_host_tool_input(path: str) -> bool:
