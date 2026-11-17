@@ -297,10 +297,11 @@ class WorkflowIntegrationTests(unittest.TestCase):
             "CONFIG_DEVEL=y",
             "CONFIG_AUTOREMOVE=y",
             "CONFIG_CCACHE=y",
-            "CONFIG_BUILD_ALL_HOST_TOOLS=y",
         ):
             self.assertIn(f"echo {setting} >> .config", tools_workflow)
             self.assertIn(setting, FINGERPRINT_MODULE.HOST_TOOLS_CONFIG)
+        self.assertNotIn("CONFIG_BUILD_ALL_HOST_TOOLS", tools_workflow)
+        self.assertNotIn("CONFIG_BUILD_ALL_HOST_TOOLS", FINGERPRINT_MODULE.HOST_TOOLS_CONFIG)
         self.assertIn("make defconfig", tools_workflow)
         self.assertIn("make tools/install", tools_workflow)
         self.assertIn("make-defconfig", FINGERPRINT_MODULE.HOST_TOOLS_BUILD_RECIPE)
