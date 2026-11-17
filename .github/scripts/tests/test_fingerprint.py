@@ -418,6 +418,24 @@ class WorkflowIntegrationTests(unittest.TestCase):
 
 
 
+    def test_toolchain_fingerprint_handoff_separates_buildbot_and_runner_outputs(self) -> None:
+        workflow = (
+            Path(__file__).resolve().parents[2]
+            / "workflows"
+            / "fingerprint.yml"
+        ).read_text(encoding="utf-8")
+        self.assertIn(
+            'run: install -o buildbot -g buildbot -m 600 /dev/null "$RUNNER_TEMP/toolchain-fingerprint.outputs"',
+            workflow,
+        )
+        self.assertIn('shell: su buildbot -c "sh -e {0}"', workflow)
+        self.assertIn('--output-file "$FINGERPRINT_OUTPUT_FILE"', workflow)
+        self.assertIn("Validate and publish Toolchain fingerprint outputs", workflow)
+        self.assertIn('entries[key] != expected_commit', workflow)
+        self.assertIn('entries["toolchain_cache_key"] != fingerprint[:32]', workflow)
+        self.assertIn('id: fp', workflow)
+        self.assertNotIn('id: fp\n        env:\n          SOURCE_REPO:', workflow)
+
     def test_toolchain_build_uses_same_run_host_tools_artifact_in_parallel(self) -> None:
         workflows = Path(__file__).resolve().parents[2] / "workflows"
         push = (workflows / "push-containers.yml").read_text(encoding="utf-8")
