@@ -9,8 +9,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
-SCRIPT = Path(__file__).resolve().parents[1] / "toolchain-fingerprint.py"
-SPEC = importlib.util.spec_from_file_location("toolchain_fingerprint", SCRIPT)
+SCRIPT = Path(__file__).resolve().parents[1] / "fingerprint.py"
+SPEC = importlib.util.spec_from_file_location("fingerprint", SCRIPT)
 assert SPEC is not None and SPEC.loader is not None
 FINGERPRINT_MODULE = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(FINGERPRINT_MODULE)

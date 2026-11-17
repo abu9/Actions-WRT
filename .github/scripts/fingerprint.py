@@ -73,7 +73,7 @@ TOOLCHAIN_BUILD_RECIPE = (
     "make-target-toolchain-compile;"
     "host-tools:prebuilt-image; ext-tools-refresh"
 )
-BUILD_ENVIRONMENT = {
+TOOLCHAIN_BUILD_ENVIRONMENT = {
     "runner": "ubuntu-24.04",
     "platform": "linux/amd64",
     "host_tools_image": "identified-by-host-tools-fingerprint",
