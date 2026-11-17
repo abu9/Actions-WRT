@@ -170,7 +170,7 @@ class ToolchainFingerprintTests(unittest.TestCase):
             "DEFAULT_PROFILE:=openwrt_two\n",
         )
         self.write_config("openwrt_two")
-        fingerprint, manifest = FINGERPRINT_MODULE.compute_fingerprint(
+        fingerprint, manifest = FINGERPRINT_MODULE.compute_toolchain_fingerprint(
             source_dir=self.source,
             local_repo_dir=self.local,
             source_repo="immortalwrt/immortalwrt",
@@ -216,7 +216,7 @@ class ToolchainFingerprintTests(unittest.TestCase):
 
     def test_source_ref_is_metadata_only(self) -> None:
         baseline = self.fingerprint()
-        fingerprint, manifest = FINGERPRINT_MODULE.compute_fingerprint(
+        fingerprint, manifest = FINGERPRINT_MODULE.compute_toolchain_fingerprint(
             source_dir=self.source,
             local_repo_dir=self.local,
             source_repo="immortalwrt/immortalwrt",
