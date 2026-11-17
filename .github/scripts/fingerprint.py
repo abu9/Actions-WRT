@@ -19,6 +19,38 @@ def write_outputs(values: dict[str,str], output_file: Path | None = None) -> Non
         with path.open("a", encoding="utf-8") as f:
             for key, value in values.items():
                 f.write(f"{key}={value}\n")
+def publish_toolchain_outputs(input_file: Path, expected_source_commit: str, github_output: Path) -> None:
+    """Validate buildbot's fingerprint handoff before publishing Runner outputs."""
+    required = {"toolchain_fingerprint", "toolchain_cache_key", "source_commit"}
+    entries: dict[str, str] = {}
+    for line in input_file.read_text(encoding="utf-8").splitlines():
+        if "=" not in line:
+            raise ValueError("Invalid fingerprint output record")
+        key, value = line.split("=", 1)
+        if key not in required or key in entries or not value:
+            raise ValueError(f"Invalid or duplicate fingerprint output: {key}")
+        entries[key] = value
+
+    if set(entries) != required:
+        raise ValueError("Fingerprint output is incomplete")
+    fingerprint = entries["toolchain_fingerprint"]
+    if not re.fullmatch(r"[0-9a-f]{64}", fingerprint):
+        raise ValueError("Invalid Toolchain fingerprint format")
+    if entries["toolchain_cache_key"] != fingerprint[:32]:
+        raise ValueError("Toolchain cache key does not match fingerprint")
+    if not re.fullmatch(r"[0-9a-f]{40}", entries["source_commit"]):
+        raise ValueError("Invalid source commit format")
+    expected_source_commit = expected_source_commit.lower()
+    if not re.fullmatch(r"[0-9a-f]{40}", expected_source_commit):
+        raise ValueError("Expected source commit input is invalid")
+    if entries["source_commit"] != expected_source_commit:
+        raise ValueError("Fingerprint source commit does not match requested commit")
+
+    with github_output.open("a", encoding="utf-8") as output:
+        for key in sorted(required):
+            output.write(f"{key}={entries[key]}\\n")
+    input_file.unlink()
+
 def ghcr_check(owner: str,image: str,tag: str,labels: dict[str,str]) -> bool:
     if not re.fullmatch(r"[a-z0-9_.-]+", owner.lower()):
         raise ValueError("Invalid GHCR owner.")
@@ -435,12 +467,15 @@ def main():
     p=argparse.ArgumentParser(); s=p.add_subparsers(dest="command",required=True)
     q=s.add_parser("tools"); q.add_argument("--source-dir",required=True,type=Path); q.add_argument("--local-repo-dir",required=True,type=Path); q.add_argument("--source-repo",required=True); q.add_argument("--source-ref",required=True)
     q=s.add_parser("toolchain"); q.add_argument("--source-dir",required=True,type=Path); q.add_argument("--local-repo-dir",required=True,type=Path); q.add_argument("--source-repo",required=True); q.add_argument("--source-ref",required=True); q.add_argument("--target",required=True); q.add_argument("--subtarget",required=True); q.add_argument("--tools-fingerprint",required=True); q.add_argument("--output-file",type=Path,help="Write Actions outputs to this file instead of GITHUB_OUTPUT")
+    q=s.add_parser("publish-toolchain-outputs"); q.add_argument("--input-file",required=True,type=Path); q.add_argument("--expected-source-commit",required=True); q.add_argument("--github-output",required=True,type=Path)
     q=s.add_parser("ghcr-check"); q.add_argument("--owner",required=True); q.add_argument("--image",required=True); q.add_argument("--tag",required=True); q.add_argument("--label",action="append",default=[])
     a=p.parse_args()
     if a.command=="tools":
         f,_=compute_tools_fingerprint(a.source_dir,a.local_repo_dir,a.source_repo,a.source_ref); write_outputs({"tools_fingerprint":f,"source_commit":run_git(a.source_dir,"rev-parse","HEAD").decode().strip()}); print(f); return 0
     if a.command=="toolchain":
         f,_=compute_toolchain_fingerprint(a.source_dir,a.local_repo_dir,a.source_repo,a.source_ref,a.target,a.subtarget,a.tools_fingerprint); write_outputs({"toolchain_fingerprint":f,"toolchain_cache_key":f[:32],"source_commit":run_git(a.source_dir,"rev-parse","HEAD").decode().strip()}, a.output_file); print(f); return 0
+    if a.command=="publish-toolchain-outputs":
+        publish_toolchain_outputs(a.input_file,a.expected_source_commit,a.github_output); return 0
     labels={}; 
     for item in a.label:
         if "=" not in item: raise ValueError("Invalid label")
