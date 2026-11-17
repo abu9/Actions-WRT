@@ -245,19 +245,20 @@ class ToolchainFingerprintTests(unittest.TestCase):
 
 
 class HostToolsFingerprintTests(unittest.TestCase):
-    def test_unrelated_package_file_does_not_change_host_tools_fingerprint(self):
+    def test_unrelated_package_and_target_files_do_not_change_host_tools_fingerprint(self):
         with tempfile.TemporaryDirectory(prefix="host-tools-fingerprint-") as d:
             root=Path(d); source=root/"openwrt"; local=root/"actions-wrt"; source.mkdir(); local.mkdir()
             for rel in ["Makefile","rules.mk","Config.in","include/a","tools/a","toolchain/a","scripts/a","config/a","package/foo/Makefile","target/x/Config.in"]:
                 p=source/rel; p.parent.mkdir(parents=True,exist_ok=True); p.write_text(rel,encoding="utf-8")
             (local/".github/workflows").mkdir(parents=True); (local/".github/dockerfiles").mkdir(parents=True)
-            (local/".github/workflows/reusable_build_tools.yml").write_text("container: ghcr.io/openwrt/buildbot/buildworker-v3.11.8:v28\n",encoding="utf-8")
-            (local/".github/dockerfiles/Dockerfile.tools").write_text("FROM ghcr.io/openwrt/buildbot/buildworker-v3.11.8:v28\n",encoding="utf-8")
+            (local/".github/workflows/reusable_build_tools.yml").write_text("container: ghcr.io/openwrt/buildbot/buildworker-v3.11.8:v28\\n",encoding="utf-8")
+            (local/".github/dockerfiles/Dockerfile.tools").write_text("FROM ghcr.io/openwrt/buildbot/buildworker-v3.11.8:v28\\n",encoding="utf-8")
             subprocess.run(["git","init","-q",str(source)],check=True); subprocess.run(["git","-C",str(source),"config","user.email","test@example.invalid"],check=True); subprocess.run(["git","-C",str(source),"config","user.name","Fingerprint Test"],check=True); subprocess.run(["git","-C",str(source),"add","-A"],check=True); subprocess.run(["git","-C",str(source),"commit","-qm","fixture"],check=True)
-            a,_=FINGERPRINT_MODULE.compute_tools_fingerprint(source,local,"test/repo","main")
-            (source/"package/foo/Makefile").write_text("changed",encoding="utf-8")
-            b,_=FINGERPRINT_MODULE.compute_tools_fingerprint(source,local,"test/repo","main")
-            self.assertEqual(a,b)
+            baseline,_=FINGERPRINT_MODULE.compute_tools_fingerprint(source,local,"test/repo","main")
+            (source/"package/foo/Makefile").write_text("changed package",encoding="utf-8")
+            (source/"target/x/Config.in").write_text("changed target",encoding="utf-8")
+            updated,_=FINGERPRINT_MODULE.compute_tools_fingerprint(source,local,"test/repo","main")
+            self.assertEqual(baseline,updated)
 
 
 class GHCRCheckTests(unittest.TestCase):

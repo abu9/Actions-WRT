@@ -59,10 +59,11 @@ HOST_TOOLS_CONFIG="CONFIG_DEVEL=y\nCONFIG_AUTOREMOVE=y\nCONFIG_CCACHE=y\nCONFIG_
 HOST_TOOLS_BUILD_ENVIRONMENT={"runner":"ubuntu-24.04","platform":"linux/amd64","buildworker_image":"ghcr.io/openwrt/buildbot/buildworker-v3.11.8:v28"}
 RUNTIME_DOCKERFILE=".github/dockerfiles/Dockerfile.tools"
 def is_host_tool_input(path: str) -> bool:
-    if path in {"Makefile","rules.mk","Config.in"}: return True
-    if path.startswith(("include/","tools/","toolchain/","scripts/","config/")): return True
-    parts=PurePosixPath(path).parts
-    return bool(parts and parts[0] in {"package","target"} and PurePosixPath(path).name in {"Makefile","Config.in"})
+    if path in {"Makefile", "rules.mk", "Config.in"}:
+        return True
+    return path.startswith(
+        ("include/", "tools/", "toolchain/", "scripts/", "config/")
+    )
 def compute_tools_fingerprint(source_dir: Path,local_repo_dir: Path,source_repo: str,source_ref: str) -> tuple[str,dict]:
     source_dir=source_dir.resolve(); local_repo_dir=local_repo_dir.resolve()
     source_files=sorted(p for p in run_git(source_dir,"ls-files","-z").decode().split("\0") if p and is_host_tool_input(p))
