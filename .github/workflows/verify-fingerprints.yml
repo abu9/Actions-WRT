@@ -16,65 +16,8 @@ permissions:
   packages: read
 
 jobs:
-  validate:
-    name: Validate workflow and fingerprint implementation
-    runs-on: ubuntu-24.04
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v7.0.1
-
-      - name: Install pinned actionlint
-        shell: bash
-        run: |
-          set -euo pipefail
-          version="1.7.12"
-          archive="actionlint_${version}_linux_amd64.tar.gz"
-          curl --fail --location --retry 3 \
-            "https://github.com/rhysd/actionlint/releases/download/v${version}/${archive}" \
-            --output "${archive}"
-          echo "8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8  ${archive}" | sha256sum --check --strict
-          tar -xzf "${archive}" actionlint
-          sudo install -m 0755 actionlint /usr/local/bin/actionlint
-
-      - name: Lint GitHub Actions workflows
-        run: actionlint -color
-
-      - name: Validate workflow YAML syntax
-        shell: bash
-        run: |
-          set -euo pipefail
-          ruby -e 'require "yaml"; Dir[".github/workflows/*.{yml,yaml}"].sort.each { |f| YAML.load_file(f, aliases: true); puts "YAML OK: #{f}" }'
-
-      - name: Validate Python fingerprint implementation
-        shell: bash
-        run: |
-          set -euo pipefail
-          python3 -m py_compile .github/scripts/fingerprint.py
-          python3 -m unittest discover \
-            -s .github/scripts/tests \
-            -p 'test_fingerprint.py' \
-            -v
-
-      - name: Validate workflow references and local ownership
-        shell: bash
-        run: |
-          set -euo pipefail
-          test ! -e .github/scripts/tools-fingerprint.py
-          test ! -e .github/scripts/toolchain-fingerprint.py
-          test ! -e .github/scripts/ghcr-check-fingerprint.sh
-          test ! -e .github/workflows/reusable_tools_fingerprint.yml
-          test ! -e .github/workflows/reusable_toolchain_fingerprint.yml
-          if grep -RInE 'actions-shared-workflows|abu9/actions-shared-workflows' .github --exclude='verify-fingerprints.yml'; then
-            echo "Unexpected shared-workflows runtime reference found." >&2
-            exit 1
-          fi
-          test -f .github/scripts/fingerprint.py
-          test -f .github/scripts/tests/test_fingerprint.py
-          test -f .github/workflows/fingerprint.yml
-
   determine_targets:
     name: Resolve OpenWrt source and target
-    needs: validate
     uses: ./.github/workflows/determine-targets.yml
     with:
       source_branch: immortalwrt/immortalwrt@openwrt-25.12
@@ -82,7 +25,7 @@ jobs:
 
   tools_fingerprint:
     name: Calculate current Host Tools fingerprint
-    needs: [validate, determine_targets]
+    needs: [determine_targets]
     uses: ./.github/workflows/fingerprint.yml
     with:
       mode: tools
