@@ -168,7 +168,7 @@ jobs:
     if: ${{ github.event_name == 'pull_request' }}
     needs: [determine_targets]
     runs-on: ubuntu-24.04
-    container: ghcr.io/openwrt/buildbot/buildworker-v3.11.8:v28
+    container: ghcr.io/openwrt/buildbot/buildworker-v3.11.8:v23
     permissions:
       contents: read
     steps:
