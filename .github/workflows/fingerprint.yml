@@ -153,14 +153,17 @@ jobs:
           echo "CONFIG_TARGET_${TARGET}=y" >> .config
           echo "CONFIG_TARGET_${TARGET}_${SUBTARGET}=y" >> .config
           make defconfig
+      - name: Prepare Toolchain fingerprint output handoff
+        run: install -o buildbot -g buildbot -m 600 /dev/null "$RUNNER_TEMP/toolchain-fingerprint.outputs"
+
       - name: Compute Toolchain fingerprint
-        id: fp
         env:
           SOURCE_REPO: ${{ inputs.repo_url }}
           SOURCE_REF: ${{ inputs.repo_branch }}
           TARGET: ${{ inputs.target }}
           SUBTARGET: ${{ inputs.subtarget }}
           TOOLS_FINGERPRINT: ${{ inputs.tools_fingerprint }}
+          FINGERPRINT_OUTPUT_FILE: ${{ runner.temp }}/toolchain-fingerprint.outputs
         shell: su buildbot -c "sh -e {0}"
         run: |
           python3 actions-wrt/.github/scripts/fingerprint.py toolchain \
@@ -170,4 +173,49 @@ jobs:
             --source-ref "$SOURCE_REF" \
             --target "$TARGET" \
             --subtarget "$SUBTARGET" \
-            --tools-fingerprint "$TOOLS_FINGERPRINT"
+            --tools-fingerprint "$TOOLS_FINGERPRINT" \
+            --output-file "$FINGERPRINT_OUTPUT_FILE"
+
+      - name: Validate and publish Toolchain fingerprint outputs
+        id: fp
+        env:
+          EXPECTED_SOURCE_COMMIT: ${{ inputs.source_commit }}
+          FINGERPRINT_OUTPUT_FILE: ${{ runner.temp }}/toolchain-fingerprint.outputs
+        run: |
+          python3 - "$FINGERPRINT_OUTPUT_FILE" "$EXPECTED_SOURCE_COMMIT" "$GITHUB_OUTPUT" <<'PY'
+          import re
+          import sys
+          from pathlib import Path
+
+          handoff = Path(sys.argv[1])
+          expected_commit = sys.argv[2].lower()
+          github_output = Path(sys.argv[3])
+          required = {"toolchain_fingerprint", "toolchain_cache_key", "source_commit"}
+          entries = {}
+          for line in handoff.read_text(encoding="utf-8").splitlines():
+              if "=" not in line:
+                  raise SystemExit("Invalid fingerprint output record")
+              key, value = line.split("=", 1)
+              if key not in required or key in entries or not value:
+                  raise SystemExit(f"Invalid or duplicate fingerprint output: {key}")
+              entries[key] = value
+
+          if set(entries) != required:
+              raise SystemExit("Fingerprint output is incomplete")
+          fingerprint = entries["toolchain_fingerprint"]
+          if not re.fullmatch(r"[0-9a-f]{64}", fingerprint):
+              raise SystemExit("Invalid Toolchain fingerprint format")
+          if entries["toolchain_cache_key"] != fingerprint[:32]:
+              raise SystemExit("Toolchain cache key does not match fingerprint")
+          if not re.fullmatch(r"[0-9a-f]{40}", entries["source_commit"]):
+              raise SystemExit("Invalid source commit format")
+          if not re.fullmatch(r"[0-9a-f]{40}", expected_commit):
+              raise SystemExit("Expected source commit input is invalid")
+          if entries["source_commit"] != expected_commit:
+              raise SystemExit("Fingerprint source commit does not match requested commit")
+
+          with github_output.open("a", encoding="utf-8") as output:
+              for key in sorted(required):
+                  output.write(f"{key}={entries[key]}\\n")
+          handoff.unlink()
+          PY
