@@ -122,7 +122,7 @@ jobs:
           id
           printf 'PATH=%s\\n' "$PATH"
           echo "=== python3 selected from PATH ==="
-          type -a python3 || true
+          command -v python3 || true
           python3 - <<'PY'
           import importlib.util
           import sys
