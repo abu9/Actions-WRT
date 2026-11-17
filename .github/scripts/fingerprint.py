@@ -18,6 +18,14 @@ def write_outputs(values: dict[str,str]) -> None:
         with open(path,"a",encoding="utf-8") as f:
             for k,v in values.items(): f.write(f"{k}={v}\n")
 def ghcr_check(owner: str,image: str,tag: str,labels: dict[str,str]) -> bool:
+    if not re.fullmatch(r"[a-z0-9_.-]+", owner.lower()):
+        raise ValueError("Invalid GHCR owner.")
+    if not re.fullmatch(r"[a-z0-9_.-]+", image):
+        raise ValueError("Invalid GHCR image name.")
+    if not re.fullmatch(r"[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}", tag):
+        raise ValueError("Invalid GHCR image tag.")
+    if not labels or any(not key or not value for key,value in labels.items()):
+        raise ValueError("At least one non-empty expected image label is required.")
     owner=owner.lower(); actor=os.environ.get("GITHUB_ACTOR"); token=os.environ.get("GITHUB_TOKEN")
     if not actor or not token: raise RuntimeError("GITHUB_ACTOR and GITHUB_TOKEN are required for GHCR verification.")
     basic=base64.b64encode(f"{actor}:{token}".encode()).decode()

@@ -102,9 +102,20 @@ jobs:
       source_branch: ${{ github.event.client_payload.source_branch || inputs.source_branch || 'immortalwrt/immortalwrt@openwrt-25.12' }}
       source_commit: ${{ github.event.client_payload.source_commit || inputs.source_commit || '' }}
 
+  test_fingerprints:
+    name: Run build-free fingerprint regression tests
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout Actions-WRT
+        uses: actions/checkout@v7.0.1
+      - name: Run fingerprint tests
+        run: python3 -m unittest discover -s .github/scripts/tests -p 'test_fingerprint.py' -v
+
   tools_fingerprint:
     name: Calculate generic host-tools fingerprint
-    needs: determine_targets
+    needs: [determine_targets, test_fingerprints]
     uses: ./.github/workflows/fingerprint.yml
     with:
       mode: tools
@@ -234,10 +245,11 @@ jobs:
           AUTHOR: ${{ needs.determine_targets.outputs.author }}
           REPO_BRANCH: ${{ needs.determine_targets.outputs.repo_branch }}
           FINGERPRINT: ${{ needs.toolchain_fingerprint.outputs.toolchain_fingerprint }}
+          TOOLS_FINGERPRINT: ${{ needs.tools_fingerprint.outputs.tools_fingerprint }}
         run: |
           set +e
           TAG="$TARGET-$SUBTARGET-$AUTHOR"_"$REPO_BRANCH-${FINGERPRINT:0:32}"
-          python3 .github/scripts/fingerprint.py ghcr-check --owner "$OWNER" --image toolchain --tag "$TAG"             --label "io.abu9.actions-wrt.toolchain-fingerprint=$FINGERPRINT"
+          python3 .github/scripts/fingerprint.py ghcr-check --owner "$OWNER" --image toolchain --tag "$TAG"             --label "io.abu9.actions-wrt.toolchain-fingerprint=$FINGERPRINT"             --label "io.abu9.actions-wrt.tools-fingerprint=$TOOLS_FINGERPRINT"
           rc=$?
           set -e
           if [ "$rc" -eq 0 ]; then
