@@ -226,7 +226,7 @@ jobs:
 
   check_toolchain_container:
     name: Check target Toolchain image
-    needs: [determine_targets, tools_ready, toolchain_fingerprint]
+    needs: [determine_targets, tools_fingerprint, tools_ready, toolchain_fingerprint]
     if: ${{ inputs.build_toolchain == true }}
     runs-on: ubuntu-24.04
     permissions: {contents: read, packages: read}
