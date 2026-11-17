@@ -214,6 +214,20 @@ class ToolchainFingerprintTests(unittest.TestCase):
         baseline = self.fingerprint()
         self.assertNotEqual(self.fingerprint("b" * 64), baseline)
 
+    def test_source_ref_is_metadata_only(self) -> None:
+        baseline = self.fingerprint()
+        fingerprint, manifest = FINGERPRINT_MODULE.compute_fingerprint(
+            source_dir=self.source,
+            local_repo_dir=self.local,
+            source_repo="immortalwrt/immortalwrt",
+            source_ref="unrelated-upstream-ref",
+            target="mediatek",
+            subtarget="filogic",
+            tools_fingerprint="a" * 64,
+        )
+        self.assertEqual(fingerprint, baseline)
+        self.assertNotIn("source_commit", manifest)
+
     def test_exported_kernel_header_patch_change_invalidates(self) -> None:
         baseline = self.fingerprint()
         self.write(
