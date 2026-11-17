@@ -431,7 +431,7 @@ class WorkflowIntegrationTests(unittest.TestCase):
         self.assertIn('shell: su buildbot -c "sh -e {0}"', workflow)
         self.assertIn('--output-file "$FINGERPRINT_OUTPUT_FILE"', workflow)
         self.assertIn("Validate and publish Toolchain fingerprint outputs", workflow)
-        self.assertIn('entries[key] != expected_commit', workflow)
+        self.assertIn('entries["source_commit"] != expected_commit', workflow)
         self.assertIn('entries["toolchain_cache_key"] != fingerprint[:32]', workflow)
         self.assertIn('id: fp', workflow)
         self.assertNotIn('id: fp\n        env:\n          SOURCE_REPO:', workflow)
