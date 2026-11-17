@@ -105,20 +105,20 @@ jobs:
           ref: ${{ inputs.source_commit }}
           path: openwrt
 
+      - name: Fix checkout permissions
+        run: chown -R buildbot:buildbot actions-wrt openwrt
+
       - name: Resolve the same internal Toolchain configuration as the build
         working-directory: openwrt
         env:
           TARGET: ${{ inputs.target }}
           SUBTARGET: ${{ inputs.subtarget }}
           USE_CCACHE_CACHE: ${{ inputs.use_ccache_cache }}
-        shell: bash
+        shell: su buildbot -c "sh -e {0}"
         run: |
-          set -euo pipefail
-          chown -R buildbot:buildbot actions-wrt openwrt
           mkdir -p staging_dir build_dir
           ln -s /prebuilt_tools/staging_dir/host staging_dir/host
           ln -s /prebuilt_tools/build_dir/host build_dir/host
-          su --preserve-environment --shell /bin/bash buildbot -c 'sh -e' <<'TOOLCHAIN_CONFIG'
           rm -f .config
           if [ "$USE_CCACHE_CACHE" = "true" ]; then
             echo CONFIG_CCACHE=y >> .config
@@ -128,8 +128,6 @@ jobs:
           echo "CONFIG_TARGET_${TARGET}=y" >> .config
           echo "CONFIG_TARGET_${TARGET}_${SUBTARGET}=y" >> .config
           make defconfig
-          TOOLCHAIN_CONFIG
-
       - name: Compute Toolchain fingerprint
         id: fp
         env:

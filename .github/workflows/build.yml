@@ -29,7 +29,6 @@ on:
           - immortalwrt/immortalwrt@openwrt-23.05
           - immortalwrt/immortalwrt@openwrt-24.10
           - immortalwrt/immortalwrt@openwrt-25.12
-          - hanwckf/immortalwrt-mt798x@openwrt-21.02
         default: 'immortalwrt/immortalwrt@openwrt-25.12'
       source_commit:
         description: 'Optional exact upstream source commit; empty resolves the selected branch once'
@@ -79,8 +78,6 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  REPO_URL: hanwckf/immortalwrt-mt798x
-  REPO_BRANCH: openwrt-21.02
   FEEDS_CONF:
   CONFIG_FILE: ${{ (github.event_name == 'push' && '360t7-immortalwrt-25.12-kernel-min.conf') || github.event.client_payload.config_name || github.event.inputs.config_name || '360t7-immortalwrt-25.12-ubi.conf' }}
   DIY_P1_SH: diy-part1.sh
@@ -183,6 +180,7 @@ jobs:
           path: openwrt
 
       - name: Verify checked out source commit
+        shell: bash
         working-directory: openwrt
         env:
           EXPECTED_SOURCE_COMMIT: ${{ needs.determine_targets.outputs.source_commit }}
@@ -190,34 +188,32 @@ jobs:
           set -euo pipefail
           test "$(git rev-parse HEAD)" = "$EXPECTED_SOURCE_COMMIT"
 
+      - name: Fix permission
+        working-directory: openwrt
+        run: chown -R buildbot:buildbot .
+
       - name: Set Host Tools configuration
         working-directory: openwrt
+        shell: su buildbot -c "sh -e {0}"
         run: |
-          set -euo pipefail
-          chown -R buildbot:buildbot .
-          su --preserve-environment --shell /bin/bash buildbot -c 'bash -s' <<'BUILD_SCRIPT'
-          set -e
           touch .config
           echo CONFIG_DEVEL=y >> .config
           echo CONFIG_AUTOREMOVE=y >> .config
           echo CONFIG_CCACHE=y >> .config
           echo CONFIG_BUILD_ALL_HOST_TOOLS=y >> .config
           make defconfig
-          BUILD_SCRIPT
-
       - name: Build Host Tools
         working-directory: openwrt
+        shell: su buildbot -c "sh -e {0}"
         run: |
-          su --preserve-environment --shell /bin/bash buildbot -c 'bash -s' <<'BUILD_SCRIPT'
           set -e
           make tools/install -j"$(nproc)" BUILD_LOG=1
-          BUILD_SCRIPT
 
       - name: Diagnose Host Python and staged setuptools
         if: always()
         working-directory: openwrt
+        shell: su buildbot -c "sh -e {0}"
         run: |
-          su --preserve-environment --shell /bin/bash buildbot -c 'bash -s' <<'DIAGNOSTIC_SCRIPT'
           set -u
           echo "=== identity and PATH ==="
           id
@@ -278,7 +274,6 @@ jobs:
           else
             echo "staging_dir/host/bin/python3 does not exist after make tools/install"
           fi
-          DIAGNOSTIC_SCRIPT
 
   build_tools_container:
     name: Build and Push tools container (only when missing)
@@ -312,6 +307,7 @@ jobs:
           IMAGE_TAG="$(printf '%s' "$CHECKED_IMAGE" | cut -d: -f2-)"
           echo "tools_image=ghcr.io/$OWNER_LC/tools:$IMAGE_TAG" >> "$GITHUB_OUTPUT"
       - name: Verify selected image
+        shell: bash
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_ACTOR: ${{ github.actor }}

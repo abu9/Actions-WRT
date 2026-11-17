@@ -264,72 +264,53 @@ jobs:
       - name: Fix permission
         run: chown -R buildbot:buildbot .
 
-      - name: Attach prebuilt tools
-        shell: bash
+      - name: Prepare prebuilt tools
+        shell: su buildbot -c "sh -e {0}"
         working-directory: openwrt
         run: |
-          su --preserve-environment --shell /bin/bash buildbot -c 'sh -e' <<'__ACTIONS_WRT_BUILDBOT_SCRIPT__'
           mkdir -p staging_dir build_dir
           ln -s /prebuilt_tools/staging_dir/host staging_dir/host
           ln -s /prebuilt_tools/build_dir/host build_dir/host
-          
-          __ACTIONS_WRT_BUILDBOT_SCRIPT__
-
+          ./scripts/ext-tools.sh --refresh
       - name: Configure all modules
-        shell: bash
+        shell: su buildbot -c "sh -e {0}"
         working-directory: openwrt
         run: |
-          su --preserve-environment --shell /bin/bash buildbot -c 'sh -e' <<'__ACTIONS_WRT_BUILDBOT_SCRIPT__'
           echo CONFIG_ALL=y >> .config
-          
+
           echo CONFIG_TARGET_MULTI_PROFILE=y >> .config
           echo CONFIG_TARGET_PER_DEVICE_ROOTFS=y >> .config
           echo CONFIG_TARGET_ALL_PROFILES=y >> .config
-          
+
           echo CONFIG_DEVEL=y >> .config
           echo CONFIG_AUTOREMOVE=y >> .config
-          
+
           echo "CONFIG_TARGET_${{ inputs.target }}=y" >> .config
           echo "CONFIG_TARGET_${{ inputs.target }}_${{ inputs.subtarget }}=y" >> .config
-          
-          make defconfig
-          
-          __ACTIONS_WRT_BUILDBOT_SCRIPT__
 
-      - name: Refresh and validate prebuilt tools
-        shell: bash
-        working-directory: openwrt
-        run: |
-          su --preserve-environment --shell /bin/bash buildbot -c 'sh -e' <<'__ACTIONS_WRT_BUILDBOT_SCRIPT__'
-          bash ../.github/scripts/ext-tools-refresh.sh --refresh
-          __ACTIONS_WRT_BUILDBOT_SCRIPT__
+          make defconfig
 
 
       - name: Compile needed host tools
-        shell: bash
+        shell: su buildbot -c "sh -e {0}"
         working-directory: openwrt
         run: |
-          su --preserve-environment --shell /bin/bash buildbot -c 'sh -e' <<'__ACTIONS_WRT_BUILDBOT_SCRIPT__'
           make tools/tar/compile -j$(nproc) BUILD_LOG=1 || { ret=$?; bash ../.github/scripts/show_build_failures.sh; exit "$ret"; }
-          __ACTIONS_WRT_BUILDBOT_SCRIPT__
 
 
       - name: Download and check toolchain
         if: inputs.build_toolchain == true
-        shell: bash
+        shell: su buildbot -c "sh -e {0}"
         working-directory: openwrt
         run: |
-          su --preserve-environment --shell /bin/bash buildbot -c 'sh -e' <<'__ACTIONS_WRT_BUILDBOT_SCRIPT__'
           make toolchain/download toolchain/check FIXUP=1 -j$(nproc) BUILD_LOG=1 || { ret=$?; bash ../.github/scripts/show_build_failures.sh; exit "$ret"; }
-          __ACTIONS_WRT_BUILDBOT_SCRIPT__
 
 
       - name: Download and check packages
         if: inputs.build_all_modules == true || inputs.build_all_kmods == true || inputs.build_full == true
-        shell: bash
+        shell: su buildbot -c "sh -e {0}"
         working-directory: openwrt
         run: |
-          su --preserve-environment --shell /bin/bash buildbot -c 'sh -e' <<'__ACTIONS_WRT_BUILDBOT_SCRIPT__'
           # With push events or check_packages_list set to all check all packages
           if [ "${{ github.event_name }}" = "push" ] || [ "${{ inputs.check_packages_list }}" = "all" ]; then
             make package/download package/check FIXUP=1 -j$(nproc) BUILD_LOG=1 || { ret=$?; bash ../.github/scripts/show_build_failures.sh; exit "$ret"; }
@@ -339,16 +320,14 @@ jobs:
               make package/$package/download package/$package/check FIXUP=1 -j$(nproc) BUILD_LOG=1 || { ret=$?; bash ../.github/scripts/show_build_failures.sh; exit "$ret"; }
             done
           fi
-          
-          __ACTIONS_WRT_BUILDBOT_SCRIPT__
+
 
       - name: Validate checked packages
-        shell: bash
+        shell: su buildbot -c "sh -e {0}"
         working-directory: openwrt
         run: |
-          su --preserve-environment --shell /bin/bash buildbot -c 'sh -e' <<'__ACTIONS_WRT_BUILDBOT_SCRIPT__'
           . ../.github/scripts/ci_helpers.sh
-          
+
           if git diff --name-only --exit-code; then
             success "All packages seems ok"
           else
@@ -360,8 +339,7 @@ jobs:
             done
             exit 1
           fi
-          
-          __ACTIONS_WRT_BUILDBOT_SCRIPT__
+
 
       - name: Upload fixed Packages
         if: failure()
@@ -557,51 +535,42 @@ jobs:
       - name: Fix permission
         run: chown -R buildbot:buildbot .
 
-      - name: Attach prebuilt tools
-        shell: bash
+      - name: Prepare prebuilt tools
+        shell: su buildbot -c "sh -e {0}"
         working-directory: openwrt
         run: |
-          su --preserve-environment --shell /bin/bash buildbot -c 'sh -e' <<'__ACTIONS_WRT_BUILDBOT_SCRIPT__'
           mkdir -p staging_dir build_dir
           ln -s /prebuilt_tools/staging_dir/host staging_dir/host
           ln -s /prebuilt_tools/build_dir/host build_dir/host
-          
-          __ACTIONS_WRT_BUILDBOT_SCRIPT__
-
+          ./scripts/ext-tools.sh --refresh
       - name: Prepare custom scripts
         if: inputs.build_full == true
-        shell: bash
+        shell: su buildbot -c "sh -e {0}"
         continue-on-error: true
         run: |
-          su --preserve-environment --shell /bin/bash buildbot -c 'sh -e' <<'__ACTIONS_WRT_BUILDBOT_SCRIPT__'
           [ -d "files" ] && mv -f files openwrt/files
           [ -e "${FEEDS_CONF}" ] && cp -f "${FEEDS_CONF}" openwrt/feeds.conf.default
           echo "Prepare custom scripts done"
-          
-          __ACTIONS_WRT_BUILDBOT_SCRIPT__
+
 
       - name: Load pre-custom script
         if: inputs.build_full == true
-        shell: bash
+        shell: su buildbot -c "bash --noprofile --norc -eo pipefail {0}"
         working-directory: openwrt
         env:
           REPO_URL: ${{ inputs.repo_url }}        
         run: |
-          su --preserve-environment --shell /bin/bash buildbot -c 'bash -s' <<'__ACTIONS_WRT_BUILDBOT_SCRIPT__'
           ${GITHUB_WORKSPACE}/diy-part1.sh
-          __ACTIONS_WRT_BUILDBOT_SCRIPT__
 
 
       - name: Update & Install feeds
         if: inputs.build_full == true
-        shell: bash
+        shell: su buildbot -c "sh -e {0}"
         working-directory: openwrt
         run: |
-          su --preserve-environment --shell /bin/bash buildbot -c 'sh -e' <<'__ACTIONS_WRT_BUILDBOT_SCRIPT__'
           ./scripts/feeds update -a
           ./scripts/feeds install -a
-          
-          __ACTIONS_WRT_BUILDBOT_SCRIPT__
+
 
       - name: Restore ccache cache
         id: restore-ccache-cache
@@ -617,16 +586,15 @@ jobs:
 
       - name: Download external toolchain/sdk
         if: inputs.build_toolchain == false && steps.parse-toolchain.outputs.toolchain-type != 'internal' && steps.parse-toolchain.outputs.toolchain-type != 'external_container'
-        shell: bash
+        shell: su buildbot -c "bash --noprofile --norc -eo pipefail {0}"
         working-directory: openwrt
         run: |
-          su --preserve-environment --shell /bin/bash buildbot -c 'bash -s' <<'__ACTIONS_WRT_BUILDBOT_SCRIPT__'
           set -euo pipefail
-          
+
           TARGET_PATH="$DOWNLOADSERVER/$TOOLCHAIN_PATH/targets/${{ inputs.target }}/${{ inputs.subtarget }}"
           curl --fail --silent --show-error --location --retry 3 "$TARGET_PATH/$TOOLCHAIN_ARCHIVE" -o "$TOOLCHAIN_ARCHIVE"
           curl --fail --silent --show-error --location --retry 3 "$TARGET_PATH/sha256sums" -o sha256sums
-          
+
           SIGNATURE=""
           for candidate in sha256sums.asc sha256sums.gpg; do
             if curl --fail --silent --show-error --location "$TARGET_PATH/$candidate" -o "$candidate"; then
@@ -638,7 +606,7 @@ jobs:
             echo "No detached signature found for sha256sums" >&2
             exit 1
           fi
-          
+
           # Import only the GPG public keys from the keyring commit pinned
           # by this exact source tree's openwrt-keyring package Makefile.
           test -n "$KEYRING_DIR"
@@ -646,7 +614,7 @@ jobs:
           export GNUPGHOME="$HOME/.gnupg"
           install -d -m 0700 "$GNUPGHOME"
           gpg --batch --homedir "$GNUPGHOME" --import "$KEYRING_DIR"/gpg/*.asc
-          
+
           if ! gpg --batch --homedir "$GNUPGHOME" --status-fd 1 --verify "$SIGNATURE" sha256sums 2>&1 | tee /tmp/official-toolchain-gpg.log; then
             echo "GPG signature verification failed for the official checksum index." >&2
             exit 1
@@ -655,7 +623,7 @@ jobs:
             echo "GPG did not report a valid signature from the pinned keyring." >&2
             exit 1
           fi
-          
+
           CHECKSUM="$(awk -v wanted="$TOOLCHAIN_ARCHIVE" '
             NF >= 2 && length($1) == 64 && $1 ~ /^[[:xdigit:]]+$/ {
               filename=$2
@@ -679,84 +647,69 @@ jobs:
             *) echo "Unsupported official toolchain archive format" >&2; exit 1 ;;
           esac
           rm -f "$TOOLCHAIN_ARCHIVE" sha256sums "$SIGNATURE"
-          
-          __ACTIONS_WRT_BUILDBOT_SCRIPT__
+
 
       - name: Clean configuration
-        shell: bash
+        shell: su buildbot -c "sh -e {0}"
         working-directory: openwrt
         run: |
-          su --preserve-environment --shell /bin/bash buildbot -c 'sh -e' <<'__ACTIONS_WRT_BUILDBOT_SCRIPT__'
           rm -rf .config
-          
-          __ACTIONS_WRT_BUILDBOT_SCRIPT__
+
 
       - name: Load post-custom script
         if: inputs.build_full == true
-        shell: bash
+        shell: su buildbot -c "bash --noprofile --norc -eo pipefail {0}"
         working-directory: openwrt
         env:
           REPO_URL: ${{ inputs.repo_url }}
         run: |
-          su --preserve-environment --shell /bin/bash buildbot -c 'bash -s' <<'__ACTIONS_WRT_BUILDBOT_SCRIPT__'
           ${GITHUB_WORKSPACE}/diy-part2.sh
-          __ACTIONS_WRT_BUILDBOT_SCRIPT__
 
 
       - name: Setup configuration
         if: inputs.build_full == true || inputs.build_kernel == true
         env:
           CONFIG_NAME: ${{ inputs.config_name }}
-        shell: bash
+        shell: su buildbot -c "bash --noprofile --norc -eo pipefail {0}"
         run: |
-          su --preserve-environment --shell /bin/bash buildbot -c 'sh -e' <<'__ACTIONS_WRT_BUILDBOT_SCRIPT__'
           set -euo pipefail
           test -f "$CONFIG_NAME"
           cp -f -- "$CONFIG_NAME" openwrt/.config
-          
-          __ACTIONS_WRT_BUILDBOT_SCRIPT__
+
 
       - name: Configure testing kernel
         if: inputs.testing == true
-        shell: bash
+        shell: su buildbot -c "sh -e {0}"
         working-directory: openwrt
         run: |
-          su --preserve-environment --shell /bin/bash buildbot -c 'sh -e' <<'__ACTIONS_WRT_BUILDBOT_SCRIPT__'
           echo CONFIG_TESTING_KERNEL=y >> .config
-          
-          __ACTIONS_WRT_BUILDBOT_SCRIPT__
+
 
       - name: Configure all kernel modules
         if: inputs.build_all_kmods == true
-        shell: bash
+        shell: su buildbot -c "sh -e {0}"
         working-directory: openwrt
         run: |
-          su --preserve-environment --shell /bin/bash buildbot -c 'sh -e' <<'__ACTIONS_WRT_BUILDBOT_SCRIPT__'
           echo CONFIG_ALL_KMODS=y >> .config
-          
-          __ACTIONS_WRT_BUILDBOT_SCRIPT__
+
 
       - name: Configure all modules
         if: inputs.build_all_modules == true
-        shell: bash
+        shell: su buildbot -c "sh -e {0}"
         working-directory: openwrt
         run: |
-          su --preserve-environment --shell /bin/bash buildbot -c 'sh -e' <<'__ACTIONS_WRT_BUILDBOT_SCRIPT__'
           echo CONFIG_ALL=y >> .config
-          
-          __ACTIONS_WRT_BUILDBOT_SCRIPT__
+
 
       - name: Configure all boards
         if: inputs.build_all_boards == true
-        shell: bash
+        shell: su buildbot -c "sh -e {0}"
         working-directory: openwrt
         run: |
-          su --preserve-environment --shell /bin/bash buildbot -c 'sh -e' <<'__ACTIONS_WRT_BUILDBOT_SCRIPT__'
           echo CONFIG_TARGET_MULTI_PROFILE=y >> .config
           echo CONFIG_TARGET_PER_DEVICE_ROOTFS=y >> .config
           echo CONFIG_TARGET_ALL_PROFILES=y >> .config
-          
-          __ACTIONS_WRT_BUILDBOT_SCRIPT__
+
 
         # ccache for some reason have problem detecting compiler type
         # with external toolchain. This cause the complete malfunction
@@ -765,154 +718,127 @@ jobs:
         # To fix this force compiler type to gcc.
       - name: Configure ccache and apply fixes
         if: inputs.use_ccache_cache == true
-        shell: bash
+        shell: su buildbot -c "sh -e {0}"
         working-directory: openwrt
         env:
           SYSTEM_CCACHE_CONF: staging_dir/host/etc/ccache.conf
         run: |
-          su --preserve-environment --shell /bin/bash buildbot -c 'sh -e' <<'__ACTIONS_WRT_BUILDBOT_SCRIPT__'
           touch $SYSTEM_CCACHE_CONF
-          
+
           echo compiler_type=gcc >> $SYSTEM_CCACHE_CONF
           [ ${{ inputs.ccache_type }} = 'kernel' ] && echo max_size=400M >> $SYSTEM_CCACHE_CONF
-          
+
           echo depend_mode=true >> $SYSTEM_CCACHE_CONF
           echo sloppiness=file_macro,locale,time_macros >> $SYSTEM_CCACHE_CONF
-          
+
           echo CONFIG_CCACHE=y >> .config
-          
-          __ACTIONS_WRT_BUILDBOT_SCRIPT__
+
 
       - name: Configure external toolchain in container
         if: inputs.build_toolchain == false && steps.parse-toolchain.outputs.toolchain-type == 'external_container'
-        shell: bash
+        shell: su buildbot -c "sh -e {0}"
         working-directory: openwrt
         run: |
-          su --preserve-environment --shell /bin/bash buildbot -c 'sh -e' <<'__ACTIONS_WRT_BUILDBOT_SCRIPT__'
           echo CONFIG_DEVEL=y >> .config
           echo CONFIG_AUTOREMOVE=y >> .config
-          
+
           ./scripts/ext-toolchain.sh \
             --toolchain /external-toolchain/$(ls /external-toolchain/ | grep wrt-toolchain)/toolchain-* \
             --overwrite-config \
             --config ${{ inputs.target }}/${{ inputs.subtarget }}
-          
-          __ACTIONS_WRT_BUILDBOT_SCRIPT__
+
 
       - name: Configure external toolchain
         if: inputs.build_toolchain == false && steps.parse-toolchain.outputs.toolchain-type == 'external_toolchain'
-        shell: bash
+        shell: su buildbot -c "sh -e {0}"
         working-directory: openwrt
         run: |
-          su --preserve-environment --shell /bin/bash buildbot -c 'sh -e' <<'__ACTIONS_WRT_BUILDBOT_SCRIPT__'
           echo CONFIG_DEVEL=y >> .config
           echo CONFIG_AUTOREMOVE=y >> .config
-          
+
           ./scripts/ext-toolchain.sh \
             --toolchain $TOOLCHAIN_FILE/toolchain-* \
             --overwrite-config \
             --config ${{ inputs.target }}/${{ inputs.subtarget }}
-          
-          __ACTIONS_WRT_BUILDBOT_SCRIPT__
+
 
       - name: Adapt external sdk to external toolchain format
         if: inputs.build_toolchain == false && steps.parse-toolchain.outputs.toolchain-type == 'external_sdk'
-        shell: bash
+        shell: su buildbot -c "sh -e {0}"
         working-directory: openwrt
         run: |
-          su --preserve-environment --shell /bin/bash buildbot -c 'sh -e' <<'__ACTIONS_WRT_BUILDBOT_SCRIPT__'
           TOOLCHAIN_DIR=$TOOLCHAIN_FILE/staging_dir/$(ls $TOOLCHAIN_FILE/staging_dir | grep toolchain)
           TOOLCHAIN_BIN=$TOOLCHAIN_DIR/bin
           OPENWRT_DIR=$(pwd)
-          
+
           # Find target name from toolchain info.mk
           GNU_TARGET_NAME=$(cat $TOOLCHAIN_DIR/info.mk | grep TARGET_CROSS | sed 's/^TARGET_CROSS=\(.*\)-$/\1/')
-          
+
           cd $TOOLCHAIN_BIN
-          
+
           # Revert sdk wrapper scripts applied to all the bins
           for app in $(find . -name "*.bin"); do
             TARGET_APP=$(echo $app | sed 's/\.\/\.\(.*\)\.bin/\1/')
             rm $TARGET_APP
             mv .$TARGET_APP.bin $TARGET_APP
           done
-          
+
           # Setup the wrapper script in the sdk toolchain dir simulating an external toolchain build
           cp $OPENWRT_DIR/target/toolchain/files/wrapper.sh $GNU_TARGET_NAME-wrapper.sh
           for app in cc gcc g++ c++ cpp ld as ; do
             [ -f $GNU_TARGET_NAME-$app ] && mv $GNU_TARGET_NAME-$app $GNU_TARGET_NAME-$app.bin
             ln -sf $GNU_TARGET_NAME-wrapper.sh $GNU_TARGET_NAME-$app
           done
-          
-          __ACTIONS_WRT_BUILDBOT_SCRIPT__
+
 
       - name: Configure external toolchain with sdk
         if: inputs.build_toolchain == false && steps.parse-toolchain.outputs.toolchain-type == 'external_sdk'
-        shell: bash
+        shell: su buildbot -c "sh -e {0}"
         working-directory: openwrt
         run: |
-          su --preserve-environment --shell /bin/bash buildbot -c 'sh -e' <<'__ACTIONS_WRT_BUILDBOT_SCRIPT__'
           echo CONFIG_DEVEL=y >> .config
           echo CONFIG_AUTOREMOVE=y >> .config
-          
+
           ./scripts/ext-toolchain.sh \
             --toolchain $TOOLCHAIN_FILE/staging_dir/toolchain-* \
             --overwrite-config \
             --config ${{ inputs.target }}/${{ inputs.subtarget }}
-          
-          __ACTIONS_WRT_BUILDBOT_SCRIPT__
+
 
       - name: Configure internal toolchain
         if: inputs.build_toolchain == true || steps.parse-toolchain.outputs.toolchain-type == 'internal'
-        shell: bash
+        shell: su buildbot -c "sh -e {0}"
         working-directory: openwrt
         run: |
-          su --preserve-environment --shell /bin/bash buildbot -c 'sh -e' <<'__ACTIONS_WRT_BUILDBOT_SCRIPT__'
           echo CONFIG_DEVEL=y >> .config
           echo CONFIG_AUTOREMOVE=y >> .config
-          
+
           echo "CONFIG_TARGET_${{ inputs.target }}=y" >> .config
           echo "CONFIG_TARGET_${{ inputs.target }}_${{ inputs.subtarget }}=y" >> .config
-          
+
           make defconfig
-          
-          __ACTIONS_WRT_BUILDBOT_SCRIPT__
+
 
       - name: Show configuration
-        shell: bash
+        shell: su buildbot -c "sh -e {0}"
         working-directory: openwrt
         run: |
-          su --preserve-environment --shell /bin/bash buildbot -c 'sh -e' <<'__ACTIONS_WRT_BUILDBOT_SCRIPT__'
           ./scripts/diffconfig.sh
-          __ACTIONS_WRT_BUILDBOT_SCRIPT__
-
-
-      - name: Refresh and validate prebuilt tools
-        shell: bash
-        working-directory: openwrt
-        run: |
-          su --preserve-environment --shell /bin/bash buildbot -c 'sh -e' <<'__ACTIONS_WRT_BUILDBOT_SCRIPT__'
-          bash ../.github/scripts/ext-tools-refresh.sh --refresh
-          __ACTIONS_WRT_BUILDBOT_SCRIPT__
 
 
       - name: Build tools
-        shell: bash
+        shell: su buildbot -c "sh -e {0}"
         working-directory: openwrt
         run: |
-          su --preserve-environment --shell /bin/bash buildbot -c 'sh -e' <<'__ACTIONS_WRT_BUILDBOT_SCRIPT__'
           make tools/install -j$(nproc) BUILD_LOG=1 || { ret=$?; bash ../.github/scripts/show_build_failures.sh; exit "$ret"; }
-          __ACTIONS_WRT_BUILDBOT_SCRIPT__
 
 
       - name: Build toolchain
         if: inputs.build_toolchain == true || steps.parse-toolchain.outputs.toolchain-type == 'internal'
-        shell: bash
+        shell: su buildbot -c "sh -e {0}"
         working-directory: openwrt
         run: |
-          su --preserve-environment --shell /bin/bash buildbot -c 'sh -e' <<'__ACTIONS_WRT_BUILDBOT_SCRIPT__'
           make toolchain/install -j$(nproc) BUILD_LOG=1 || { ret=$?; bash ../.github/scripts/show_build_failures.sh; exit "$ret"; }
-          __ACTIONS_WRT_BUILDBOT_SCRIPT__
 
 
       - name: Setup Debug Session
@@ -923,12 +849,10 @@ jobs:
 
       - name: Build Kernel
         if: inputs.build_kernel == true
-        shell: bash
+        shell: su buildbot -c "sh -e {0}"
         working-directory: openwrt
         run: |
-          su --preserve-environment --shell /bin/bash buildbot -c 'sh -e' <<'__ACTIONS_WRT_BUILDBOT_SCRIPT__'
           make target/compile -j$(nproc) BUILD_LOG=1 || { ret=$?; bash ../.github/scripts/show_build_failures.sh; exit "$ret"; }
-          __ACTIONS_WRT_BUILDBOT_SCRIPT__
 
 
       - name: Save ccache kernel cache
@@ -940,20 +864,17 @@ jobs:
 
       - name: Build Kernel Kmods
         if: inputs.build_kernel == true
-        shell: bash
+        shell: su buildbot -c "sh -e {0}"
         working-directory: openwrt
         run: |
-          su --preserve-environment --shell /bin/bash buildbot -c 'sh -e' <<'__ACTIONS_WRT_BUILDBOT_SCRIPT__'
           make package/linux/compile -j$(nproc) BUILD_LOG=1 || { ret=$?; bash ../.github/scripts/show_build_failures.sh; exit "$ret"; }
-          __ACTIONS_WRT_BUILDBOT_SCRIPT__
 
 
       - name: Build DTBs
         if: inputs.build_dtb == true
-        shell: bash
+        shell: su buildbot -c "bash --noprofile --norc -eo pipefail {0}"
         working-directory: openwrt
         run: |
-          su --preserve-environment --shell /bin/bash buildbot -c 'sh -e' <<'__ACTIONS_WRT_BUILDBOT_SCRIPT__'
           set -euo pipefail
           # make -q returns 0 when up to date, 1 when a rebuild is needed,
           # and 2 when the optional target cannot be queried.
@@ -961,7 +882,7 @@ jobs:
           TOPDIR="$(pwd)" make -C target/linux dtb -q >/dev/null 2>&1
           dtb_status=$?
           set -e
-          
+
           case "$dtb_status" in
             0|1) ;;
             2)
@@ -973,84 +894,74 @@ jobs:
               exit "$dtb_status"
               ;;
           esac
-          
+
           make target/linux/dtb -j"$(nproc)" BUILD_LOG=1 || {
             ret=$?
             bash ../.github/scripts/show_build_failures.sh
             exit "$ret"
           }
-          
-          __ACTIONS_WRT_BUILDBOT_SCRIPT__
+
 
       - name: Build everything
         if: inputs.build_full == true
-        shell: bash
+        shell: su buildbot -c "sh -e {0}"
         working-directory: openwrt
         run: |
-          su --preserve-environment --shell /bin/bash buildbot -c 'sh -e' <<'__ACTIONS_WRT_BUILDBOT_SCRIPT__'
           make -j$(nproc) BUILD_LOG=1 || { ret=$?; bash ../.github/scripts/show_build_failures.sh; exit "$ret"; }
-          __ACTIONS_WRT_BUILDBOT_SCRIPT__
 
 
       - name: Build external toolchain
         if: inputs.build_external_toolchain == true
-        shell: bash
+        shell: su buildbot -c "sh -e {0}"
         working-directory: openwrt
         run: |
-          su --preserve-environment --shell /bin/bash buildbot -c 'sh -e' <<'__ACTIONS_WRT_BUILDBOT_SCRIPT__'
           make target/toolchain/compile -j$(nproc) BUILD_LOG=1 || { ret=$?; bash ../.github/scripts/show_build_failures.sh; exit "$ret"; }
-          __ACTIONS_WRT_BUILDBOT_SCRIPT__
 
 
       - name: Coverity prepare toolchain
         if: inputs.coverity_check_packages != ''
-        shell: bash
+        shell: su buildbot -c "sh -e {0}"
         working-directory: openwrt
         run: |
-          su --preserve-environment --shell /bin/bash buildbot -c 'sh -e' <<'__ACTIONS_WRT_BUILDBOT_SCRIPT__'
           wget -q https://scan.coverity.com/download/linux64 --post-data "token=${{ secrets.coverity_api_token }}&project=${{ inputs.coverity_project_name }}" -O coverity.tar.gz
           wget -q https://scan.coverity.com/download/linux64 --post-data "token=${{ secrets.coverity_api_token }}&project=${{ inputs.coverity_project_name }}&md5=1" -O coverity.tar.gz.md5
           echo ' coverity.tar.gz' >> coverity.tar.gz.md5
           md5sum -c coverity.tar.gz.md5
-          
+
           mkdir cov-analysis-linux64
           tar xzf coverity.tar.gz --strip 1 -C cov-analysis-linux64
           export PATH=$(pwd)/cov-analysis-linux64/bin:$PATH
-          
+
           for template in ${{ inputs.coverity_compiler_template_list }}; do
             cov-configure --template --comptype gcc --compiler "$template"
           done
-          
-          __ACTIONS_WRT_BUILDBOT_SCRIPT__
+
 
       - name: Clean and recompile packages with Coverity toolchain
         if: inputs.coverity_check_packages != ''
-        shell: bash
+        shell: su buildbot -c "bash --noprofile --norc -eo pipefail {0}"
         working-directory: openwrt
         run: |
-          su --preserve-environment --shell /bin/bash buildbot -c 'bash -s' <<'__ACTIONS_WRT_BUILDBOT_SCRIPT__'
           set -o pipefail -o errexit
-          
+
           coverity_check_packages=(${{ inputs.coverity_check_packages }})
           printf -v clean_packages "package/%s/clean " "${coverity_check_packages[@]}"
           make -j$(nproc) BUILD_LOG=1 $clean_packages || { ret=$?; bash ../.github/scripts/show_build_failures.sh; exit "$ret"; }
-          
+
           coverity_force_compile_packages=(${{ inputs.coverity_force_compile_packages }})
           printf -v force_compile_packages "package/%s/compile " "${coverity_force_compile_packages[@]}"
           make -j$(nproc) BUILD_LOG=1 $force_compile_packages || { ret=$?; bash ../.github/scripts/show_build_failures.sh; exit "$ret"; }
-          
+
           printf -v compile_packages "package/%s/compile " "${coverity_check_packages[@]}"
           export PATH=$(pwd)/cov-analysis-linux64/bin:$PATH
           cov-build --dir cov-int make -j $(nproc) BUILD_LOG=1 $compile_packages || { ret=$?; bash ../.github/scripts/show_build_failures.sh; exit "$ret"; }
-          
-          __ACTIONS_WRT_BUILDBOT_SCRIPT__
+
 
       - name: Upload build to Coverity for analysis
         if: inputs.coverity_check_packages != ''
-        shell: bash
+        shell: su buildbot -c "sh -e {0}"
         working-directory: openwrt
         run: |
-          su --preserve-environment --shell /bin/bash buildbot -c 'sh -e' <<'__ACTIONS_WRT_BUILDBOT_SCRIPT__'
           tar czf cov-int.tar.gz ./cov-int
           curl \
             --form token="${{ secrets.coverity_api_token }}" \
@@ -1059,8 +970,7 @@ jobs:
             --form version="${{ inputs.repo_branch }}-${{ github.sha }}" \
             --form description="OpenWrt ${{ inputs.repo_branch }}-${{ github.sha }}" \
             "https://scan.coverity.com/builds?project=${{ inputs.coverity_project_name }}"
-          
-          __ACTIONS_WRT_BUILDBOT_SCRIPT__
+
 
       - name: Upload logs
         if: failure()
@@ -1093,12 +1003,10 @@ jobs:
 
       - name: Archive ccache
         if: inputs.use_ccache_cache == true  && inputs.upload_ccache_cache == true
-        shell: bash
+        shell: su buildbot -c "sh -e {0}"
         working-directory: openwrt
         run: |
-          su --preserve-environment --shell /bin/bash buildbot -c 'sh -e' <<'__ACTIONS_WRT_BUILDBOT_SCRIPT__'
           tar -cf ${{ needs.setup_build.outputs.ccache_name }}.tar .ccache
-          __ACTIONS_WRT_BUILDBOT_SCRIPT__
 
 
       - name: Upload ccache cache

@@ -64,6 +64,7 @@ class ToolchainFingerprintTests(unittest.TestCase):
             "scripts/metadata.pm": "metadata\n",
             "scripts/target-metadata.pl": "metadata\n",
             "scripts/patch-kernel.sh": "#!/bin/sh\n",
+            "scripts/ext-tools.sh": "#!/usr/bin/env bash\n# upstream refresh implementation fixture\n",
             "scripts/config/conf.c": "int main(void) { return 0; }\n",
             "target/linux/Makefile": "include $(INCLUDE_DIR)/target.mk\n",
             "target/linux/mediatek/Makefile": (
@@ -102,10 +103,6 @@ class ToolchainFingerprintTests(unittest.TestCase):
         self.write(
             self.local / ".github/dockerfiles/Dockerfile.toolchain",
             "FROM ghcr.io/test/tools:test\n",
-        )
-        self.write(
-            self.local / ".github/scripts/ext-tools-refresh.sh",
-            "#!/bin/bash\nexec true\n",
         )
         self.write_config("openwrt_one")
 
@@ -204,6 +201,26 @@ class ToolchainFingerprintTests(unittest.TestCase):
         )
         self.assertNotEqual(self.fingerprint(), baseline)
 
+    def test_ext_tools_refresh_script_change_invalidates(self) -> None:
+        baseline = self.fingerprint()
+        self.write(
+            self.source / "scripts/ext-tools.sh",
+            "#!/usr/bin/env bash\\n# changed upstream refresh implementation\\n",
+        )
+        self.assertNotEqual(self.fingerprint(), baseline)
+
+    def test_missing_ext_tools_refresh_script_fails_closed(self) -> None:
+        script = self.source / "scripts/ext-tools.sh"
+        script.unlink()
+        subprocess.run(
+            ["git", "-C", str(self.source), "rm", "-q", "--cached", "scripts/ext-tools.sh"],
+            check=True,
+        )
+        with self.assertRaisesRegex(
+            RuntimeError, "Required Toolchain input is not tracked: scripts/ext-tools.sh"
+        ):
+            self.fingerprint()
+
     def test_toolchain_configuration_change_invalidates(self) -> None:
         baseline = self.fingerprint()
         self.write_config("openwrt_one", extra_gcc="--with-bar")
@@ -244,6 +261,24 @@ class ToolchainFingerprintTests(unittest.TestCase):
 
 
 class WorkflowIntegrationTests(unittest.TestCase):
+    def test_legacy_openwrt_21_02_source_is_not_supported(self) -> None:
+        workflows = Path(__file__).resolve().parents[2] / "workflows"
+        for name in ("build.yml", "push-containers.yml", "determine-targets.yml"):
+            source = (workflows / name).read_text(encoding="utf-8")
+            self.assertNotIn("openwrt-21.02", source)
+            self.assertNotIn("hanwckf/immortalwrt-mt798x", source)
+
+    def test_prebuilt_tools_prepare_uses_upstream_refresh_script(self) -> None:
+        workflow = (
+            Path(__file__).resolve().parents[2]
+            / "workflows"
+            / "reusable_build.yml"
+        ).read_text(encoding="utf-8")
+        self.assertEqual(workflow.count("name: Prepare prebuilt tools"), 2)
+        self.assertIn("./scripts/ext-tools.sh --refresh", workflow)
+        self.assertNotIn("ext-tools-refresh.sh", workflow)
+        self.assertNotIn("--preserve-environment", workflow)
+
     def test_verify_workflow_passes_authentication_to_both_ghcr_checks(self) -> None:
         workflow_path = (
             Path(__file__).resolve().parents[2]
@@ -273,8 +308,8 @@ class HostToolsFingerprintTests(unittest.TestCase):
             for rel in ["Makefile","rules.mk","Config.in","include/a","tools/a","toolchain/a","scripts/a","config/a","package/foo/Makefile","target/x/Config.in"]:
                 p=source/rel; p.parent.mkdir(parents=True,exist_ok=True); p.write_text(rel,encoding="utf-8")
             (local/".github/workflows").mkdir(parents=True); (local/".github/dockerfiles").mkdir(parents=True)
-            (local/".github/workflows/reusable_build_tools.yml").write_text("container: ghcr.io/openwrt/buildbot/buildworker-v3.11.8:v28\n",encoding="utf-8")
-            (local/".github/dockerfiles/Dockerfile.tools").write_text("FROM ghcr.io/openwrt/buildbot/buildworker-v3.11.8:v28\n",encoding="utf-8")
+            (local/".github/workflows/reusable_build_tools.yml").write_text("container: ghcr.io/openwrt/buildbot/buildworker-v3.11.8:v23\n",encoding="utf-8")
+            (local/".github/dockerfiles/Dockerfile.tools").write_text("FROM ghcr.io/openwrt/buildbot/buildworker-v3.11.8:v23\n",encoding="utf-8")
             subprocess.run(["git","init","-q",str(source)],check=True); subprocess.run(["git","-C",str(source),"config","user.email","test@example.invalid"],check=True); subprocess.run(["git","-C",str(source),"config","user.name","Fingerprint Test"],check=True); subprocess.run(["git","-C",str(source),"add","-A"],check=True); subprocess.run(["git","-C",str(source),"commit","-qm","fixture"],check=True)
             baseline,_=FINGERPRINT_MODULE.compute_tools_fingerprint(source,local,"test/repo","main")
             (source/"package/foo/Makefile").write_text("changed package",encoding="utf-8")

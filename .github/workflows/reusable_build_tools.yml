@@ -42,6 +42,7 @@ jobs:
           path: openwrt
 
       - name: Verify checked out source commit
+        shell: bash
         working-directory: openwrt
         env:
           EXPECTED_SOURCE_COMMIT: ${{ inputs.source_commit }}
@@ -59,23 +60,21 @@ jobs:
 
       - name: Set configs for tools container
         working-directory: openwrt
+        shell: su buildbot -c "sh -e {0}"
         run: |
-          su --preserve-environment --shell /bin/bash buildbot -c 'bash -s' <<'BUILD_SCRIPT'
           set -e
           touch .config
           echo CONFIG_DEVEL=y >> .config
           echo CONFIG_AUTOREMOVE=y >> .config
           echo CONFIG_CCACHE=y >> .config
           echo CONFIG_BUILD_ALL_HOST_TOOLS=y >> .config
-          BUILD_SCRIPT
 
       - name: Make prereq
         working-directory: openwrt
+        shell: su buildbot -c "sh -e {0}"
         run: |
-          su --preserve-environment --shell /bin/bash buildbot -c 'bash -s' <<'BUILD_SCRIPT'
           set -e
           make defconfig
-          BUILD_SCRIPT
 
       - name: Restore Host Tools ccache
         id: restore-ccache-cache
@@ -88,8 +87,8 @@ jobs:
         working-directory: openwrt
         env:
           CCACHE_DIR: ${{ github.workspace }}/openwrt/.ccache
+        shell: su buildbot -c "bash --noprofile --norc -eo pipefail {0}"
         run: |
-          su --preserve-environment --shell /bin/bash buildbot -c 'bash -s' <<'BUILD_SCRIPT'
           set -euo pipefail
           install -d staging_dir/host/etc .ccache
           touch staging_dir/host/etc/ccache.conf
@@ -99,27 +98,25 @@ jobs:
             echo sloppiness=file_macro,locale,time_macros
           } >> staging_dir/host/etc/ccache.conf
           chown -R buildbot:buildbot .ccache staging_dir/host/etc/ccache.conf
-          BUILD_SCRIPT
 
       - name: Build tools
         working-directory: openwrt
         env:
           CCACHE_DIR: ${{ github.workspace }}/openwrt/.ccache
+        shell: su buildbot -c "sh -e {0}"
         run: |
-          su --preserve-environment --shell /bin/bash buildbot -c 'bash -s' <<'BUILD_SCRIPT'
           set -e
           make tools/install -j"$(nproc)" BUILD_LOG=1 || {
             ret=$?
             bash ../.github/scripts/show_build_failures.sh
             exit "$ret"
           }
-          BUILD_SCRIPT
 
       - name: Diagnose Host Python and staged setuptools
         if: always()
         working-directory: openwrt
+        shell: su buildbot -c "sh -e {0}"
         run: |
-          su --preserve-environment --shell /bin/bash buildbot -c 'bash -s' <<'DIAGNOSTIC_SCRIPT'
           set -u
           echo "=== identity and PATH ==="
           id
@@ -183,15 +180,14 @@ jobs:
           else
             echo "staging_dir/host/bin/python3 does not exist before make tools/install"
           fi
-          DIAGNOSTIC_SCRIPT
 
       - name: Show Host Tools ccache statistics
         if: always()
         working-directory: openwrt
         env:
           CCACHE_DIR: ${{ github.workspace }}/openwrt/.ccache
+        shell: su buildbot -c "bash --noprofile --norc -eo pipefail {0}"
         run: |
-          su --preserve-environment --shell /bin/bash buildbot -c 'bash -s' <<'BUILD_SCRIPT'
           set -euo pipefail
           CCACHE_BIN="$PWD/staging_dir/host/bin/ccache"
           if [ -x "$CCACHE_BIN" ]; then
@@ -199,7 +195,6 @@ jobs:
           else
             echo "Host ccache executable not found; statistics unavailable."
           fi
-          BUILD_SCRIPT
 
       - name: Delete existing Host Tools ccache entry
         if: steps.restore-ccache-cache.outputs.cache-hit == 'true'
@@ -235,11 +230,10 @@ jobs:
       - name: Archive prebuilt tools
         if: inputs.generate_prebuilt_artifacts == true
         working-directory: openwrt
+        shell: su buildbot -c "sh -e {0}"
         run: |
-          su --preserve-environment --shell /bin/bash buildbot -c 'bash -s' <<'BUILD_SCRIPT'
           set -e
           tar -cf tools.tar staging_dir/host build_dir/host
-          BUILD_SCRIPT
 
       - name: Upload prebuilt tools
         if: inputs.generate_prebuilt_artifacts == true

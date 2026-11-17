@@ -15,7 +15,6 @@ on:
           - immortalwrt/immortalwrt@openwrt-23.05
           - immortalwrt/immortalwrt@openwrt-24.10
           - immortalwrt/immortalwrt@openwrt-25.12
-          - hanwckf/immortalwrt-mt798x@openwrt-21.02
       source_commit:
         description: 'Optional exact upstream source commit; empty resolves the selected branch once'
         required: false

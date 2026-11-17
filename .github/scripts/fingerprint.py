@@ -56,7 +56,7 @@ def ghcr_check(owner: str,image: str,tag: str,labels: dict[str,str]) -> bool:
 
 HOST_TOOLS_BUILD_RECIPE=("host-tools-v1; config:DEVEL,AUTOREMOVE,CCACHE,BUILD_ALL_HOST_TOOLS; commands:make-defconfig,make-tools-install")
 HOST_TOOLS_CONFIG="CONFIG_DEVEL=y\nCONFIG_AUTOREMOVE=y\nCONFIG_CCACHE=y\nCONFIG_BUILD_ALL_HOST_TOOLS=y\n"
-HOST_TOOLS_BUILD_ENVIRONMENT={"runner":"ubuntu-24.04","platform":"linux/amd64","buildworker_image":"ghcr.io/openwrt/buildbot/buildworker-v3.11.8:v28"}
+HOST_TOOLS_BUILD_ENVIRONMENT={"runner":"ubuntu-24.04","platform":"linux/amd64","buildworker_image":"ghcr.io/openwrt/buildbot/buildworker-v3.11.8:v23"}
 RUNTIME_DOCKERFILE=".github/dockerfiles/Dockerfile.tools"
 def is_host_tool_input(path: str) -> bool:
     if path in {"Makefile", "rules.mk", "Config.in"}:
@@ -80,7 +80,7 @@ TOOLCHAIN_BUILD_RECIPE = (
     "config:CCACHE,DEVEL,AUTOREMOVE,TARGET,SUBTARGET;"
     "commands:make-defconfig,make-tools-install,make-toolchain-install,"
     "make-target-toolchain-compile;"
-    "host-tools:prebuilt-image; ext-tools-refresh"
+    "host-tools:prebuilt-image; command:./scripts/ext-tools.sh --refresh"
 )
 TOOLCHAIN_BUILD_ENVIRONMENT = {
     "runner": "ubuntu-24.04",
@@ -88,7 +88,6 @@ TOOLCHAIN_BUILD_ENVIRONMENT = {
     "host_tools_image": "identified-by-host-tools-fingerprint",
 }
 TOOLCHAIN_DOCKERFILE = ".github/dockerfiles/Dockerfile.toolchain"
-EXT_TOOLS_REFRESH = ".github/scripts/ext-tools-refresh.sh"
 
 COMMON_BUILD_FILES = {
     "Makefile",
@@ -317,7 +316,7 @@ def compute_manifest(
     tracked = set(paths)
     board_makefile = f"target/linux/{target}/Makefile"
     subtarget_makefile = f"target/linux/{target}/{subtarget}/target.mk"
-    for required in ("Makefile", "rules.mk", "Config.in", board_makefile, subtarget_makefile):
+    for required in ("Makefile", "rules.mk", "Config.in", board_makefile, subtarget_makefile, "scripts/ext-tools.sh"):
         if required not in tracked:
             raise RuntimeError(f"Required Toolchain input is not tracked: {required}")
 
@@ -334,6 +333,7 @@ def compute_manifest(
         path for path in paths
         if path.startswith(("toolchain/", "target/toolchain/"))
     }
+    source_inputs.add("scripts/ext-tools.sh")
     source_inputs.update(path for path in COMMON_BUILD_FILES if path in tracked)
     source_inputs.update(
         path for path in paths if path.startswith("scripts/config/")
@@ -350,7 +350,7 @@ def compute_manifest(
         paths, target, subtarget, kernel_patchver, kernel_arch, source_dir
     ))
 
-    local_inputs = [TOOLCHAIN_DOCKERFILE, EXT_TOOLS_REFRESH]
+    local_inputs = [TOOLCHAIN_DOCKERFILE]
     for relative in local_inputs:
         if not (local_repo_dir / relative).is_file():
             raise RuntimeError(f"Required local Toolchain build input is missing: {relative}")

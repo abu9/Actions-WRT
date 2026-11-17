@@ -56,7 +56,7 @@ jobs:
           set -euo pipefail
 
           case "$SOURCE_BRANCH" in
-            openwrt/openwrt@main|coolsnowwolf/lede@master|immortalwrt/immortalwrt@openwrt-23.05|immortalwrt/immortalwrt@openwrt-24.10|immortalwrt/immortalwrt@openwrt-25.12|hanwckf/immortalwrt-mt798x@openwrt-21.02) ;;
+            openwrt/openwrt@main|coolsnowwolf/lede@master|immortalwrt/immortalwrt@openwrt-23.05|immortalwrt/immortalwrt@openwrt-24.10|immortalwrt/immortalwrt@openwrt-25.12) ;;
             *)
               echo "Unsupported source_branch: $SOURCE_BRANCH" >&2
               exit 1
