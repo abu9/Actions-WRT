@@ -161,9 +161,8 @@ jobs:
           TARGET: ${{ inputs.target }}
           SUBTARGET: ${{ inputs.subtarget }}
           TOOLS_FINGERPRINT: ${{ inputs.tools_fingerprint }}
-        shell: bash
+        shell: su buildbot -c "sh -e {0}"
         run: |
-          set -euo pipefail
           python3 actions-wrt/.github/scripts/fingerprint.py toolchain \
             --source-dir openwrt \
             --local-repo-dir actions-wrt \
