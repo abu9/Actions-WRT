@@ -244,8 +244,7 @@ jobs:
             --image toolchain \
             --tag "$TAG" \
             --label "io.abu9.actions-wrt.toolchain-fingerprint=$FINGERPRINT" \
-            --label "io.abu9.actions-wrt.tools-fingerprint=$TOOLS_FINGERPRINT" \
-
+            --label "io.abu9.actions-wrt.tools-fingerprint=$TOOLS_FINGERPRINT"
           rc=$?
           set -e
           if [ "$rc" -eq 0 ]; then

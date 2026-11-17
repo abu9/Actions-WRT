@@ -178,7 +178,7 @@ jobs:
                 --image toolchain \
                 --tag "$TOOLCHAIN_TAG" \
                 --label "io.abu9.actions-wrt.toolchain-fingerprint=$TOOLCHAIN_FINGERPRINT" \
-                --label "io.abu9.actions-wrt.tools-fingerprint=$TOOLS_FINGERPRINT" \
+                --label "io.abu9.actions-wrt.tools-fingerprint=$TOOLS_FINGERPRINT"
               rc=$?
               set -e
               case "$rc" in
