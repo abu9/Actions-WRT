@@ -417,8 +417,9 @@ def compute_manifest(
     }
 
     target_settings = []
-    for relative, path in zip(
-        (board_makefile, subtarget_makefile), target_files, strict=True
+    for relative, path in (
+        (board_makefile, target_files[0]),
+        (subtarget_makefile, target_files[1]),
     ):
         target_settings.append({
             "path": relative,
