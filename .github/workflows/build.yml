@@ -168,6 +168,9 @@ jobs:
       checked_image: ${{ needs.check_tools_container.outputs.checked_image }}
       tools_image: ${{ steps.image.outputs.tools_image }}
     steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7.0.1
+
       - id: image
         env:
           OWNER: ${{ github.repository_owner }}
