@@ -57,14 +57,6 @@ jobs:
       - name: Fix permission
         run: chown -R buildbot:buildbot .
 
-      # U-Boot checks setuptools through STAGING_DIR_HOST/bin/python3, whose
-      # sys.path includes Debian's /usr/lib/python3/dist-packages. Install the
-      # Debian package and verify it with that exact interpreter below.
-      - name: Install host Python setuptools dependency
-        run: |
-          apt-get update
-          apt-get install -y --no-install-recommends python3-setuptools
-
       - name: Set configs for tools container
         working-directory: openwrt
         run: |
@@ -84,19 +76,6 @@ jobs:
           set -e
           make defconfig
           BUILD_SCRIPT
-
-      - name: Verify host Python setuptools
-        working-directory: openwrt
-        run: |
-          set -euo pipefail
-          HOST_PYTHON="$PWD/staging_dir/host/bin/python3"
-          if [ ! -x "$HOST_PYTHON" ]; then
-            echo "Expected host Python executable not found: $HOST_PYTHON" >&2
-            ls -la staging_dir/host/bin || true
-            exit 1
-          fi
-          echo "Host Python resolves to: $(readlink -f "$HOST_PYTHON")"
-          "$HOST_PYTHON" -c 'import setuptools; print("Host setuptools:", setuptools.__version__)'
 
       - name: Restore Host Tools ccache
         id: restore-ccache-cache

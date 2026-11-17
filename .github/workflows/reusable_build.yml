@@ -10,8 +10,6 @@ on:
         value: ${{ jobs.setup_build.outputs.ccache_tag }}
       push:
         value: ${{ jobs.build.outputs.push}}
-      toolchain-hash: 
-        value: ${{ jobs.build.outputs.toolchain_hash }}
     
     inputs:
       container_name:
@@ -272,14 +270,6 @@ jobs:
       - name: Fix permission
         run: chown -R buildbot:buildbot .
 
-      - name: Install runtime host Python setuptools dependency
-        shell: bash
-        run: |
-          set -euo pipefail
-          apt-get update
-          DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends python3-setuptools
-          rm -rf /var/lib/apt/lists/*
-
       - name: Attach prebuilt tools
         shell: bash
         working-directory: openwrt
@@ -326,7 +316,7 @@ jobs:
         working-directory: openwrt
         run: |
           su --preserve-environment --shell /bin/bash buildbot -c 'sh -e' <<'__ACTIONS_WRT_BUILDBOT_SCRIPT__'
-          make tools/tar/compile -j$(nproc) BUILD_LOG=1 || ret=$? ../.github/scripts/show_build_failures.sh
+          make tools/tar/compile -j$(nproc) BUILD_LOG=1 || { ret=$?; bash ../.github/scripts/show_build_failures.sh; exit "$ret"; }
           __ACTIONS_WRT_BUILDBOT_SCRIPT__
 
 
@@ -336,7 +326,7 @@ jobs:
         working-directory: openwrt
         run: |
           su --preserve-environment --shell /bin/bash buildbot -c 'sh -e' <<'__ACTIONS_WRT_BUILDBOT_SCRIPT__'
-          make toolchain/download toolchain/check FIXUP=1 -j$(nproc) BUILD_LOG=1 || ret=$? ../.github/scripts/show_build_failures.sh
+          make toolchain/download toolchain/check FIXUP=1 -j$(nproc) BUILD_LOG=1 || { ret=$?; bash ../.github/scripts/show_build_failures.sh; exit "$ret"; }
           __ACTIONS_WRT_BUILDBOT_SCRIPT__
 
 
@@ -348,11 +338,11 @@ jobs:
           su --preserve-environment --shell /bin/bash buildbot -c 'sh -e' <<'__ACTIONS_WRT_BUILDBOT_SCRIPT__'
           # With push events or check_packages_list set to all check all packages
           if [ "${{ github.event_name }}" = "push" ] || [ "${{ inputs.check_packages_list }}" = "all" ]; then
-            make package/download package/check FIXUP=1 -j$(nproc) BUILD_LOG=1 || ret=$? ../.github/scripts/show_build_failures.sh
+            make package/download package/check FIXUP=1 -j$(nproc) BUILD_LOG=1 || { ret=$?; bash ../.github/scripts/show_build_failures.sh; exit "$ret"; }
           # With every other event check only changed packages (if provided)
           elif [ -n "${{ inputs.check_packages_list }}" ]; then
             for package in ${{ inputs.check_packages_list }}; do
-              make package/$package/download package/$package/check FIXUP=1 -j$(nproc) BUILD_LOG=1 || ret=$? ../.github/scripts/show_build_failures.sh
+              make package/$package/download package/$package/check FIXUP=1 -j$(nproc) BUILD_LOG=1 || { ret=$?; bash ../.github/scripts/show_build_failures.sh; exit "$ret"; }
             done
           fi
           
@@ -392,7 +382,6 @@ jobs:
     runs-on: ubuntu-24.04
     outputs:
       push: ${{ steps.setoutput.outputs.push }}
-      toolchain_hash: ${{ steps.get-toolchain-file.outputs.toolchain_hash }}
 
     container: ghcr.io/${{ needs.setup_build.outputs.container }}
 
@@ -571,29 +560,8 @@ jobs:
           echo "KEYRING_COMMIT=$KEYRING_COMMIT" >> "$GITHUB_ENV"
           echo "Using $AUTHOR signing keyring commit $KEYRING_COMMIT"
 
-      - name: Download and extract ccache cache from s3
-        id: restore-ccache-cache-s3
-        if: inputs.use_ccache_cache == true
-        working-directory: openwrt
-        run: |
-          S3_LINK=https://s3-ccache.openwrt-ci.ansuel.com
-          CCACHE_TAR=${{ needs.setup_build.outputs.ccache_name }}.tar
-
-          # if curl -o /dev/null -s --head --fail $S3_LINK/$CCACHE_TAR; then
-          #   wget -O - $S3_LINK/$CCACHE_TAR | tar -xf -
-          #   echo "cache-hit=true" >> $GITHUB_OUTPUT
-          # fi
-
       - name: Fix permission
         run: chown -R buildbot:buildbot .
-
-      - name: Install runtime host Python setuptools dependency
-        shell: bash
-        run: |
-          set -euo pipefail
-          apt-get update
-          DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends python3-setuptools
-          rm -rf /var/lib/apt/lists/*
 
       - name: Attach prebuilt tools
         shell: bash
@@ -643,7 +611,7 @@ jobs:
 
       - name: Restore ccache cache
         id: restore-ccache-cache
-        if: inputs.use_ccache_cache == true && steps.restore-ccache-cache-s3.outputs.cache-hit != 'true'
+        if: inputs.use_ccache_cache == true
         uses: actions/cache/restore@v6.1.0
         with:
           path: openwrt/.ccache
@@ -763,12 +731,6 @@ jobs:
           echo CONFIG_TESTING_KERNEL=y >> .config
           
           __ACTIONS_WRT_BUILDBOT_SCRIPT__
-
-      # - name: Configure KERNEL_WERROR
-      #   shell: bash -c 'su --preserve-environment --shell /bin/bash --command "bash -e" buildbot < "$1"' -- {0}
-      #   working-directory: openwrt
-      #   run: |
-      #     echo CONFIG_KERNEL_WERROR=y >> .config
 
       - name: Configure all kernel modules
         if: inputs.build_all_kmods == true
@@ -945,7 +907,7 @@ jobs:
         working-directory: openwrt
         run: |
           su --preserve-environment --shell /bin/bash buildbot -c 'sh -e' <<'__ACTIONS_WRT_BUILDBOT_SCRIPT__'
-          make tools/install -j$(nproc) BUILD_LOG=1 || ret=$? ../.github/scripts/show_build_failures.sh
+          make tools/install -j$(nproc) BUILD_LOG=1 || { ret=$?; bash ../.github/scripts/show_build_failures.sh; exit "$ret"; }
           __ACTIONS_WRT_BUILDBOT_SCRIPT__
 
 
@@ -955,7 +917,7 @@ jobs:
         working-directory: openwrt
         run: |
           su --preserve-environment --shell /bin/bash buildbot -c 'sh -e' <<'__ACTIONS_WRT_BUILDBOT_SCRIPT__'
-          make toolchain/install -j$(nproc) BUILD_LOG=1 || ret=$? ../.github/scripts/show_build_failures.sh
+          make toolchain/install -j$(nproc) BUILD_LOG=1 || { ret=$?; bash ../.github/scripts/show_build_failures.sh; exit "$ret"; }
           __ACTIONS_WRT_BUILDBOT_SCRIPT__
 
 
@@ -971,7 +933,7 @@ jobs:
         working-directory: openwrt
         run: |
           su --preserve-environment --shell /bin/bash buildbot -c 'sh -e' <<'__ACTIONS_WRT_BUILDBOT_SCRIPT__'
-          make target/compile -j$(nproc) BUILD_LOG=1 || ret=$? ../.github/scripts/show_build_failures.sh
+          make target/compile -j$(nproc) BUILD_LOG=1 || { ret=$?; bash ../.github/scripts/show_build_failures.sh; exit "$ret"; }
           __ACTIONS_WRT_BUILDBOT_SCRIPT__
 
 
@@ -988,7 +950,7 @@ jobs:
         working-directory: openwrt
         run: |
           su --preserve-environment --shell /bin/bash buildbot -c 'sh -e' <<'__ACTIONS_WRT_BUILDBOT_SCRIPT__'
-          make package/linux/compile -j$(nproc) BUILD_LOG=1 || ret=$? ../.github/scripts/show_build_failures.sh
+          make package/linux/compile -j$(nproc) BUILD_LOG=1 || { ret=$?; bash ../.github/scripts/show_build_failures.sh; exit "$ret"; }
           __ACTIONS_WRT_BUILDBOT_SCRIPT__
 
 
@@ -1032,7 +994,7 @@ jobs:
         working-directory: openwrt
         run: |
           su --preserve-environment --shell /bin/bash buildbot -c 'sh -e' <<'__ACTIONS_WRT_BUILDBOT_SCRIPT__'
-          make -j$(nproc) BUILD_LOG=1 || ret=$? ../.github/scripts/show_build_failures.sh
+          make -j$(nproc) BUILD_LOG=1 || { ret=$?; bash ../.github/scripts/show_build_failures.sh; exit "$ret"; }
           __ACTIONS_WRT_BUILDBOT_SCRIPT__
 
 
@@ -1042,7 +1004,7 @@ jobs:
         working-directory: openwrt
         run: |
           su --preserve-environment --shell /bin/bash buildbot -c 'sh -e' <<'__ACTIONS_WRT_BUILDBOT_SCRIPT__'
-          make target/toolchain/compile -j$(nproc) BUILD_LOG=1 || ret=$? ../.github/scripts/show_build_failures.sh
+          make target/toolchain/compile -j$(nproc) BUILD_LOG=1 || { ret=$?; bash ../.github/scripts/show_build_failures.sh; exit "$ret"; }
           __ACTIONS_WRT_BUILDBOT_SCRIPT__
 
 
@@ -1077,15 +1039,15 @@ jobs:
           
           coverity_check_packages=(${{ inputs.coverity_check_packages }})
           printf -v clean_packages "package/%s/clean " "${coverity_check_packages[@]}"
-          make -j$(nproc) BUILD_LOG=1 $clean_packages || ret=$? ../.github/scripts/show_build_failures.sh
+          make -j$(nproc) BUILD_LOG=1 $clean_packages || { ret=$?; bash ../.github/scripts/show_build_failures.sh; exit "$ret"; }
           
           coverity_force_compile_packages=(${{ inputs.coverity_force_compile_packages }})
           printf -v force_compile_packages "package/%s/compile " "${coverity_force_compile_packages[@]}"
-          make -j$(nproc) BUILD_LOG=1 $force_compile_packages || ret=$? ../.github/scripts/show_build_failures.sh
+          make -j$(nproc) BUILD_LOG=1 $force_compile_packages || { ret=$?; bash ../.github/scripts/show_build_failures.sh; exit "$ret"; }
           
           printf -v compile_packages "package/%s/compile " "${coverity_check_packages[@]}"
           export PATH=$(pwd)/cov-analysis-linux64/bin:$PATH
-          cov-build --dir cov-int make -j $(nproc) BUILD_LOG=1 $compile_packages || ret=$? ../.github/scripts/show_build_failures.sh
+          cov-build --dir cov-int make -j $(nproc) BUILD_LOG=1 $compile_packages || { ret=$?; bash ../.github/scripts/show_build_failures.sh; exit "$ret"; }
           
           __ACTIONS_WRT_BUILDBOT_SCRIPT__
 
@@ -1157,11 +1119,21 @@ jobs:
         id: get-toolchain-file
         if: inputs.upload_external_toolchain == true
         working-directory: openwrt
+        env:
+          TARGET: ${{ inputs.target }}
+          SUBTARGET: ${{ inputs.subtarget }}
+        shell: bash
         run: |
-          TOOLCHAIN_FILE=$(ls bin/targets/${{inputs.target }}/${{ inputs.subtarget }}/* | grep toolchain)
-          TOOLCHAIN_HASH="${{ hashFiles('openwrt/include/**','openwrt/tools/**','openwrt/toolchain/**') }}"
-          echo "toolchain-file=$TOOLCHAIN_FILE" >> $GITHUB_OUTPUT
-          echo "toolchain_hash=$TOOLCHAIN_HASH" >> $GITHUB_OUTPUT
+          set -euo pipefail
+          mapfile -t candidates < <(
+            find "bin/targets/${TARGET}/${SUBTARGET}" -maxdepth 1 -type f -name '*toolchain*.tar*' -print | sort
+          )
+          if [ "${#candidates[@]}" -ne 1 ]; then
+            echo "Expected exactly one external toolchain archive, found ${#candidates[@]}." >&2
+            printf '%s\n' "${candidates[@]}" >&2
+            exit 1
+          fi
+          printf 'toolchain-file=%s\n' "${candidates[0]}" >> "$GITHUB_OUTPUT"
 
       - name: Upload prebuilt toolchain
         if: inputs.upload_external_toolchain == true
@@ -1170,12 +1142,6 @@ jobs:
           name: ${{ inputs.target }}-${{ inputs.subtarget }}-external-toolchain
           path: |
             openwrt/${{ steps.get-toolchain-file.outputs.toolchain-file }}
-
-      # - name: Archive Firmware
-      #   if: inputs.build_full == true
-      #   shell: bash -c 'su --preserve-environment --shell /bin/bash --command "bash -e" buildbot < "$1"' -- {0}
-      #   working-directory: openwrt
-      #   run: tar -cf tools.tar staging_dir/host build_dir/host
 
       - name: Upload Firmware
         if: inputs.build_full == true

@@ -16,7 +16,7 @@ from pathlib import Path, PurePosixPath
 # orchestration (cache restore/save, triggers, firmware jobs) is deliberately
 # excluded from the artifact fingerprint.
 HOST_TOOLS_BUILD_RECIPE = (
-    "host-tools-v1; apt:python3-setuptools; config:DEVEL,AUTOREMOVE,CCACHE,"
+    "host-tools-v1; config:DEVEL,AUTOREMOVE,CCACHE,"
     "BUILD_ALL_HOST_TOOLS; commands:make-defconfig,make-tools-install"
 )
 HOST_TOOLS_CONFIG = (
