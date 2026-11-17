@@ -255,6 +255,23 @@ class ToolchainFingerprintTests(unittest.TestCase):
         baseline = self.fingerprint()
         self.assertNotEqual(self.fingerprint("b" * 64), baseline)
 
+    def test_toolchain_outputs_can_use_explicit_handoff_file(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="fingerprint-output-") as directory:
+            output = Path(directory) / "handoff"
+            with mock.patch.dict(os.environ, {"GITHUB_OUTPUT": str(Path(directory) / "runner-output")}):
+                FINGERPRINT_MODULE.write_outputs(
+                    {"toolchain_fingerprint": "a" * 64, "toolchain_cache_key": "a" * 32,
+                     "source_commit": "b" * 40},
+                    output,
+                )
+            self.assertEqual(
+                output.read_text(encoding="utf-8").splitlines(),
+                ["toolchain_fingerprint=" + "a" * 64,
+                 "toolchain_cache_key=" + "a" * 32,
+                 "source_commit=" + "b" * 40],
+            )
+            self.assertFalse((Path(directory) / "runner-output").exists())
+
     def test_source_ref_is_metadata_only(self) -> None:
         baseline = self.fingerprint()
         fingerprint, manifest = FINGERPRINT_MODULE.compute_toolchain_fingerprint(
