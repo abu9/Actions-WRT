@@ -124,8 +124,6 @@ COMMON_BUILD_FILES = {
     "scripts/metadata.pm",
     "scripts/target-metadata.pl",
     "scripts/patch-kernel.sh",
-    "LICENSES",
-    "COPYING",
 }
 
 TARGET_RULE_KEYS = {

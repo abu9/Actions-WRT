@@ -64,6 +64,8 @@ class ToolchainFingerprintTests(unittest.TestCase):
             "scripts/metadata.pm": "metadata\n",
             "scripts/target-metadata.pl": "metadata\n",
             "scripts/patch-kernel.sh": "#!/bin/sh\n",
+            "COPYING": "GPL-2.0-only license metadata\n",
+            "LICENSES/GPL-2.0": "license text\n",
             "scripts/ext-tools.sh": "#!/usr/bin/env bash\n# upstream refresh implementation fixture\n",
             "scripts/config/conf.c": "int main(void) { return 0; }\n",
             "target/linux/Makefile": "include $(INCLUDE_DIR)/target.mk\n",
@@ -153,6 +155,24 @@ class ToolchainFingerprintTests(unittest.TestCase):
             subtarget="filogic",
             tools_fingerprint=tools_fingerprint,
         )[0]
+
+    def test_license_metadata_does_not_invalidate_toolchain_fingerprint(self) -> None:
+        baseline = self.fingerprint()
+        self.write(self.source / "COPYING", "updated license metadata\n")
+        self.write(self.source / "LICENSES/GPL-2.0", "updated license text\n")
+        fingerprint, manifest = FINGERPRINT_MODULE.compute_toolchain_fingerprint(
+            source_dir=self.source,
+            local_repo_dir=self.local,
+            source_repo="immortalwrt/immortalwrt",
+            source_ref="openwrt-25.12",
+            target="mediatek",
+            subtarget="filogic",
+            tools_fingerprint="a" * 64,
+        )
+        self.assertEqual(fingerprint, baseline)
+        paths = {item["path"] for item in manifest["files"]}
+        self.assertNotIn("COPYING", paths)
+        self.assertNotIn("LICENSES/GPL-2.0", paths)
 
     def test_unrelated_package_and_device_image_makefiles_do_not_invalidate(self) -> None:
         baseline = self.fingerprint()
