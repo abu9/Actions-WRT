@@ -211,6 +211,7 @@ jobs:
       subtarget: ${{ needs.determine_targets.outputs.subtarget }}
       tools_fingerprint: ${{ needs.tools_fingerprint.outputs.tools_fingerprint }}
       tools_image: ${{ needs.tools_ready.outputs.tools_image }}
+      use_ccache_cache: ${{ github.event_name == 'repository_dispatch' || github.event_name == 'push' || inputs.use_ccache_cache == true }}
 
   check_toolchain_container:
     name: Check target Toolchain image
@@ -263,7 +264,6 @@ jobs:
       tools_fingerprint: ${{ needs.tools_fingerprint.outputs.tools_fingerprint }}
       tools_image_fingerprint: ${{ needs.tools_ready.outputs.expected_fingerprint }}
       toolchain_fingerprint: ${{ needs.toolchain_fingerprint.outputs.toolchain_fingerprint }}
-      use_ccache_cache: ${{ github.event_name == 'repository_dispatch' || github.event_name == 'push' || inputs.use_ccache_cache == true }}
       author: ${{ needs.determine_targets.outputs.author }}
       container_name: ${{ (inputs.build_toolchain == true && needs.check_toolchain_container.outputs.use_toolchain == 'true') && 'toolchain' || 'tools' }}
       build_kernel: ${{ github.event_name == 'push' || inputs.build_kernel == true }}

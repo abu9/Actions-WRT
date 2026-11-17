@@ -187,6 +187,7 @@ jobs:
       subtarget: ${{ needs.determine_targets.outputs.subtarget }}
       tools_fingerprint: ${{ needs.compute-tools-fingerprint.outputs.tools_fingerprint }}
       tools_image: ghcr.io/${{ needs.determine_container_info.outputs.owner_lc }}/tools:${{ needs.determine_container_info.outputs.container_tag }}-${{ needs.compute-tools-fingerprint.outputs.tools_fingerprint }}
+      use_ccache_cache: true
 
   build-target-toolchain:
     name: Build target-specific toolchain
