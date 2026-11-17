@@ -103,8 +103,9 @@ jobs:
     name: Compute generic host-tools fingerprint
     if: ${{ !cancelled() && needs.determine_targets.result == 'success' && inputs.build_tools == true }}
     needs: determine_targets
-    uses: ./.github/workflows/reusable_tools_fingerprint.yml
+    uses: ./.github/workflows/fingerprint.yml
     with:
+      mode: tools
       repo_url: ${{ needs.determine_targets.outputs.repo_url }}
       repo_branch: ${{ needs.determine_targets.outputs.repo_branch }}
       source_commit: ${{ needs.determine_targets.outputs.source_commit }}
