@@ -82,7 +82,7 @@ jobs:
         uses: actions/cache/restore@v6.1.0
         with:
           path: openwrt/.ccache
-          key: ccache-host-tools-${{ inputs.ccache_tag }}-buildworker-v28-${{ runner.os }}-${{ runner.arch }}
+          key: ccache-host-tools-${{ inputs.ccache_tag }}-buildworker-v23-${{ runner.os }}-${{ runner.arch }}
 
       - name: Configure Host Tools ccache
         working-directory: openwrt
