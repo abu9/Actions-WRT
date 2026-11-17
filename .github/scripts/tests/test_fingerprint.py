@@ -325,6 +325,96 @@ class GHCRCheckTests(unittest.TestCase):
                 )
             mocked.assert_not_called()
 
+    def test_empty_expected_labels_fail_before_network(self) -> None:
+        with mock.patch.object(FINGERPRINT_MODULE, "urlopen") as mocked:
+            with self.assertRaises(ValueError):
+                FINGERPRINT_MODULE.ghcr_check("owner", "image", "tag", {})
+            mocked.assert_not_called()
+
+    def test_missing_manifest_returns_false(self) -> None:
+        not_found = HTTPError(
+            "https://ghcr.io/v2/owner/image/manifests/missing",
+            404, "Not Found", {}, None,
+        )
+        with mock.patch.object(
+            FINGERPRINT_MODULE, "urlopen",
+            side_effect=[self.response({"token": "pull-token"}), not_found],
+        ):
+            self.assertFalse(
+                FINGERPRINT_MODULE.ghcr_check(
+                    "owner", "image", "missing", {"fingerprint": "expected"}
+                )
+            )
+
+    def test_oci_index_resolves_linux_amd64_config_labels(self) -> None:
+        index = {
+            "manifests": [
+                {
+                    "digest": "sha256:" + "d" * 64,
+                    "platform": {"os": "linux", "architecture": "arm64"},
+                },
+                {
+                    "digest": "sha256:" + "e" * 64,
+                    "platform": {"os": "linux", "architecture": "amd64"},
+                },
+            ]
+        }
+        image_manifest = {"config": {"digest": "sha256:" + "c" * 64}}
+        image_config = {
+            "config": {
+                "Labels": {
+                    "fingerprint": "expected",
+                    "dependency": "host-tools",
+                }
+            }
+        }
+        with mock.patch.object(
+            FINGERPRINT_MODULE, "urlopen",
+            side_effect=[
+                self.response({"token": "pull-token"}),
+                self.response(index),
+                self.response(image_manifest),
+                self.response(image_config),
+            ],
+        ):
+            self.assertTrue(
+                FINGERPRINT_MODULE.ghcr_check(
+                    "owner", "image", "tag",
+                    {"fingerprint": "expected", "dependency": "host-tools"},
+                )
+            )
+
+    def test_oci_index_without_linux_amd64_returns_false(self) -> None:
+        index = {
+            "manifests": [
+                {
+                    "digest": "sha256:" + "d" * 64,
+                    "platform": {"os": "linux", "architecture": "arm64"},
+                }
+            ]
+        }
+        with mock.patch.object(
+            FINGERPRINT_MODULE, "urlopen",
+            side_effect=[
+                self.response({"token": "pull-token"}),
+                self.response(index),
+            ],
+        ):
+            self.assertFalse(
+                FINGERPRINT_MODULE.ghcr_check(
+                    "owner", "image", "tag", {"fingerprint": "expected"}
+                )
+            )
+
+    def test_missing_registry_token_fails_closed(self) -> None:
+        with mock.patch.object(
+            FINGERPRINT_MODULE, "urlopen", return_value=self.response({})
+        ):
+            with self.assertRaisesRegex(RuntimeError, "empty pull token"):
+                FINGERPRINT_MODULE.ghcr_check(
+                    "owner", "image", "tag", {"fingerprint": "expected"}
+                )
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
