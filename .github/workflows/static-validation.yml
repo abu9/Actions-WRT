@@ -20,6 +20,11 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v7.0.1
 
+      - name: Run build-free Toolchain fingerprint regression tests
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover -s .github/scripts/tests -p 'test_*.py' -v
+
       - name: Install pinned actionlint binary
         env:
           ACTIONLINT_VERSION: '1.7.12'
