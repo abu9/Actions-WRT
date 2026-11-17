@@ -400,6 +400,55 @@ class WorkflowIntegrationTests(unittest.TestCase):
         self.assertNotIn("tools_image_fingerprint", reusable)
 
 
+
+    def test_toolchain_build_uses_same_run_host_tools_artifact_in_parallel(self) -> None:
+        workflows = Path(__file__).resolve().parents[2] / "workflows"
+        push = (workflows / "push-containers.yml").read_text(encoding="utf-8")
+        fingerprint = (workflows / "fingerprint.yml").read_text(encoding="utf-8")
+        reusable = (workflows / "reusable_build.yml").read_text(encoding="utf-8")
+        dockerfile = (
+            Path(__file__).resolve().parents[2]
+            / "dockerfiles"
+            / "Dockerfile.toolchain"
+        ).read_text(encoding="utf-8")
+
+        toolchain_fp = push.split("  compute-toolchain-fingerprint:", 1)[1].split(
+            "  build-target-toolchain:", 1
+        )[0]
+        self.assertIn("needs.build-linux-buildbot.result == 'success'", toolchain_fp)
+        self.assertNotIn("needs.push-tools-container", toolchain_fp)
+        self.assertIn("use_prebuilt_tools_artifact: true", toolchain_fp)
+        toolchain_build = push.split("  build-target-toolchain:", 1)[1].split(
+            "  push-target-toolchain:", 1
+        )[0]
+        self.assertIn("needs.build-linux-buildbot", toolchain_build)
+        self.assertNotIn("push-tools-container", toolchain_build)
+        self.assertIn("use_prebuilt_tools_artifact: true", toolchain_build)
+        self.assertIn("name: linux-buildbot-prebuilt-tools", push)
+        self.assertIn("use_prebuilt_tools_artifact", fingerprint)
+        self.assertIn("actions/download-artifact@v8.0.2", fingerprint)
+        self.assertIn("use_prebuilt_tools_artifact", reusable)
+        self.assertIn("actions/download-artifact@v8.0.2", reusable)
+        self.assertIn("container=openwrt/buildbot/buildworker-v3.11.8:v23", reusable)
+        self.assertEqual(
+            dockerfile.splitlines()[0],
+            "FROM ghcr.io/openwrt/buildbot/buildworker-v3.11.8:v23",
+        )
+        self.assertIn(
+            "COPY --chown=buildbot staging_dir/host /prebuilt_tools/staging_dir/host",
+            dockerfile,
+        )
+        self.assertIn(
+            "COPY --chown=buildbot build_dir/host /prebuilt_tools/build_dir/host",
+            dockerfile,
+        )
+        self.assertNotIn("FROM ghcr.io/$OWNER_LC/tools:", dockerfile)
+        self.assertIn("host-tools:prebuilt-artifact", FINGERPRINT_MODULE.TOOLCHAIN_BUILD_RECIPE)
+        self.assertEqual(
+            FINGERPRINT_MODULE.TOOLCHAIN_BUILD_ENVIRONMENT["buildworker_image"],
+            "ghcr.io/openwrt/buildbot/buildworker-v3.11.8:v23",
+        )
+
 class HostToolsFingerprintTests(unittest.TestCase):
     def test_unrelated_package_and_target_files_do_not_change_host_tools_fingerprint(self):
         with tempfile.TemporaryDirectory(prefix="host-tools-fingerprint-") as d:

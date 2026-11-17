@@ -1,6 +1,4 @@
-ARG OWNER_LC
-ARG CONTAINER_TAG
-FROM ghcr.io/$OWNER_LC/tools:$CONTAINER_TAG
+FROM ghcr.io/openwrt/buildbot/buildworker-v3.11.8:v23
 
 ARG TOOLCHAIN_NAME
 ARG TOOLS_FINGERPRINT
@@ -11,4 +9,6 @@ LABEL io.abu9.actions-wrt.tools-fingerprint="${TOOLS_FINGERPRINT}" \
       io.abu9.actions-wrt.tools-source-commit="${SOURCE_COMMIT}" \
       io.abu9.actions-wrt.toolchain-fingerprint="${TOOLCHAIN_FINGERPRINT}"
 
+COPY --chown=buildbot staging_dir/host /prebuilt_tools/staging_dir/host
+COPY --chown=buildbot build_dir/host /prebuilt_tools/build_dir/host
 ADD $TOOLCHAIN_NAME /external-toolchain/

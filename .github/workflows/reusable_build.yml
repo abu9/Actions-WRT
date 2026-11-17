@@ -88,6 +88,10 @@ on:
       tools_fingerprint:
         type: string
         default: ''
+      use_prebuilt_tools_artifact:
+        description: 'Use the same-run Host Tools artifact instead of a published tools image'
+        type: boolean
+        default: false
       toolchain_fingerprint:
         description: 'Full verified target Toolchain content fingerprint'
         type: string
@@ -209,7 +213,13 @@ jobs:
 
       - name: Determine container
         id: determine_container
-        run: echo "container=${{ steps.lower_owner.outputs.owner_lc }}/${{ steps.determine_container_name.outputs.container_name }}" >> $GITHUB_OUTPUT
+        shell: bash
+        run: |
+          if [ "${{ inputs.use_prebuilt_tools_artifact }}" = "true" ]; then
+            echo "container=openwrt/buildbot/buildworker-v3.11.8:v23" >> "$GITHUB_OUTPUT"
+          else
+            echo "container=${{ steps.lower_owner.outputs.owner_lc }}/${{ steps.determine_container_name.outputs.container_name }}" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Determine ccache info
         id: determine_ccache_info
@@ -370,6 +380,20 @@ jobs:
           repository: ${{ inputs.repo_url }}
           ref: ${{ inputs.repo_commit != '' && inputs.repo_commit || inputs.repo_branch }}
           path: openwrt
+
+      - name: Download prebuilt Host Tools artifact
+        if: inputs.use_prebuilt_tools_artifact == true
+        uses: actions/download-artifact@v8.0.2
+        with:
+          name: linux-buildbot-prebuilt-tools
+
+      - name: Extract prebuilt Host Tools artifact
+        if: inputs.use_prebuilt_tools_artifact == true
+        run: |
+          set -euo pipefail
+          mkdir -p /prebuilt_tools
+          tar -xf tools.tar -C /prebuilt_tools
+          chown -R buildbot:buildbot /prebuilt_tools
 
       - name: Parse toolchain file
         if: inputs.build_toolchain == false

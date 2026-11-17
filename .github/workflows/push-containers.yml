@@ -180,8 +180,8 @@ jobs:
       contents: read
       packages: read
     name: Compute target Toolchain fingerprint
-    if: ${{ !cancelled() && needs.determine_targets.result == 'success' && needs.push-tools-container.result == 'success' && inputs.build_toolchain == true && inputs.build_tools == true }}
-    needs: [determine_targets, determine_container_info, compute-tools-fingerprint, push-tools-container]
+    if: ${{ !cancelled() && needs.determine_targets.result == 'success' && needs.build-linux-buildbot.result == 'success' && inputs.build_toolchain == true && inputs.build_tools == true }}
+    needs: [determine_targets, determine_container_info, compute-tools-fingerprint, build-linux-buildbot]
     uses: ./.github/workflows/fingerprint.yml
     with:
       mode: toolchain
@@ -191,7 +191,8 @@ jobs:
       target: ${{ needs.determine_targets.outputs.target }}
       subtarget: ${{ needs.determine_targets.outputs.subtarget }}
       tools_fingerprint: ${{ needs.compute-tools-fingerprint.outputs.tools_fingerprint }}
-      tools_image: ghcr.io/${{ needs.determine_container_info.outputs.owner_lc }}/tools:${{ needs.determine_container_info.outputs.container_tag }}-${{ needs.compute-tools-fingerprint.outputs.tools_fingerprint }}
+      tools_image: ''
+      use_prebuilt_tools_artifact: true
       use_ccache_cache: true
 
   build-target-toolchain:
@@ -199,10 +200,11 @@ jobs:
     if: ${{ !cancelled() &&
         needs.determine_targets.result == 'success' &&
         needs.compute-tools-fingerprint.result == 'success' &&
+        needs.build-linux-buildbot.result == 'success' &&
         needs.compute-toolchain-fingerprint.result == 'success' &&
         inputs.build_toolchain == true &&
         inputs.build_tools == true }}
-    needs: [determine_targets, compute-tools-fingerprint, push-tools-container, compute-toolchain-fingerprint]
+    needs: [determine_targets, compute-tools-fingerprint, build-linux-buildbot, compute-toolchain-fingerprint]
     permissions:
       contents: read
       packages: read
@@ -219,6 +221,8 @@ jobs:
       author: ${{ needs.determine_targets.outputs.author }}
       container_name: tools
       build_toolchain: true
+      use_prebuilt_tools_artifact: true
+      check: false
       use_ccache_cache: true
       ccache_type: toolchain
       build_external_toolchain: true
@@ -234,7 +238,7 @@ jobs:
           needs.compute-toolchain-fingerprint.result == 'success' &&
           needs.build-target-toolchain.result == 'success' &&
           needs.build-target-toolchain.outputs.push == 'true' }}
-    needs: [determine_targets, determine_container_info, compute-tools-fingerprint, compute-toolchain-fingerprint, build-target-toolchain]
+    needs: [determine_targets, determine_container_info, compute-tools-fingerprint, compute-toolchain-fingerprint, build-linux-buildbot, build-target-toolchain]
     runs-on: ubuntu-24.04
     permissions:
       contents: read
@@ -242,6 +246,14 @@ jobs:
     steps:
       - name: Checkout Actions-WRT repository
         uses: actions/checkout@v7.0.1
+
+      - name: Download prebuilt Host Tools artifact
+        uses: actions/download-artifact@v8.0.2
+        with:
+          name: linux-buildbot-prebuilt-tools
+
+      - name: Extract prebuilt Host Tools
+        run: tar -xf tools.tar
 
       - name: Download external toolchain artifact
         uses: actions/download-artifact@v8.0.2
@@ -272,8 +284,6 @@ jobs:
           tags: ghcr.io/${{ needs.determine_container_info.outputs.owner_lc }}/toolchain:${{ needs.determine_targets.outputs.target }}-${{ needs.determine_targets.outputs.subtarget }}-${{ needs.determine_container_info.outputs.container_tag }}-${{ needs.compute-toolchain-fingerprint.outputs.toolchain_cache_key }}
           file: .github/dockerfiles/Dockerfile.toolchain
           build-args: |
-            OWNER_LC=${{ needs.determine_container_info.outputs.owner_lc }}
-            CONTAINER_TAG=${{ needs.determine_container_info.outputs.container_tag }}-${{ needs.compute-tools-fingerprint.outputs.tools_fingerprint }}
             TOOLS_FINGERPRINT=${{ needs.compute-tools-fingerprint.outputs.tools_fingerprint }}
             SOURCE_COMMIT=${{ needs.compute-tools-fingerprint.outputs.source_commit }}
             TOOLCHAIN_NAME=${{ steps.get-toolchain-name.outputs.toolchain_name }}

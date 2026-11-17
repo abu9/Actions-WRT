@@ -86,12 +86,12 @@ TOOLCHAIN_BUILD_RECIPE = (
     "config:CCACHE,DEVEL,AUTOREMOVE,TARGET,SUBTARGET;"
     "commands:make-defconfig,make-tools-install,make-toolchain-install,"
     "make-target-toolchain-compile;"
-    "host-tools:prebuilt-image; command:./scripts/ext-tools.sh --refresh"
+    "host-tools:prebuilt-artifact; command:./scripts/ext-tools.sh --refresh"
 )
 TOOLCHAIN_BUILD_ENVIRONMENT = {
     "runner": "ubuntu-24.04",
     "platform": "linux/amd64",
-    "host_tools_image": "identified-by-host-tools-fingerprint",
+    "buildworker_image": "ghcr.io/openwrt/buildbot/buildworker-v3.11.8:v23",
 }
 TOOLCHAIN_DOCKERFILE = ".github/dockerfiles/Dockerfile.toolchain"
 
