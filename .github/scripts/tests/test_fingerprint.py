@@ -333,6 +333,7 @@ class WorkflowIntegrationTests(unittest.TestCase):
         self.assertIn('io.abu9.actions-wrt.tools-source-commit=$SOURCE_COMMIT', block)
         self.assertNotIn("GHCR_USER:", block)
         self.assertNotIn("GHCR_PASSWORD:", block)
+        self.assertNotIn("tools_image_fingerprint", reusable)
 
 
 class HostToolsFingerprintTests(unittest.TestCase):

@@ -88,10 +88,6 @@ on:
       tools_fingerprint:
         type: string
         default: ''
-      tools_image_fingerprint:
-        description: 'Exact verified GHCR Host Tools image fingerprint/tag component'
-        type: string
-        default: ''
       toolchain_fingerprint:
         description: 'Full verified target Toolchain content fingerprint'
         type: string
@@ -157,7 +153,6 @@ jobs:
           REPO_BRANCH: ${{ inputs.repo_branch }}
           REQUESTED_CONTAINER: ${{ inputs.container_name }}
           TOOLS_FINGERPRINT: ${{ inputs.tools_fingerprint }}
-          TOOLS_IMAGE_FINGERPRINT: ${{ inputs.tools_image_fingerprint }}
           SOURCE_COMMIT: ${{ inputs.repo_commit }}
           TOOLCHAIN_FINGERPRINT: ${{ inputs.toolchain_fingerprint }}
         shell: bash
@@ -202,12 +197,11 @@ jobs:
           # Both generic host-tools and target-toolchain images are selected
           # with the exact Host Tools fingerprint.
           if [ "$CONTAINER_NAME" = "tools" ]; then
-            IMAGE_FINGERPRINT="${TOOLS_IMAGE_FINGERPRINT:-$TOOLS_FINGERPRINT}"
-            if [ -z "$IMAGE_FINGERPRINT" ]; then
+            if [ -z "$TOOLS_FINGERPRINT" ]; then
               echo "No verified Host Tools image fingerprint supplied." >&2
               exit 1
             fi
-            CONTAINER_TAG="${CONTAINER_TAG}-${IMAGE_FINGERPRINT}"
+            CONTAINER_TAG="${CONTAINER_TAG}-${TOOLS_FINGERPRINT}"
           fi
 
           echo "Container to use: $CONTAINER_NAME:$CONTAINER_TAG"

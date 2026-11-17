@@ -131,7 +131,6 @@ jobs:
     outputs:
       tools_required: ${{ steps.check.outputs.tools_required }}
       checked_image: ${{ steps.check.outputs.checked_image }}
-      expected_fingerprint: ${{ steps.check.outputs.expected_fingerprint }}
     steps:
       - uses: actions/checkout@v7.0.1
       - id: check
@@ -158,7 +157,6 @@ jobs:
             exit "$rc"
           fi
           echo "checked_image=tools:$TAG" >> "$GITHUB_OUTPUT"
-          echo "expected_fingerprint=$EXPECTED_FINGERPRINT" >> "$GITHUB_OUTPUT"
 
   diagnose_host_tools:
     name: Diagnose Host Tools Python environment (PR only; no image publish)
@@ -295,7 +293,6 @@ jobs:
     runs-on: ubuntu-24.04
     outputs:
       checked_image: ${{ needs.check_tools_container.outputs.checked_image }}
-      expected_fingerprint: ${{ needs.check_tools_container.outputs.expected_fingerprint }}
       tools_image: ${{ steps.image.outputs.tools_image }}
     steps:
       - id: image
@@ -402,7 +399,6 @@ jobs:
       repo_branch: ${{ needs.determine_targets.outputs.repo_branch }}
       repo_commit: ${{ needs.tools_fingerprint.outputs.source_commit }}
       tools_fingerprint: ${{ needs.tools_fingerprint.outputs.tools_fingerprint }}
-      tools_image_fingerprint: ${{ needs.tools_ready.outputs.expected_fingerprint }}
       toolchain_fingerprint: ${{ needs.toolchain_fingerprint.outputs.toolchain_fingerprint }}
       author: ${{ needs.determine_targets.outputs.author }}
       container_name: ${{ (inputs.build_toolchain == true && needs.check_toolchain_container.outputs.use_toolchain == 'true') && 'toolchain' || 'tools' }}
