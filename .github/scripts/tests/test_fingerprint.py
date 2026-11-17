@@ -324,9 +324,10 @@ class WorkflowIntegrationTests(unittest.TestCase):
         self.assertIn('io.abu9.actions-wrt.tools-source-commit=$SOURCE_COMMIT', verifier)
 
         reusable = (root / "reusable_build.yml").read_text(encoding="utf-8")
-        start = reusable.index("      - name: Determine container name")
-        end = reusable.index("\\n      - name: Determine container", start)
-        block = reusable[start:end]
+        workflow_lines = reusable.splitlines()
+        start = workflow_lines.index("      - name: Determine container name")
+        end = workflow_lines.index("      - name: Determine container", start + 1)
+        block = "\n".join(workflow_lines[start:end])
         self.assertIn("GITHUB_ACTOR: ${{ github.actor }}", block)
         self.assertIn("GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}", block)
         self.assertIn('io.abu9.actions-wrt.tools-source-commit=$SOURCE_COMMIT', block)
