@@ -48,7 +48,7 @@ def publish_toolchain_outputs(input_file: Path, expected_source_commit: str, git
 
     with github_output.open("a", encoding="utf-8") as output:
         for key in sorted(required):
-            output.write(f"{key}={entries[key]}\\n")
+            output.write(f"{key}={entries[key]}\n")
     input_file.unlink()
 
 def ghcr_check(owner: str,image: str,tag: str,labels: dict[str,str]) -> bool:
