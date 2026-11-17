@@ -108,6 +108,15 @@ jobs:
       - name: Fix checkout permissions
         run: chown -R buildbot:buildbot actions-wrt openwrt
 
+      - name: Prepare prebuilt tools
+        working-directory: openwrt
+        shell: su buildbot -c "sh -e {0}"
+        run: |
+          mkdir -p staging_dir build_dir
+          ln -s /prebuilt_tools/staging_dir/host staging_dir/host
+          ln -s /prebuilt_tools/build_dir/host build_dir/host
+          ./scripts/ext-tools.sh --refresh
+
       - name: Resolve the same internal Toolchain configuration as the build
         working-directory: openwrt
         env:
@@ -116,9 +125,6 @@ jobs:
           USE_CCACHE_CACHE: ${{ inputs.use_ccache_cache }}
         shell: su buildbot -c "sh -e {0}"
         run: |
-          mkdir -p staging_dir build_dir
-          ln -s /prebuilt_tools/staging_dir/host staging_dir/host
-          ln -s /prebuilt_tools/build_dir/host build_dir/host
           rm -f .config
           if [ "$USE_CCACHE_CACHE" = "true" ]; then
             echo CONFIG_CCACHE=y >> .config

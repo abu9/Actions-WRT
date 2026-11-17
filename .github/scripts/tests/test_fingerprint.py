@@ -279,6 +279,18 @@ class WorkflowIntegrationTests(unittest.TestCase):
         self.assertNotIn("ext-tools-refresh.sh", workflow)
         self.assertNotIn("--preserve-environment", workflow)
 
+        fingerprint_workflow = (
+            Path(__file__).resolve().parents[2]
+            / "workflows"
+            / "fingerprint.yml"
+        ).read_text(encoding="utf-8")
+        self.assertEqual(
+            fingerprint_workflow.count("name: Prepare prebuilt tools"), 1
+        )
+        self.assertIn("./scripts/ext-tools.sh --refresh", fingerprint_workflow)
+        self.assertNotIn("ext-tools-refresh.sh", fingerprint_workflow)
+        self.assertNotIn("--preserve-environment", fingerprint_workflow)
+
     def test_verify_workflow_passes_authentication_to_both_ghcr_checks(self) -> None:
         workflow_path = (
             Path(__file__).resolve().parents[2]
