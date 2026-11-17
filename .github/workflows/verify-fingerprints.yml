@@ -94,6 +94,8 @@ jobs:
 
       - name: Verify existing Host Tools image labels
         env:
+          GITHUB_ACTOR: ${{ github.actor }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           OWNER: ${{ github.repository_owner }}
           IMAGE: ${{ inputs.tools_image }}
           TAG: ${{ inputs.tools_tag }}
@@ -112,6 +114,8 @@ jobs:
 
       - name: Verify existing Toolchain image labels
         env:
+          GITHUB_ACTOR: ${{ github.actor }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           OWNER: ${{ github.repository_owner }}
           IMAGE: ${{ inputs.toolchain_image }}
           TAG: ${{ inputs.toolchain_tag }}
