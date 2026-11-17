@@ -12,11 +12,13 @@ def tracked_paths(repo: Path) -> list[str]:
     return sorted(item.decode("utf-8") for item in run_git(repo,"ls-files","-z").split(b"\0") if item)
 def sha256_file(path: Path) -> str: return hashlib.sha256(path.read_bytes()).hexdigest()
 def canonical_sha256(value: dict, *, ensure_ascii: bool = False) -> str: return hashlib.sha256(json.dumps(value,sort_keys=True,separators=(",",":"),ensure_ascii=ensure_ascii).encode("utf-8")).hexdigest()
-def write_outputs(values: dict[str,str]) -> None:
-    path=os.environ.get("GITHUB_OUTPUT")
-    if path:
-        with open(path,"a",encoding="utf-8") as f:
-            for k,v in values.items(): f.write(f"{k}={v}\n")
+def write_outputs(values: dict[str,str], output_file: Path | None = None) -> None:
+    """Write GitHub Actions outputs, optionally to an explicitly supplied handoff file."""
+    path = output_file or (Path(os.environ["GITHUB_OUTPUT"]) if os.environ.get("GITHUB_OUTPUT") else None)
+    if path is not None:
+        with path.open("a", encoding="utf-8") as f:
+            for key, value in values.items():
+                f.write(f"{key}={value}\n")
 def ghcr_check(owner: str,image: str,tag: str,labels: dict[str,str]) -> bool:
     if not re.fullmatch(r"[a-z0-9_.-]+", owner.lower()):
         raise ValueError("Invalid GHCR owner.")
@@ -432,13 +434,13 @@ def compute_toolchain_fingerprint(*args,**kwargs):
 def main():
     p=argparse.ArgumentParser(); s=p.add_subparsers(dest="command",required=True)
     q=s.add_parser("tools"); q.add_argument("--source-dir",required=True,type=Path); q.add_argument("--local-repo-dir",required=True,type=Path); q.add_argument("--source-repo",required=True); q.add_argument("--source-ref",required=True)
-    q=s.add_parser("toolchain"); q.add_argument("--source-dir",required=True,type=Path); q.add_argument("--local-repo-dir",required=True,type=Path); q.add_argument("--source-repo",required=True); q.add_argument("--source-ref",required=True); q.add_argument("--target",required=True); q.add_argument("--subtarget",required=True); q.add_argument("--tools-fingerprint",required=True)
+    q=s.add_parser("toolchain"); q.add_argument("--source-dir",required=True,type=Path); q.add_argument("--local-repo-dir",required=True,type=Path); q.add_argument("--source-repo",required=True); q.add_argument("--source-ref",required=True); q.add_argument("--target",required=True); q.add_argument("--subtarget",required=True); q.add_argument("--tools-fingerprint",required=True); q.add_argument("--output-file",type=Path,help="Write Actions outputs to this file instead of GITHUB_OUTPUT")
     q=s.add_parser("ghcr-check"); q.add_argument("--owner",required=True); q.add_argument("--image",required=True); q.add_argument("--tag",required=True); q.add_argument("--label",action="append",default=[])
     a=p.parse_args()
     if a.command=="tools":
         f,_=compute_tools_fingerprint(a.source_dir,a.local_repo_dir,a.source_repo,a.source_ref); write_outputs({"tools_fingerprint":f,"source_commit":run_git(a.source_dir,"rev-parse","HEAD").decode().strip()}); print(f); return 0
     if a.command=="toolchain":
-        f,_=compute_toolchain_fingerprint(a.source_dir,a.local_repo_dir,a.source_repo,a.source_ref,a.target,a.subtarget,a.tools_fingerprint); write_outputs({"toolchain_fingerprint":f,"toolchain_cache_key":f[:32],"source_commit":run_git(a.source_dir,"rev-parse","HEAD").decode().strip()}); print(f); return 0
+        f,_=compute_toolchain_fingerprint(a.source_dir,a.local_repo_dir,a.source_repo,a.source_ref,a.target,a.subtarget,a.tools_fingerprint); write_outputs({"toolchain_fingerprint":f,"toolchain_cache_key":f[:32],"source_commit":run_git(a.source_dir,"rev-parse","HEAD").decode().strip()}, a.output_file); print(f); return 0
     labels={}; 
     for item in a.label:
         if "=" not in item: raise ValueError("Invalid label")
