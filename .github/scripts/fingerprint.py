@@ -81,13 +81,20 @@ def ghcr_check(owner: str,image: str,tag: str,labels: dict[str,str]) -> bool:
     if manifest is None:return False
     if isinstance(manifest.get("manifests"),list):
         digest=next((m.get("digest") for m in manifest["manifests"] if (m.get("platform") or {}).get("os")=="linux" and (m.get("platform") or {}).get("architecture")=="amd64"),None)
-        if not digest:return False
+        if not digest:
+            raise RuntimeError("GHCR tag manifest exists but has no linux/amd64 image manifest.")
         manifest=get(f"manifests/{digest}","application/vnd.oci.image.manifest.v1+json, application/vnd.docker.distribution.manifest.v2+json")
-        if manifest is None:return False
+    if not isinstance(manifest,dict):
+        raise RuntimeError("GHCR returned an invalid image manifest.")
     digest=(manifest.get("config") or {}).get("digest")
-    if not digest:return False
+    if not digest:
+        raise RuntimeError("GHCR image manifest has no config digest.")
     config=get(f"blobs/{digest}","application/json")
-    return config is not None and all((config.get("config",{}).get("Labels") or {}).get(k)==v for k,v in labels.items())
+    actual_labels=config.get("config",{}).get("Labels") or {}
+    mismatches=[key for key,value in labels.items() if actual_labels.get(key)!=value]
+    if mismatches:
+        raise RuntimeError("GHCR image labels do not match the expected fingerprints: "+", ".join(sorted(mismatches)))
+    return True
 
 HOST_TOOLS_BUILD_RECIPE=("host-tools-v2; config:DEVEL,AUTOREMOVE,CCACHE; commands:make-defconfig,make-tools-install")
 HOST_TOOLS_CONFIG="CONFIG_DEVEL=y\nCONFIG_AUTOREMOVE=y\nCONFIG_CCACHE=y\n"
