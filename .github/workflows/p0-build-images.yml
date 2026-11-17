@@ -7,6 +7,7 @@ on:
       - feat/360t7-openwrt-uboot-ubi-25.12
     paths:
       - '.github/workflows/p0-build-images.yml'
+      - '.github/workflows/push-containers.yml'
   workflow_dispatch:
 
 permissions:

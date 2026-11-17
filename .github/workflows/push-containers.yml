@@ -100,6 +100,9 @@ jobs:
           echo "Will publish ghcr.io/$OWNER_LC/tools:$CONTAINER_TAG"
 
   compute-tools-fingerprint:
+    permissions:
+      contents: read
+      packages: read
     name: Compute generic host-tools fingerprint
     if: ${{ !cancelled() && needs.determine_targets.result == 'success' && inputs.build_tools == true }}
     needs: determine_targets
@@ -174,6 +177,9 @@ jobs:
           file: .github/dockerfiles/Dockerfile.tools
 
   compute-toolchain-fingerprint:
+    permissions:
+      contents: read
+      packages: read
     name: Compute target Toolchain fingerprint
     if: ${{ !cancelled() && needs.determine_targets.result == 'success' && needs.push-tools-container.result == 'success' && inputs.build_toolchain == true && inputs.build_tools == true }}
     needs: [determine_targets, determine_container_info, compute-tools-fingerprint, push-tools-container]
