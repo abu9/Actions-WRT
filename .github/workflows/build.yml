@@ -244,7 +244,7 @@ jobs:
           FINGERPRINT: ${ needs.toolchain_fingerprint.outputs.toolchain_fingerprint }
         run: |
           set +e
-          TAG="$TARGET-$SUBTARGET-$AUTHOR"_"$REPO_BRANCH-$FINGERPRINT"
+          TAG="$TARGET-$SUBTARGET-$AUTHOR"_"$REPO_BRANCH-${FINGERPRINT:0:32}"
           python3 .github/scripts/fingerprint.py ghcr-check --owner "$OWNER" --image toolchain --tag "$TAG"             --label "io.abu9.actions-wrt.toolchain-fingerprint=$FINGERPRINT"
           rc=$?
           set -e

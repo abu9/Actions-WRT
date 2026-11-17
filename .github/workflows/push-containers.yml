@@ -225,7 +225,7 @@ jobs:
           needs.compute-toolchain-fingerprint.result == 'success' &&
           needs.build-target-toolchain.result == 'success' &&
           needs.build-target-toolchain.outputs.push == 'true' }}
-    needs: [determine_targets, determine_container_info, compute-tools-fingerprint, compute-toolchain-cache-key, build-target-toolchain]
+    needs: [determine_targets, determine_container_info, compute-tools-fingerprint, compute-toolchain-fingerprint, build-target-toolchain]
     runs-on: ubuntu-24.04
     permissions:
       contents: read
@@ -260,7 +260,7 @@ jobs:
         with:
           context: .
           push: true
-          tags: ghcr.io/${{ needs.determine_container_info.outputs.owner_lc }}/toolchain:${{ needs.determine_targets.outputs.target }}-${{ needs.determine_targets.outputs.subtarget }}-${{ needs.determine_container_info.outputs.container_tag }}-${{ needs.compute-toolchain-fingerprint.outputs.toolchain_fingerprint }}
+          tags: ghcr.io/${{ needs.determine_container_info.outputs.owner_lc }}/toolchain:${{ needs.determine_targets.outputs.target }}-${{ needs.determine_targets.outputs.subtarget }}-${{ needs.determine_container_info.outputs.container_tag }}-${{ needs.compute-toolchain-fingerprint.outputs.toolchain_cache_key }}
           file: .github/dockerfiles/Dockerfile.toolchain
           build-args: |
             OWNER_LC=${{ needs.determine_container_info.outputs.owner_lc }}

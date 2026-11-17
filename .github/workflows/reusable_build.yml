@@ -177,7 +177,7 @@ jobs:
             else
               TOOLCHAIN_BASE_TAG="$TARGET-$SUBTARGET-$CONTAINER_TAG"
               CCACHE_TAG="$TOOLCHAIN_BASE_TAG"
-              TOOLCHAIN_TAG="$TOOLCHAIN_BASE_TAG-$TOOLCHAIN_FINGERPRINT"
+              TOOLCHAIN_TAG="$TOOLCHAIN_BASE_TAG-${TOOLCHAIN_FINGERPRINT:0:32}"
               set +e
               python3 .github/scripts/fingerprint.py ghcr-check                 --owner "$GHCR_OWNER" --image toolchain --tag "$TOOLCHAIN_TAG"                 --label "io.abu9.actions-wrt.toolchain-fingerprint=$TOOLCHAIN_FINGERPRINT"
               rc=$?
