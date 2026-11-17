@@ -10,6 +10,7 @@ import subprocess
 import tempfile
 import unittest
 from unittest import mock
+from urllib.error import HTTPError
 from pathlib import Path
 
 SCRIPT = Path(__file__).resolve().parents[1] / "fingerprint.py"
