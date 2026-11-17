@@ -272,6 +272,59 @@ class ToolchainFingerprintTests(unittest.TestCase):
             )
             self.assertFalse((Path(directory) / "runner-output").exists())
 
+    def test_toolchain_output_publisher_validates_and_consumes_handoff(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="fingerprint-publish-") as directory:
+            root = Path(directory)
+            handoff = root / "handoff"
+            github_output = root / "github-output"
+            fingerprint = "a" * 64
+            commit = "b" * 40
+            handoff.write_text(
+                f"toolchain_fingerprint={fingerprint}\n"
+                f"toolchain_cache_key={fingerprint[:32]}\n"
+                f"source_commit={commit}\n",
+                encoding="utf-8",
+            )
+            FINGERPRINT_MODULE.publish_toolchain_outputs(handoff, commit, github_output)
+            self.assertEqual(
+                set(github_output.read_text(encoding="utf-8").splitlines()),
+                {
+                    f"toolchain_fingerprint={fingerprint}",
+                    f"toolchain_cache_key={fingerprint[:32]}",
+                    f"source_commit={commit}",
+                },
+            )
+            self.assertFalse(handoff.exists())
+
+    def test_toolchain_output_publisher_rejects_invalid_handoffs(self) -> None:
+        fingerprint = "a" * 64
+        commit = "b" * 40
+        valid = [
+            f"toolchain_fingerprint={fingerprint}",
+            f"toolchain_cache_key={fingerprint[:32]}",
+            f"source_commit={commit}",
+        ]
+        invalid_cases = [
+            ("missing", valid[:2], commit),
+            ("duplicate", valid + [valid[0]], commit),
+            ("fingerprint", [f"toolchain_fingerprint={'x' * 64}", valid[1], valid[2]], commit),
+            ("cache-key", [valid[0], f"toolchain_cache_key={'c' * 32}", valid[2]], commit),
+            ("source-commit", [valid[0], valid[1], f"source_commit={'d' * 40}"], commit),
+            ("expected-commit", valid, "not-a-commit"),
+        ]
+        for name, records, expected in invalid_cases:
+            with self.subTest(name=name), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                handoff = root / "handoff"
+                github_output = root / "github-output"
+                handoff.write_text("\n".join(records) + "\n", encoding="utf-8")
+                with self.assertRaises(ValueError):
+                    FINGERPRINT_MODULE.publish_toolchain_outputs(
+                        handoff, expected, github_output
+                    )
+                self.assertFalse(github_output.exists())
+                self.assertTrue(handoff.exists())
+
     def test_source_ref_is_metadata_only(self) -> None:
         baseline = self.fingerprint()
         fingerprint, manifest = FINGERPRINT_MODULE.compute_toolchain_fingerprint(
@@ -431,8 +484,8 @@ class WorkflowIntegrationTests(unittest.TestCase):
         self.assertIn('shell: su buildbot -c "sh -e {0}"', workflow)
         self.assertIn('--output-file "$FINGERPRINT_OUTPUT_FILE"', workflow)
         self.assertIn("Validate and publish Toolchain fingerprint outputs", workflow)
-        self.assertIn('entries["source_commit"] != expected_commit', workflow)
-        self.assertIn('entries["toolchain_cache_key"] != fingerprint[:32]', workflow)
+        self.assertIn("publish-toolchain-outputs", workflow)
+        self.assertTrue(hasattr(FINGERPRINT_MODULE, "publish_toolchain_outputs"))
         self.assertIn('id: fp', workflow)
         self.assertNotIn('id: fp\n        env:\n          SOURCE_REPO:', workflow)
 
