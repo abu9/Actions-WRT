@@ -102,24 +102,15 @@ jobs:
       source_branch: ${{ github.event.client_payload.source_branch || inputs.source_branch || 'immortalwrt/immortalwrt@openwrt-25.12' }}
       source_commit: ${{ github.event.client_payload.source_commit || inputs.source_commit || '' }}
 
-jobs:
-  determine_targets:
-    name: Get target info
-    uses: ./.github/workflows/determine-targets.yml
-    with:
-      config_name: ${{ (github.event_name == 'push' && '360t7-immortalwrt-25.12-kernel-min.conf') || github.event.client_payload.config_name || inputs.config_name || '360t7-immortalwrt-25.12-ubi.conf' }}
-      source_branch: ${{ github.event.client_payload.source_branch || inputs.source_branch || 'immortalwrt/immortalwrt@openwrt-25.12' }}
-      source_commit: ${{ github.event.client_payload.source_commit || inputs.source_commit || '' }}
-
   tools_fingerprint:
     name: Calculate generic host-tools fingerprint
     needs: determine_targets
     uses: ./.github/workflows/fingerprint.yml
     with:
       mode: tools
-      repo_url: ${ needs.determine_targets.outputs.repo_url }
-      repo_branch: ${ needs.determine_targets.outputs.repo_branch }
-      source_commit: ${ needs.determine_targets.outputs.source_commit }
+      repo_url: ${{ needs.determine_targets.outputs.repo_url }}
+      repo_branch: ${{ needs.determine_targets.outputs.repo_branch }}
+      source_commit: ${{ needs.determine_targets.outputs.source_commit }}
 
   check_tools_container:
     name: Check Host Tools image
@@ -127,21 +118,21 @@ jobs:
     runs-on: ubuntu-24.04
     permissions: {contents: read, packages: read}
     outputs:
-      tools_required: ${ steps.check.outputs.tools_required }
-      checked_image: ${ steps.check.outputs.checked_image }
-      expected_fingerprint: ${ steps.check.outputs.expected_fingerprint }
+      tools_required: ${{ steps.check.outputs.tools_required }}
+      checked_image: ${{ steps.check.outputs.checked_image }}
+      expected_fingerprint: ${{ steps.check.outputs.expected_fingerprint }}
     steps:
       - uses: actions/checkout@v7.0.1
       - id: check
         env:
-          GITHUB_TOKEN: ${ secrets.GITHUB_TOKEN }
-          GITHUB_ACTOR: ${ github.actor }
-          OWNER: ${ github.repository_owner }
-          AUTHOR: ${ needs.determine_targets.outputs.author }
-          REPO_BRANCH: ${ needs.determine_targets.outputs.repo_branch }
-          EXPECTED_FINGERPRINT: ${ needs.tools_fingerprint.outputs.tools_fingerprint }
-          EXPECTED_SOURCE_COMMIT: ${ needs.tools_fingerprint.outputs.source_commit }
-          SOURCE_REPOSITORY: ${ needs.determine_targets.outputs.repo_url }
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_ACTOR: ${{ github.actor }}
+          OWNER: ${{ github.repository_owner }}
+          AUTHOR: ${{ needs.determine_targets.outputs.author }}
+          REPO_BRANCH: ${{ needs.determine_targets.outputs.repo_branch }}
+          EXPECTED_FINGERPRINT: ${{ needs.tools_fingerprint.outputs.tools_fingerprint }}
+          EXPECTED_SOURCE_COMMIT: ${{ needs.tools_fingerprint.outputs.source_commit }}
+          SOURCE_REPOSITORY: ${{ needs.determine_targets.outputs.repo_url }}
         run: |
           set +e
           TAG="$AUTHOR"_"$REPO_BRANCH-$EXPECTED_FINGERPRINT"
@@ -161,45 +152,45 @@ jobs:
   build_tools_container:
     name: Build and Push tools container (only when missing)
     needs: [determine_targets, tools_fingerprint, check_tools_container]
-    if: ${ github.event_name != 'pull_request' && inputs.validate_only != true && needs.check_tools_container.outputs.tools_required == 'true' }
+    if: ${{ github.event_name != 'pull_request' && inputs.validate_only != true && needs.check_tools_container.outputs.tools_required == 'true' }}
     permissions: {contents: read, packages: write, actions: write}
     uses: ./.github/workflows/push-containers.yml
     with:
-      source_branch: ${ github.event.client_payload.source_branch || inputs.source_branch || 'immortalwrt/immortalwrt@openwrt-25.12' }
-      config_name: ${ (github.event_name == 'push' && '360t7-immortalwrt-25.12-kernel-min.conf') || github.event.client_payload.config_name || inputs.config_name || '360t7-immortalwrt-25.12-ubi.conf' }
-      source_commit: ${ needs.tools_fingerprint.outputs.source_commit }
+      source_branch: ${{ github.event.client_payload.source_branch || inputs.source_branch || 'immortalwrt/immortalwrt@openwrt-25.12' }}
+      config_name: ${{ (github.event_name == 'push' && '360t7-immortalwrt-25.12-kernel-min.conf') || github.event.client_payload.config_name || inputs.config_name || '360t7-immortalwrt-25.12-ubi.conf' }}
+      source_commit: ${{ needs.tools_fingerprint.outputs.source_commit }}
       build_tools: true
       build_toolchain: false
 
   tools_ready:
     name: Verify Host Tools image is ready
     needs: [determine_targets, tools_fingerprint, check_tools_container, build_tools_container]
-    if: ${ !cancelled() && needs.check_tools_container.result == 'success' && (needs.build_tools_container.result == 'success' || needs.build_tools_container.result == 'skipped') }
+    if: ${{ !cancelled() && needs.check_tools_container.result == 'success' && (needs.build_tools_container.result == 'success' || needs.build_tools_container.result == 'skipped') }}
     runs-on: ubuntu-24.04
     outputs:
-      checked_image: ${ needs.check_tools_container.outputs.checked_image }
-      expected_fingerprint: ${ needs.check_tools_container.outputs.expected_fingerprint }
-      tools_image: ${ steps.image.outputs.tools_image }
+      checked_image: ${{ needs.check_tools_container.outputs.checked_image }}
+      expected_fingerprint: ${{ needs.check_tools_container.outputs.expected_fingerprint }}
+      tools_image: ${{ steps.image.outputs.tools_image }}
     steps:
       - id: image
         env:
-          OWNER: ${ github.repository_owner }
-          CHECKED_IMAGE: ${ needs.check_tools_container.outputs.checked_image }
+          OWNER: ${{ github.repository_owner }}
+          CHECKED_IMAGE: ${{ needs.check_tools_container.outputs.checked_image }}
         run: |
           OWNER_LC="$(printf '%s' "$OWNER" | tr '[:upper:]' '[:lower:]')"
           IMAGE_TAG="$(printf '%s' "$CHECKED_IMAGE" | cut -d: -f2-)"
           echo "tools_image=ghcr.io/$OWNER_LC/tools:$IMAGE_TAG" >> "$GITHUB_OUTPUT"
       - name: Verify selected image
         env:
-          GITHUB_TOKEN: ${ secrets.GITHUB_TOKEN }
-          GITHUB_ACTOR: ${ github.actor }
-          OWNER: ${ github.repository_owner }
-          EXPECTED_FINGERPRINT: ${ needs.tools_fingerprint.outputs.tools_fingerprint }
-          EXPECTED_SOURCE_COMMIT: ${ needs.tools_fingerprint.outputs.source_commit }
-          SOURCE_REPOSITORY: ${ needs.determine_targets.outputs.repo_url }
-          CHECKED_IMAGE: ${ needs.check_tools_container.outputs.checked_image }
-          TOOLS_REQUIRED: ${ needs.check_tools_container.outputs.tools_required }
-          BUILD_RESULT: ${ needs.build_tools_container.result }
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_ACTOR: ${{ github.actor }}
+          OWNER: ${{ github.repository_owner }}
+          EXPECTED_FINGERPRINT: ${{ needs.tools_fingerprint.outputs.tools_fingerprint }}
+          EXPECTED_SOURCE_COMMIT: ${{ needs.tools_fingerprint.outputs.source_commit }}
+          SOURCE_REPOSITORY: ${{ needs.determine_targets.outputs.repo_url }}
+          CHECKED_IMAGE: ${{ needs.check_tools_container.outputs.checked_image }}
+          TOOLS_REQUIRED: ${{ needs.check_tools_container.outputs.tools_required }}
+          BUILD_RESULT: ${{ needs.build_tools_container.result }}
         run: |
           set -euo pipefail
           if [ "$TOOLS_REQUIRED" = "true" ]; then test "$BUILD_RESULT" = success; fi
@@ -208,40 +199,40 @@ jobs:
 
   toolchain_fingerprint:
     name: Calculate target Toolchain fingerprint
-    if: ${ inputs.build_toolchain == true }
+    if: ${{ inputs.build_toolchain == true }}
     needs: [determine_targets, tools_fingerprint, tools_ready]
     uses: ./.github/workflows/fingerprint.yml
     with:
       mode: toolchain
-      repo_url: ${ needs.determine_targets.outputs.repo_url }
-      repo_branch: ${ needs.determine_targets.outputs.repo_branch }
-      source_commit: ${ needs.tools_fingerprint.outputs.source_commit }
-      target: ${ needs.determine_targets.outputs.target }
-      subtarget: ${ needs.determine_targets.outputs.subtarget }
-      tools_fingerprint: ${ needs.tools_fingerprint.outputs.tools_fingerprint }
-      tools_image: ${ needs.tools_ready.outputs.tools_image }
+      repo_url: ${{ needs.determine_targets.outputs.repo_url }}
+      repo_branch: ${{ needs.determine_targets.outputs.repo_branch }}
+      source_commit: ${{ needs.tools_fingerprint.outputs.source_commit }}
+      target: ${{ needs.determine_targets.outputs.target }}
+      subtarget: ${{ needs.determine_targets.outputs.subtarget }}
+      tools_fingerprint: ${{ needs.tools_fingerprint.outputs.tools_fingerprint }}
+      tools_image: ${{ needs.tools_ready.outputs.tools_image }}
 
   check_toolchain_container:
     name: Check target Toolchain image
     needs: [determine_targets, tools_ready, toolchain_fingerprint]
-    if: ${ inputs.build_toolchain == true }
+    if: ${{ inputs.build_toolchain == true }}
     runs-on: ubuntu-24.04
     permissions: {contents: read, packages: read}
     outputs:
-      use_toolchain: ${ steps.check.outputs.use_toolchain }
-      image: ${ steps.check.outputs.image }
+      use_toolchain: ${{ steps.check.outputs.use_toolchain }}
+      image: ${{ steps.check.outputs.image }}
     steps:
       - uses: actions/checkout@v7.0.1
       - id: check
         env:
-          GITHUB_TOKEN: ${ secrets.GITHUB_TOKEN }
-          GITHUB_ACTOR: ${ github.actor }
-          OWNER: ${ github.repository_owner }
-          TARGET: ${ needs.determine_targets.outputs.target }
-          SUBTARGET: ${ needs.determine_targets.outputs.subtarget }
-          AUTHOR: ${ needs.determine_targets.outputs.author }
-          REPO_BRANCH: ${ needs.determine_targets.outputs.repo_branch }
-          FINGERPRINT: ${ needs.toolchain_fingerprint.outputs.toolchain_fingerprint }
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_ACTOR: ${{ github.actor }}
+          OWNER: ${{ github.repository_owner }}
+          TARGET: ${{ needs.determine_targets.outputs.target }}
+          SUBTARGET: ${{ needs.determine_targets.outputs.subtarget }}
+          AUTHOR: ${{ needs.determine_targets.outputs.author }}
+          REPO_BRANCH: ${{ needs.determine_targets.outputs.repo_branch }}
+          FINGERPRINT: ${{ needs.toolchain_fingerprint.outputs.toolchain_fingerprint }}
         run: |
           set +e
           TAG="$TARGET-$SUBTARGET-$AUTHOR"_"$REPO_BRANCH-${FINGERPRINT:0:32}"
@@ -260,25 +251,26 @@ jobs:
   build_firmware:
     name: Build firmware
     needs: [determine_targets, tools_fingerprint, tools_ready, toolchain_fingerprint, check_toolchain_container]
-    if: ${ !cancelled() && github.event_name != 'pull_request' && inputs.validate_only != true && needs.determine_targets.result == 'success' && needs.tools_ready.result == 'success' && (needs.toolchain_fingerprint.result == 'success' || needs.toolchain_fingerprint.result == 'skipped') && (needs.check_toolchain_container.result == 'success' || needs.check_toolchain_container.result == 'skipped') }
+    if: ${{ !cancelled() && github.event_name != 'pull_request' && inputs.validate_only != true && needs.determine_targets.result == 'success' && needs.tools_ready.result == 'success' && (needs.toolchain_fingerprint.result == 'success' || needs.toolchain_fingerprint.result == 'skipped') && (needs.check_toolchain_container.result == 'success' || needs.check_toolchain_container.result == 'skipped') }}
     permissions: {contents: read, packages: read, actions: write}
     uses: ./.github/workflows/reusable_build.yml
     with:
-      target: ${ needs.determine_targets.outputs.target }
-      subtarget: ${ needs.determine_targets.outputs.subtarget }
-      repo_url: ${ needs.determine_targets.outputs.repo_url }
-      repo_branch: ${ needs.determine_targets.outputs.repo_branch }
-      repo_commit: ${ needs.tools_fingerprint.outputs.source_commit }
-      tools_fingerprint: ${ needs.tools_fingerprint.outputs.tools_fingerprint }
-      tools_image_fingerprint: ${ needs.tools_ready.outputs.expected_fingerprint }
-      toolchain_fingerprint: ${ needs.toolchain_fingerprint.outputs.toolchain_fingerprint }
-      author: ${ needs.determine_targets.outputs.author }
-      container_name: ${ (inputs.build_toolchain == true && needs.check_toolchain_container.outputs.use_toolchain == 'true') && 'toolchain' || 'tools' }
-      build_kernel: ${ github.event_name == 'push' || inputs.build_kernel == true }
-      build_full: ${ github.event_name == 'repository_dispatch' || inputs.build_full == true }
-      build_toolchain: ${ inputs.build_toolchain == true && needs.check_toolchain_container.outputs.use_toolchain != 'true' }
-      debug: ${ inputs.debug == true }
-      config_name: ${ (github.event_name == 'push' && '360t7-immortalwrt-25.12-kernel-min.conf') || github.event.client_payload.config_name || inputs.config_name || '360t7-immortalwrt-25.12-ubi.conf' }
+      target: ${{ needs.determine_targets.outputs.target }}
+      subtarget: ${{ needs.determine_targets.outputs.subtarget }}
+      repo_url: ${{ needs.determine_targets.outputs.repo_url }}
+      repo_branch: ${{ needs.determine_targets.outputs.repo_branch }}
+      repo_commit: ${{ needs.tools_fingerprint.outputs.source_commit }}
+      tools_fingerprint: ${{ needs.tools_fingerprint.outputs.tools_fingerprint }}
+      tools_image_fingerprint: ${{ needs.tools_ready.outputs.expected_fingerprint }}
+      toolchain_fingerprint: ${{ needs.toolchain_fingerprint.outputs.toolchain_fingerprint }}
+      use_ccache_cache: ${{ github.event_name == 'repository_dispatch' || github.event_name == 'push' || inputs.use_ccache_cache == true }}
+      author: ${{ needs.determine_targets.outputs.author }}
+      container_name: ${{ (inputs.build_toolchain == true && needs.check_toolchain_container.outputs.use_toolchain == 'true') && 'toolchain' || 'tools' }}
+      build_kernel: ${{ github.event_name == 'push' || inputs.build_kernel == true }}
+      build_full: ${{ github.event_name == 'repository_dispatch' || inputs.build_full == true }}
+      build_toolchain: ${{ inputs.build_toolchain == true && needs.check_toolchain_container.outputs.use_toolchain != 'true' }}
+      debug: ${{ inputs.debug == true }}
+      config_name: ${{ (github.event_name == 'push' && '360t7-immortalwrt-25.12-kernel-min.conf') || github.event.client_payload.config_name || inputs.config_name || '360t7-immortalwrt-25.12-ubi.conf' }}
       ccache_type: packages
-      use_ccache_cache: ${ github.event_name == 'repository_dispatch' || github.event_name == 'push' || inputs.use_ccache_cache == true }
-      check: ${ github.event_name != 'push' }
+      use_ccache_cache: ${{ github.event_name == 'repository_dispatch' || github.event_name == 'push' || inputs.use_ccache_cache == true }}
+      check: ${{ github.event_name != 'push' }}
