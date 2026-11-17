@@ -118,13 +118,14 @@ jobs:
         with:
           name: linux-buildbot-prebuilt-tools
 
+      - name: Prepare prebuilt Host Tools directory
+        if: inputs.use_prebuilt_tools_artifact == true
+        run: install -d -o buildbot -g buildbot /prebuilt_tools
+
       - name: Extract prebuilt Host Tools artifact
         if: inputs.use_prebuilt_tools_artifact == true
-        run: |
-          set -euo pipefail
-          mkdir -p /prebuilt_tools
-          tar -xf tools.tar -C /prebuilt_tools
-          chown -R buildbot:buildbot /prebuilt_tools
+        shell: su buildbot -c "sh -e {0}"
+        run: tar -xf tools.tar -C /prebuilt_tools
 
       - name: Prepare prebuilt tools
         working-directory: openwrt
