@@ -120,6 +120,7 @@ jobs:
           REPO_BRANCH: ${{ needs.determine_targets.outputs.repo_branch }}
           TOOLCHAIN_FINGERPRINT: ${{ needs.toolchain_fingerprint.outputs.toolchain_fingerprint }}
           TOOLS_FINGERPRINT: ${{ needs.tools_fingerprint.outputs.tools_fingerprint }}
+          SOURCE_COMMIT: ${{ needs.tools_fingerprint.outputs.source_commit }}
         shell: bash
         run: |
           set -euo pipefail
@@ -130,7 +131,8 @@ jobs:
             --image toolchain \
             --tag "$TAG" \
             --label "io.abu9.actions-wrt.toolchain-fingerprint=$TOOLCHAIN_FINGERPRINT" \
-            --label "io.abu9.actions-wrt.tools-fingerprint=$TOOLS_FINGERPRINT"
+            --label "io.abu9.actions-wrt.tools-fingerprint=$TOOLS_FINGERPRINT" \
+            --label "io.abu9.actions-wrt.tools-source-commit=$SOURCE_COMMIT"
           rc=$?
           set -e
           if [ "$rc" -eq 0 ]; then

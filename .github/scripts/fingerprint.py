@@ -59,6 +59,8 @@ HOST_TOOLS_CONFIG="CONFIG_DEVEL=y\nCONFIG_AUTOREMOVE=y\nCONFIG_CCACHE=y\nCONFIG_
 HOST_TOOLS_BUILD_ENVIRONMENT={"runner":"ubuntu-24.04","platform":"linux/amd64","buildworker_image":"ghcr.io/openwrt/buildbot/buildworker-v3.11.8:v23"}
 RUNTIME_DOCKERFILE=".github/dockerfiles/Dockerfile.tools"
 def is_host_tool_input(path: str) -> bool:
+    if path == "scripts/ext-tools.sh":
+        return False
     if path in {"Makefile", "rules.mk", "Config.in"}:
         return True
     return path.startswith(

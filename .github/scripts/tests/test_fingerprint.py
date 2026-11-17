@@ -312,18 +312,41 @@ class WorkflowIntegrationTests(unittest.TestCase):
             self.assertIn("GITHUB_ACTOR: ${{ github.actor }}", block)
             self.assertIn("GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}", block)
 
+    def test_toolchain_image_reuse_checks_source_commit_everywhere(self) -> None:
+        root = Path(__file__).resolve().parents[2] / "workflows"
+
+        build_workflow = (root / "build.yml").read_text(encoding="utf-8")
+        self.assertIn("SOURCE_COMMIT: ${{ needs.tools_fingerprint.outputs.source_commit }}", build_workflow)
+        self.assertIn('io.abu9.actions-wrt.tools-source-commit=$SOURCE_COMMIT', build_workflow)
+
+        verifier = (root / "verify-fingerprints.yml").read_text(encoding="utf-8")
+        self.assertIn("SOURCE_COMMIT: ${{ needs.tools_fingerprint.outputs.source_commit }}", verifier)
+        self.assertIn('io.abu9.actions-wrt.tools-source-commit=$SOURCE_COMMIT', verifier)
+
+        reusable = (root / "reusable_build.yml").read_text(encoding="utf-8")
+        start = reusable.index("      - name: Determine container name")
+        end = reusable.index("\\n      - name: Determine container", start)
+        block = reusable[start:end]
+        self.assertIn("GITHUB_ACTOR: ${{ github.actor }}", block)
+        self.assertIn("GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}", block)
+        self.assertIn('io.abu9.actions-wrt.tools-source-commit=$SOURCE_COMMIT', block)
+        self.assertNotIn("GHCR_USER:", block)
+        self.assertNotIn("GHCR_PASSWORD:", block)
+
 
 class HostToolsFingerprintTests(unittest.TestCase):
     def test_unrelated_package_and_target_files_do_not_change_host_tools_fingerprint(self):
         with tempfile.TemporaryDirectory(prefix="host-tools-fingerprint-") as d:
             root=Path(d); source=root/"openwrt"; local=root/"actions-wrt"; source.mkdir(); local.mkdir()
-            for rel in ["Makefile","rules.mk","Config.in","include/a","tools/a","toolchain/a","scripts/a","config/a","package/foo/Makefile","target/x/Config.in"]:
+            for rel in ["Makefile","rules.mk","Config.in","include/a","tools/a","toolchain/a","scripts/a","scripts/ext-tools.sh","config/a","package/foo/Makefile","target/x/Config.in"]:
                 p=source/rel; p.parent.mkdir(parents=True,exist_ok=True); p.write_text(rel,encoding="utf-8")
             (local/".github/workflows").mkdir(parents=True); (local/".github/dockerfiles").mkdir(parents=True)
             (local/".github/workflows/reusable_build_tools.yml").write_text("container: ghcr.io/openwrt/buildbot/buildworker-v3.11.8:v23\n",encoding="utf-8")
             (local/".github/dockerfiles/Dockerfile.tools").write_text("FROM ghcr.io/openwrt/buildbot/buildworker-v3.11.8:v23\n",encoding="utf-8")
             subprocess.run(["git","init","-q",str(source)],check=True); subprocess.run(["git","-C",str(source),"config","user.email","test@example.invalid"],check=True); subprocess.run(["git","-C",str(source),"config","user.name","Fingerprint Test"],check=True); subprocess.run(["git","-C",str(source),"add","-A"],check=True); subprocess.run(["git","-C",str(source),"commit","-qm","fixture"],check=True)
-            baseline,_=FINGERPRINT_MODULE.compute_tools_fingerprint(source,local,"test/repo","main")
+            baseline,manifest=FINGERPRINT_MODULE.compute_tools_fingerprint(source,local,"test/repo","main")
+            self.assertFalse(any(item["path"] == "scripts/ext-tools.sh" for item in manifest["files"]))
+            (source/"scripts/ext-tools.sh").write_text("changed refresh implementation",encoding="utf-8")
             (source/"package/foo/Makefile").write_text("changed package",encoding="utf-8")
             (source/"target/x/Config.in").write_text("changed target",encoding="utf-8")
             updated,_=FINGERPRINT_MODULE.compute_tools_fingerprint(source,local,"test/repo","main")

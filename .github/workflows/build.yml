@@ -365,10 +365,19 @@ jobs:
           REPO_BRANCH: ${{ needs.determine_targets.outputs.repo_branch }}
           FINGERPRINT: ${{ needs.toolchain_fingerprint.outputs.toolchain_fingerprint }}
           TOOLS_FINGERPRINT: ${{ needs.tools_fingerprint.outputs.tools_fingerprint }}
+          SOURCE_COMMIT: ${{ needs.tools_fingerprint.outputs.source_commit }}
+        shell: bash
         run: |
-          set +e
+          set -euo pipefail
           TAG="$TARGET-$SUBTARGET-$AUTHOR"_"$REPO_BRANCH-${FINGERPRINT:0:32}"
-          python3 .github/scripts/fingerprint.py ghcr-check --owner "$OWNER" --image toolchain --tag "$TAG"             --label "io.abu9.actions-wrt.toolchain-fingerprint=$FINGERPRINT"             --label "io.abu9.actions-wrt.tools-fingerprint=$TOOLS_FINGERPRINT"
+          set +e
+          python3 .github/scripts/fingerprint.py ghcr-check \
+            --owner "$OWNER" \
+            --image toolchain \
+            --tag "$TAG" \
+            --label "io.abu9.actions-wrt.toolchain-fingerprint=$FINGERPRINT" \
+            --label "io.abu9.actions-wrt.tools-fingerprint=$TOOLS_FINGERPRINT" \
+            --label "io.abu9.actions-wrt.tools-source-commit=$SOURCE_COMMIT"
           rc=$?
           set -e
           if [ "$rc" -eq 0 ]; then
