@@ -404,8 +404,8 @@ class HostToolsFingerprintTests(unittest.TestCase):
             for rel in ["Makefile","rules.mk","Config.in","include/a","tools/a","toolchain/Config.in","toolchain/gcc/Config.in","scripts/a","config/a"]:
                 p=source/rel; p.parent.mkdir(parents=True,exist_ok=True); p.write_text(rel,encoding="utf-8")
             (local/".github/workflows").mkdir(parents=True); (local/".github/dockerfiles").mkdir(parents=True)
-            (local/".github/workflows/reusable_build_tools.yml").write_text("container: ghcr.io/openwrt/buildbot/buildworker-v3.11.8:v23\\n",encoding="utf-8")
-            (local/".github/dockerfiles/Dockerfile.tools").write_text("FROM ghcr.io/openwrt/buildbot/buildworker-v3.11.8:v23\\n",encoding="utf-8")
+            (local/".github/workflows/reusable_build_tools.yml").write_text("container: ghcr.io/openwrt/buildbot/buildworker-v3.11.8:v23\n",encoding="utf-8")
+            (local/".github/dockerfiles/Dockerfile.tools").write_text("FROM ghcr.io/openwrt/buildbot/buildworker-v3.11.8:v23\n",encoding="utf-8")
             subprocess.run(["git","init","-q",str(source)],check=True); subprocess.run(["git","-C",str(source),"config","user.email","test@example.invalid"],check=True); subprocess.run(["git","-C",str(source),"config","user.name","Fingerprint Test"],check=True); subprocess.run(["git","-C",str(source),"add","-A"],check=True); subprocess.run(["git","-C",str(source),"commit","-qm","fixture"],check=True)
             baseline,_=FINGERPRINT_MODULE.compute_tools_fingerprint(source,local,"test/repo","main")
             (source/"toolchain/gcc/Config.in").write_text("changed Kconfig definition",encoding="utf-8")
