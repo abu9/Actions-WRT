@@ -2,12 +2,6 @@ name: Bootstrap Host Tools and Toolchain images
 run-name: Bootstrap OpenWrt 25.12 Host Tools and Toolchain images
 
 on:
-  push:
-    branches:
-      - feat/360t7-openwrt-uboot-ubi-25.12
-    paths:
-      - '.github/workflows/p0-build-images.yml'
-      - '.github/workflows/push-containers.yml'
   workflow_dispatch:
 
 permissions:
@@ -16,7 +10,7 @@ permissions:
 
 jobs:
   dispatch_image_build:
-    name: Dispatch and monitor fingerprinted image build
+    name: Dispatch fingerprinted image build
     runs-on: ubuntu-24.04
     steps:
       - name: Dispatch Host Tools and Toolchain build
@@ -33,30 +27,3 @@ jobs:
             -f 'inputs[build_tools]=true' \
             -f 'inputs[build_toolchain]=true'
           echo "Dispatched push-containers.yml for ${GITHUB_SHA}"
-
-      - name: Wait for image build workflow
-        env:
-          GH_TOKEN: ${{ github.token }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          RUN_ID=""
-          for attempt in {1..60}; do
-            RUNS="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs" \
-              -f "branch=${GITHUB_REF_NAME}" \
-              -f "event=workflow_dispatch" \
-              -F per_page=50)"
-            RUN_ID="$(jq -r --arg sha "${GITHUB_SHA}" \
-              '.workflow_runs[] | select(.head_sha == $sha and .path == ".github/workflows/push-containers.yml") | .id' \
-              <<< "$RUNS" | head -n1)"
-            if [ -n "$RUN_ID" ]; then
-              break
-            fi
-            sleep 5
-          done
-          if [ -z "$RUN_ID" ]; then
-            echo "Timed out waiting for push-containers.yml run to appear." >&2
-            exit 1
-          fi
-          echo "Monitoring push-containers.yml run $RUN_ID"
-          gh run watch "$RUN_ID" --exit-status
