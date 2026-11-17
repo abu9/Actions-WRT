@@ -243,6 +243,28 @@ class ToolchainFingerprintTests(unittest.TestCase):
         self.assertNotEqual(self.fingerprint(), baseline)
 
 
+class WorkflowIntegrationTests(unittest.TestCase):
+    def test_verify_workflow_passes_authentication_to_both_ghcr_checks(self) -> None:
+        workflow_path = (
+            Path(__file__).resolve().parents[2]
+            / "workflows"
+            / "verify-fingerprints.yml"
+        )
+        workflow = workflow_path.read_text(encoding="utf-8")
+
+        step_names = (
+            "Verify existing Host Tools image labels",
+            "Verify existing Toolchain image labels",
+        )
+        for step_name in step_names:
+            marker = f"      - name: {step_name}\n"
+            start = workflow.find(marker)
+            self.assertNotEqual(start, -1, f"Missing workflow step: {step_name}")
+            next_step = workflow.find("\n      - name: ", start + len(marker))
+            block = workflow[start:next_step if next_step != -1 else len(workflow)]
+            self.assertIn("GITHUB_ACTOR: ${{ github.actor }}", block)
+            self.assertIn("GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}", block)
+
 
 class HostToolsFingerprintTests(unittest.TestCase):
     def test_unrelated_package_and_target_files_do_not_change_host_tools_fingerprint(self):
