@@ -11,19 +11,51 @@ on:
 
 permissions:
   contents: read
-  packages: write
   actions: write
 
 jobs:
-  build_prebuilt_images:
-    name: Build and publish fingerprinted images
-    permissions:
-      contents: read
-      packages: write
-      actions: write
-    uses: ./.github/workflows/push-containers.yml
-    with:
-      source_branch: immortalwrt/immortalwrt@openwrt-25.12
-      config_name: 360t7-immortalwrt-25.12-ubi.conf
-      build_tools: true
-      build_toolchain: true
+  dispatch_image_build:
+    name: Dispatch and monitor fingerprinted image build
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Dispatch Host Tools and Toolchain build
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh api --method POST \
+            "repos/${GITHUB_REPOSITORY}/actions/workflows/push-containers.yml/dispatches" \
+            -f "ref=${GITHUB_REF_NAME}" \
+            -f 'inputs[source_branch]=immortalwrt/immortalwrt@openwrt-25.12' \
+            -f 'inputs[config_name]=360t7-immortalwrt-25.12-ubi.conf' \
+            -f 'inputs[build_tools]=true' \
+            -f 'inputs[build_toolchain]=true'
+          echo "Dispatched push-containers.yml for ${GITHUB_SHA}"
+
+      - name: Wait for image build workflow
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          RUN_ID=""
+          for attempt in {1..60}; do
+            RUNS="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs" \
+              -f "branch=${GITHUB_REF_NAME}" \
+              -f "event=workflow_dispatch" \
+              -F per_page=50)"
+            RUN_ID="$(jq -r --arg sha "${GITHUB_SHA}" \
+              '.workflow_runs[] | select(.head_sha == $sha and .path == ".github/workflows/push-containers.yml") | .id' \
+              <<< "$RUNS" | head -n1)"
+            if [ -n "$RUN_ID" ]; then
+              break
+            fi
+            sleep 5
+          done
+          if [ -z "$RUN_ID" ]; then
+            echo "Timed out waiting for push-containers.yml run to appear." >&2
+            exit 1
+          fi
+          echo "Monitoring push-containers.yml run $RUN_ID"
+          gh run watch "$RUN_ID" --exit-status
