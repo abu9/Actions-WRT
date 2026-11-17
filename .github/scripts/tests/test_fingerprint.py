@@ -623,11 +623,10 @@ class GHCRCheckTests(unittest.TestCase):
             self.response({"config": {"Labels": {"fingerprint": "wrong"}}}),
         ]
         with mock.patch.object(FINGERPRINT_MODULE, "urlopen", side_effect=responses):
-            self.assertFalse(
+            with self.assertRaisesRegex(RuntimeError, "labels do not match"):
                 FINGERPRINT_MODULE.ghcr_check(
                     "owner", "image", "tag", {"fingerprint": "expected"}
                 )
-            )
 
     def test_invalid_inputs_fail_before_network(self) -> None:
         with mock.patch.object(FINGERPRINT_MODULE, "urlopen") as mocked:
@@ -778,7 +777,7 @@ class GHCRCheckTests(unittest.TestCase):
                 )
             )
 
-    def test_oci_index_without_linux_amd64_returns_false(self) -> None:
+    def test_oci_index_without_linux_amd64_is_an_error(self) -> None:
         index = {
             "manifests": [
                 {
@@ -794,11 +793,10 @@ class GHCRCheckTests(unittest.TestCase):
                 self.response(index),
             ],
         ):
-            self.assertFalse(
+            with self.assertRaisesRegex(RuntimeError, "no linux/amd64 image manifest"):
                 FINGERPRINT_MODULE.ghcr_check(
                     "owner", "image", "tag", {"fingerprint": "expected"}
                 )
-            )
 
     def test_missing_registry_token_fails_closed(self) -> None:
         with mock.patch.object(
