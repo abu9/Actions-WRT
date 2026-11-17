@@ -67,7 +67,6 @@ jobs:
           echo CONFIG_DEVEL=y >> .config
           echo CONFIG_AUTOREMOVE=y >> .config
           echo CONFIG_CCACHE=y >> .config
-          echo CONFIG_BUILD_ALL_HOST_TOOLS=y >> .config
 
       - name: Make prereq
         working-directory: openwrt
