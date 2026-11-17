@@ -101,7 +101,22 @@ jobs:
           chown -R buildbot:buildbot .ccache staging_dir/host/etc/ccache.conf
           BUILD_SCRIPT
 
+      - name: Build tools
+        working-directory: openwrt
+        env:
+          CCACHE_DIR: ${{ github.workspace }}/openwrt/.ccache
+        run: |
+          su --preserve-environment --shell /bin/bash buildbot -c 'bash -s' <<'BUILD_SCRIPT'
+          set -e
+          make tools/install -j"$(nproc)" BUILD_LOG=1 || {
+            ret=$?
+            bash ../.github/scripts/show_build_failures.sh
+            exit "$ret"
+          }
+          BUILD_SCRIPT
+
       - name: Diagnose Host Python and staged setuptools
+        if: always()
         working-directory: openwrt
         run: |
           su --preserve-environment --shell /bin/bash buildbot -c 'bash -s' <<'DIAGNOSTIC_SCRIPT'
@@ -169,20 +184,6 @@ jobs:
             echo "staging_dir/host/bin/python3 does not exist before make tools/install"
           fi
           DIAGNOSTIC_SCRIPT
-
-      - name: Build tools
-        working-directory: openwrt
-        env:
-          CCACHE_DIR: ${{ github.workspace }}/openwrt/.ccache
-        run: |
-          su --preserve-environment --shell /bin/bash buildbot -c 'bash -s' <<'BUILD_SCRIPT'
-          set -e
-          make tools/install -j"$(nproc)" BUILD_LOG=1 || {
-            ret=$?
-            bash ../.github/scripts/show_build_failures.sh
-            exit "$ret"
-          }
-          BUILD_SCRIPT
 
       - name: Show Host Tools ccache statistics
         if: always()
