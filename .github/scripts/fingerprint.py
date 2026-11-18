@@ -107,8 +107,10 @@ def ghcr_check(owner: str,image: str,tag: str,labels: dict[str,str]) -> bool:
     config=get(f"blobs/{image_config_digest}","application/json")
     if not isinstance(config, dict) or not isinstance(config.get("config"), dict):
         raise RuntimeError("GHCR returned an invalid image config.")
-    actual_labels=config["config"].get("Labels") or {}
-    if not isinstance(actual_labels, dict):
+    actual_labels=config["config"].get("Labels")
+    if actual_labels is None:
+        actual_labels = {}
+    elif not isinstance(actual_labels, dict):
         raise RuntimeError("GHCR image config contains invalid labels.")
     mismatches=[key for key,value in labels.items() if actual_labels.get(key)!=value]
     if mismatches:
