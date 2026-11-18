@@ -80,10 +80,251 @@ jobs:
           SOURCE_REPO: ${{ inputs.repo_url }}
         shell: bash
         run: |
-          python3 actions-wrt/.github/scripts/fingerprint.py tools \
-            --source-dir openwrt \
-            --local-repo-dir actions-wrt \
-            --source-repo "$SOURCE_REPO"
+          set -euo pipefail
+          
+          SOURCE_DIR="$(cd openwrt && pwd -P)"
+          LOCAL_REPO_DIR="$(cd actions-wrt && pwd -P)"
+          if [[ -z "$SOURCE_REPO" ]]; then
+            echo "SOURCE_REPO is required." >&2
+            exit 1
+          fi
+          BUILDWORKER_IMAGE='ghcr.io/openwrt/buildbot/buildworker-v3.11.8:v23'
+          BUILDWORKER_REF="$(printf '%s' "$BUILDWORKER_IMAGE" | sed 's#^ghcr.io/##')"
+          GIT_CONFIG_FILE="$(mktemp)"
+          TRACKED_LIST="$(mktemp)"
+          MANIFEST="$(mktemp)"
+          trap 'rm -f "$GIT_CONFIG_FILE" "$TRACKED_LIST" "$MANIFEST"' EXIT
+          
+          : > "$GIT_CONFIG_FILE"
+          git config --file "$GIT_CONFIG_FILE" --add safe.directory "$SOURCE_DIR"
+          SOURCE_COMMIT="$(GIT_CONFIG_GLOBAL="$GIT_CONFIG_FILE" git -C "$SOURCE_DIR" rev-parse HEAD)"
+          if [[ ! "$SOURCE_COMMIT" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "Invalid OpenWrt source commit: $SOURCE_COMMIT" >&2
+            exit 1
+          fi
+          
+          WORKFLOW="$LOCAL_REPO_DIR/.github/workflows/reusable_build_tools.yml"
+          DOCKERFILE='.github/dockerfiles/Dockerfile.tools'
+          if ! grep -Fq "$BUILDWORKER_IMAGE" "$WORKFLOW" &&
+             ! grep -Fq "$BUILDWORKER_REF" "$WORKFLOW"; then
+            echo "Builder workflow does not reference $BUILDWORKER_IMAGE." >&2
+            exit 1
+          fi
+          if [[ "$(head -n 1 "$LOCAL_REPO_DIR/$DOCKERFILE")" != "FROM $BUILDWORKER_IMAGE" ]]; then
+            echo "Runtime Dockerfile does not use $BUILDWORKER_IMAGE." >&2
+            exit 1
+          fi
+          
+          GIT_CONFIG_GLOBAL="$GIT_CONFIG_FILE" git -C "$SOURCE_DIR" ls-files -z > "$TRACKED_LIST"
+          printf '%s\0' \
+            schema 5 \
+            source_repository "$SOURCE_REPO" \
+            host_tools_config 
+
+  toolchain:
+    if: ${{ inputs.mode == 'toolchain' }}
+    runs-on: ubuntu-24.04
+    container: ${{ inputs.use_prebuilt_tools_artifact == true && 'ghcr.io/openwrt/buildbot/buildworker-v3.11.8:v23' || inputs.tools_image }}
+    outputs:
+      toolchain_fingerprint: ${{ steps.fp.outputs.toolchain_fingerprint }}
+      toolchain_cache_key: ${{ steps.fp.outputs.toolchain_cache_key }}
+      source_commit: ${{ steps.fp.outputs.source_commit }}
+    steps:
+      - name: Checkout Actions-WRT scripts
+        uses: actions/checkout@v7.0.1
+        with:
+          path: actions-wrt
+
+      - name: Checkout exact OpenWrt source
+        uses: actions/checkout@v7.0.1
+        with:
+          repository: ${{ inputs.repo_url }}
+          ref: ${{ inputs.source_commit }}
+          path: openwrt
+
+      - name: Fix checkout permissions
+        run: chown -R buildbot:buildbot actions-wrt openwrt
+
+      - name: Download prebuilt Host Tools artifact
+        if: inputs.use_prebuilt_tools_artifact == true
+        uses: actions/download-artifact@v8.0.2
+        with:
+          name: linux-buildbot-prebuilt-tools
+
+      - name: Prepare prebuilt Host Tools directory
+        if: inputs.use_prebuilt_tools_artifact == true
+        run: install -d -o buildbot -g buildbot /prebuilt_tools
+
+      - name: Extract prebuilt Host Tools artifact
+        if: inputs.use_prebuilt_tools_artifact == true
+        shell: su buildbot -c "sh -e {0}"
+        run: tar -xf tools.tar -C /prebuilt_tools
+
+      - name: Prepare prebuilt tools
+        working-directory: openwrt
+        shell: su buildbot -c "sh -e {0}"
+        run: |
+          mkdir -p staging_dir build_dir
+          ln -s /prebuilt_tools/staging_dir/host staging_dir/host
+          ln -s /prebuilt_tools/build_dir/host build_dir/host
+          ./scripts/ext-tools.sh --refresh
+
+      - name: Resolve the same internal Toolchain configuration as the build
+        working-directory: openwrt
+        env:
+          TARGET: ${{ inputs.target }}
+          SUBTARGET: ${{ inputs.subtarget }}
+          USE_CCACHE_CACHE: ${{ inputs.use_ccache_cache }}
+        shell: su buildbot -c "sh -e {0}"
+        run: |
+          rm -f .config
+          if [ "$USE_CCACHE_CACHE" = "true" ]; then
+            echo CONFIG_CCACHE=y >> .config
+          fi
+          echo CONFIG_DEVEL=y >> .config
+          echo CONFIG_AUTOREMOVE=y >> .config
+          echo "CONFIG_TARGET_${TARGET}=y" >> .config
+          echo "CONFIG_TARGET_${TARGET}_${SUBTARGET}=y" >> .config
+          make defconfig
+      - name: Compute Toolchain fingerprint
+        id: fp
+        env:
+          SOURCE_REPO: ${{ inputs.repo_url }}
+          EXPECTED_SOURCE_COMMIT: ${{ inputs.source_commit }}
+          TARGET: ${{ inputs.target }}
+          SUBTARGET: ${{ inputs.subtarget }}
+          TOOLS_FINGERPRINT: ${{ inputs.tools_fingerprint }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          
+          SOURCE_DIR="$(cd openwrt && pwd -P)"
+          LOCAL_REPO_DIR="$(cd actions-wrt && pwd -P)"
+          BUILDWORKER_IMAGE='ghcr.io/openwrt/buildbot/buildworker-v3.11.8:v23'
+          BUILDWORKER_REF="$(printf '%s' "$BUILDWORKER_IMAGE" | sed 's#^ghcr.io/##')"
+          GIT_CONFIG_FILE="$(mktemp)"
+          TRACKED_LIST="$(mktemp)"
+          MANIFEST="$(mktemp)"
+          trap 'rm -f "$GIT_CONFIG_FILE" "$TRACKED_LIST" "$MANIFEST"' EXIT
+          
+          # The checkout is owned by buildbot. safe.directory is only honored from
+          # protected Git config scopes, so isolate the exception in a temporary file.
+          : > "$GIT_CONFIG_FILE"
+          git config --file "$GIT_CONFIG_FILE" --add safe.directory "$SOURCE_DIR"
+          
+          SOURCE_COMMIT="$(GIT_CONFIG_GLOBAL="$GIT_CONFIG_FILE" git -C "$SOURCE_DIR" rev-parse HEAD)"
+          if [[ ! "$SOURCE_COMMIT" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "Invalid OpenWrt source commit: $SOURCE_COMMIT" >&2
+            exit 1
+          fi
+          if [[ "$SOURCE_COMMIT" != "$EXPECTED_SOURCE_COMMIT" ]]; then
+            echo "OpenWrt source commit mismatch: expected $EXPECTED_SOURCE_COMMIT, got $SOURCE_COMMIT" >&2
+            exit 1
+          fi
+          if [[ ! "$TARGET" =~ ^[A-Za-z0-9_-]+$ || ! "$SUBTARGET" =~ ^[A-Za-z0-9_-]+$ ]]; then
+            echo "Target and subtarget must be simple OpenWrt identifiers." >&2
+            exit 1
+          fi
+          if [[ ! "$TOOLS_FINGERPRINT" =~ ^[0-9a-f]{64}$ ]]; then
+            echo "Host Tools fingerprint must be a full lowercase SHA-256 digest." >&2
+            exit 1
+          fi
+          
+          WORKFLOW="$LOCAL_REPO_DIR/.github/workflows/reusable_build.yml"
+          DOCKERFILE='.github/dockerfiles/Dockerfile.toolchain'
+          if ! grep -Fq "$BUILDWORKER_IMAGE" "$WORKFLOW" &&
+             ! grep -Fq "$BUILDWORKER_REF" "$WORKFLOW"; then
+            echo "Builder workflow does not reference $BUILDWORKER_IMAGE." >&2
+            exit 1
+          fi
+          if [[ "$(head -n 1 "$LOCAL_REPO_DIR/$DOCKERFILE")" != "FROM $BUILDWORKER_IMAGE" ]]; then
+            echo "Runtime Dockerfile does not use $BUILDWORKER_IMAGE." >&2
+            exit 1
+          fi
+          
+          GIT_CONFIG_GLOBAL="$GIT_CONFIG_FILE" git -C "$SOURCE_DIR" ls-files -z > "$TRACKED_LIST"
+          printf '%s\0' \
+            schema 3 \
+            source_repository "$SOURCE_REPO" \
+            target "$TARGET" \
+            subtarget "$SUBTARGET" \
+            host_tools_fingerprint "$TOOLS_FINGERPRINT" \
+            toolchain_build_recipe 'toolchain-v2; config:CCACHE,DEVEL,AUTOREMOVE,TARGET,SUBTARGET; commands:make-defconfig,make-tools-install,make-toolchain-install,make-target-toolchain-compile; host-tools:prebuilt-artifact; command:./scripts/ext-tools.sh --refresh' \
+            runner ubuntu-24.04 \
+            platform linux/amd64 \
+            buildworker_image "$BUILDWORKER_IMAGE" > "$MANIFEST"
+          
+          FILE_COUNT=0
+          while IFS= read -r -d '' path; do
+            case "$path" in
+              include/version.mk|include/cmake.mk|.github/workflows/push-containers.yml|tools/*|toolchain/*) ;;
+              *) continue ;;
+            esac
+            [[ -f "$SOURCE_DIR/$path" ]] || continue
+            FILE_HASH="$(sha256sum < "$SOURCE_DIR/$path")"
+            FILE_HASH="$(printf '%s' "$FILE_HASH" | cut -d ' ' -f 1)"
+            printf '%s\0%s\0%s\0' upstream-source "$path" "$FILE_HASH" >> "$MANIFEST"
+            FILE_COUNT=$((FILE_COUNT + 1))
+          done < "$TRACKED_LIST"
+          
+          if (( FILE_COUNT == 0 )); then
+            echo "No tracked upstream container inputs were found." >&2
+            exit 1
+          fi
+          
+          if [[ ! -f "$LOCAL_REPO_DIR/$DOCKERFILE" ]]; then
+            echo "Required local runtime Dockerfile is missing: $DOCKERFILE" >&2
+            exit 1
+          fi
+          FILE_HASH="$(sha256sum < "$LOCAL_REPO_DIR/$DOCKERFILE")"
+          FILE_HASH="$(printf '%s' "$FILE_HASH" | cut -d ' ' -f 1)"
+          printf '%s\0%s\0%s\0' runtime-image "$DOCKERFILE" "$FILE_HASH" >> "$MANIFEST"
+          
+          HASH_OUTPUT="$(sha256sum < "$MANIFEST")"
+          TOOLCHAIN_FINGERPRINT="$(printf '%s' "$HASH_OUTPUT" | cut -d ' ' -f 1)"
+          TOOLCHAIN_CACHE_KEY="$(printf '%s' "$TOOLCHAIN_FINGERPRINT" | cut -c 1-32)"
+          
+          printf 'toolchain_fingerprint=%s\n' "$TOOLCHAIN_FINGERPRINT" >> "$GITHUB_OUTPUT"
+          printf 'toolchain_cache_key=%s\n' "$TOOLCHAIN_CACHE_KEY" >> "$GITHUB_OUTPUT"
+          printf 'source_commit=%s\n' "$SOURCE_COMMIT" >> "$GITHUB_OUTPUT"
+          echo "Toolchain fingerprint: $TOOLCHAIN_FINGERPRINT"
+CONFIG_DEVEL=y\nCONFIG_AUTOREMOVE=y\nCONFIG_CCACHE=y\n' \
+            host_tools_build_recipe 'host-tools-v3; config:DEVEL,AUTOREMOVE,CCACHE; commands:make-defconfig,make-tools-install' \
+            runner ubuntu-24.04 \
+            platform linux/amd64 \
+            buildworker_image "$BUILDWORKER_IMAGE" > "$MANIFEST"
+          
+          FILE_COUNT=0
+          while IFS= read -r -d '' path; do
+            case "$path" in
+              include/version.mk|include/cmake.mk|.github/workflows/push-containers.yml|tools/*|toolchain/*) ;;
+              *) continue ;;
+            esac
+            [[ -f "$SOURCE_DIR/$path" ]] || continue
+            FILE_HASH="$(sha256sum < "$SOURCE_DIR/$path")"
+            FILE_HASH="$(printf '%s' "$FILE_HASH" | cut -d ' ' -f 1)"
+            printf '%s\0%s\0%s\0' upstream-source "$path" "$FILE_HASH" >> "$MANIFEST"
+            FILE_COUNT=$((FILE_COUNT + 1))
+          done < "$TRACKED_LIST"
+          
+          if (( FILE_COUNT == 0 )); then
+            echo "No tracked upstream container inputs were found." >&2
+            exit 1
+          fi
+          
+          if [[ ! -f "$LOCAL_REPO_DIR/$DOCKERFILE" ]]; then
+            echo "Required local runtime Dockerfile is missing: $DOCKERFILE" >&2
+            exit 1
+          fi
+          FILE_HASH="$(sha256sum < "$LOCAL_REPO_DIR/$DOCKERFILE")"
+          FILE_HASH="$(printf '%s' "$FILE_HASH" | cut -d ' ' -f 1)"
+          printf '%s\0%s\0%s\0' runtime-image "$DOCKERFILE" "$FILE_HASH" >> "$MANIFEST"
+          
+          HASH_OUTPUT="$(sha256sum < "$MANIFEST")"
+          TOOLS_FINGERPRINT="$(printf '%s' "$HASH_OUTPUT" | cut -d ' ' -f 1)"
+          printf 'tools_fingerprint=%s\n' "$TOOLS_FINGERPRINT" >> "$GITHUB_OUTPUT"
+          printf 'source_commit=%s\n' "$SOURCE_COMMIT" >> "$GITHUB_OUTPUT"
+          echo "Host Tools fingerprint: $TOOLS_FINGERPRINT"
 
   toolchain:
     if: ${{ inputs.mode == 'toolchain' }}
