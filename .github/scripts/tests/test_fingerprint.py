@@ -1061,7 +1061,7 @@ class ReleaseIndexVerifierTests(unittest.TestCase):
             keyring, commit = self._create_keyring_checkout(
                 root,
                 "https://github.com/openwrt/keyring",
-                {name: "test public key\\n" for name in names},
+                {name: "test public key\n" for name in names},
             )
             github_env = root / "github-env"
             result = subprocess.run(
@@ -1082,14 +1082,14 @@ class ReleaseIndexVerifierTests(unittest.TestCase):
             makefile = source / "package/system/openwrt-keyring/Makefile"
             makefile.parent.mkdir(parents=True)
             makefile.write_text(
-                "PKG_SOURCE_VERSION:=1111111111111111111111111111111111111111\\n"
-                "$(INSTALL_DATA) $(PKG_BUILD_DIR)/usign/467a35c14d7fbc5c $(1)/etc/opkg/keys/\\n",
+                "PKG_SOURCE_VERSION:=1111111111111111111111111111111111111111\n"
+                "$(INSTALL_DATA) $(PKG_BUILD_DIR)/usign/467a35c14d7fbc5c $(1)/etc/opkg/keys/\n",
                 encoding="utf-8",
             )
             keyring, commit = self._create_keyring_checkout(
                 root,
                 "https://github.com/immortalwrt/keyring.git",
-                {"usign/467a35c14d7fbc5c": "official public usign key\\n"},
+                {"usign/467a35c14d7fbc5c": "official public usign key\n"},
             )
             github_env = root / "github-env"
             result = subprocess.run(
@@ -1111,13 +1111,13 @@ class ReleaseIndexVerifierTests(unittest.TestCase):
             makefile = source / "package/system/openwrt-keyring/Makefile"
             makefile.parent.mkdir(parents=True)
             makefile.write_text(
-                "$(INSTALL_DATA) $(PKG_BUILD_DIR)/usign/aaaaaaaaaaaaaaaa $(1)/etc/opkg/keys/\\n",
+                "$(INSTALL_DATA) $(PKG_BUILD_DIR)/usign/aaaaaaaaaaaaaaaa $(1)/etc/opkg/keys/\n",
                 encoding="utf-8",
             )
             keyring, _ = self._create_keyring_checkout(
                 root,
                 "https://github.com/immortalwrt/keyring",
-                {"usign/467a35c14d7fbc5c": "official key\\n"},
+                {"usign/467a35c14d7fbc5c": "official key\n"},
             )
             result = subprocess.run(
                 ["bash", str(self.helper), "resolve", "immortalwrt", str(source), str(keyring)],
@@ -1135,9 +1135,9 @@ class ReleaseIndexVerifierTests(unittest.TestCase):
                 root,
                 "https://github.com/attacker/keyring",
                 {
-                    "gpg/CD54E82DADB3684D.asc": "key\\n",
-                    "gpg/0x1D53D1877742E911.asc": "key\\n",
-                    "gpg/626471F1.asc": "key\\n",
+                    "gpg/CD54E82DADB3684D.asc": "key\n",
+                    "gpg/0x1D53D1877742E911.asc": "key\n",
+                    "gpg/626471F1.asc": "key\n",
                 },
             )
             result = subprocess.run(
@@ -1154,7 +1154,7 @@ class ReleaseIndexVerifierTests(unittest.TestCase):
             usign = root / "usign"
             usign.write_text(
                 "#!/usr/bin/env bash\n"
-                'printf "%s\\n" "$@" > "$USIGN_ARGS_FILE"\n',
+                'printf "%s\n" "$@" > "$USIGN_ARGS_FILE"\n',
                 encoding="utf-8",
             )
             usign.chmod(0o755)
@@ -1200,7 +1200,7 @@ class ReleaseIndexVerifierTests(unittest.TestCase):
             fake_gpg = bin_dir / "gpg"
             fake_gpg.write_text(
                 "#!/usr/bin/env bash\n"
-                'printf "%s\\n" "$@" >> "$GPG_ARGS_FILE"\n',
+                'printf "%s\n" "$@" >> "$GPG_ARGS_FILE"\n',
                 encoding="utf-8",
             )
             fake_gpg.chmod(0o755)
@@ -1259,14 +1259,14 @@ class ReleaseIndexVerifierTests(unittest.TestCase):
         with tempfile.TemporaryDirectory(prefix="release-index-usign-negative-") as temporary:
             root = Path(temporary)
             usign = root / "usign"
-            usign.write_text("#!/usr/bin/env bash\\nexit 17\\n", encoding="utf-8")
+            usign.write_text("#!/usr/bin/env bash\nexit 17\n", encoding="utf-8")
             usign.chmod(0o755)
             public_key = root / "release.pub"
             checksum_file = root / "sha256sums"
             signature_file = root / "sha256sums.sig"
-            public_key.write_text("public-key\\n", encoding="utf-8")
-            checksum_file.write_text("checksum-index\\n", encoding="utf-8")
-            signature_file.write_text("bad-signature\\n", encoding="utf-8")
+            public_key.write_text("public-key\n", encoding="utf-8")
+            checksum_file.write_text("checksum-index\n", encoding="utf-8")
+            signature_file.write_text("bad-signature\n", encoding="utf-8")
             result = subprocess.run(
                 ["bash", str(self.helper), "verify", "immortalwrt", str(usign),
                  str(public_key), "", str(checksum_file), str(signature_file)],
@@ -1284,7 +1284,7 @@ class ReleaseIndexVerifierTests(unittest.TestCase):
             checksum_file = root / "sha256sums"
             payload = b"0123456789abcdef"
             checksum_file.write_text(
-                __import__("hashlib").sha256(payload).hexdigest() + " *toolchain.tar.zst\\n",
+                __import__("hashlib").sha256(payload).hexdigest() + " *toolchain.tar.zst\n",
                 encoding="utf-8",
             )
             subprocess.run(
@@ -1317,7 +1317,7 @@ class ReleaseIndexVerifierTests(unittest.TestCase):
             self.assertEqual(valid.returncode, 0, valid.stdout + valid.stderr)
 
             checksum_file.write_text(
-                checksum_file.read_text(encoding="utf-8") + "# tampered\\n",
+                checksum_file.read_text(encoding="utf-8") + "# tampered\n",
                 encoding="utf-8",
             )
             invalid = subprocess.run(command, text=True, capture_output=True, check=False)
@@ -1332,8 +1332,8 @@ class ReleaseIndexVerifierTests(unittest.TestCase):
             import hashlib
             digest = hashlib.sha256(archive.read_bytes()).hexdigest()
             (root / "sha256sums").write_text(
-                f"{digest} *toolchain.tar.zst\\n"
-                + f"{'0' * 64} *not-downloaded.tar.zst\\n",
+                f"{digest} *toolchain.tar.zst\n"
+                + f"{'0' * 64} *not-downloaded.tar.zst\n",
                 encoding="utf-8",
             )
             valid = subprocess.run(
