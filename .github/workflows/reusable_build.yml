@@ -853,7 +853,6 @@ jobs:
 
 
       - name: Build toolchain
-        if: inputs.build_toolchain == true || steps.parse-toolchain.outputs.toolchain-type == 'internal'
         shell: su buildbot -c "sh -e {0}"
         working-directory: openwrt
         run: |
