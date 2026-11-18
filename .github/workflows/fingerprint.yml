@@ -84,7 +84,7 @@ jobs:
           python3 actions-wrt/.github/scripts/fingerprint.py tools \
             --source-dir openwrt \
             --local-repo-dir actions-wrt \
-            --source-repo "$SOURCE_REPO" \
+            --source-repo "$SOURCE_REPO"
 
   toolchain:
     if: ${{ inputs.mode == 'toolchain' }}
