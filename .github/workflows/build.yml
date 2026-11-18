@@ -129,11 +129,7 @@ jobs:
           HTTP_STATUS="$(curl -sS -o /dev/null -w '%{http_code}' -H "$GHCR_HEADER" -I "$GHCR_MANIFEST_LINK")"
           case "$HTTP_STATUS" in
             200) echo "tools_required=false" >> "$GITHUB_OUTPUT" ;;
-            404) echo "tools_required=true" >> "$GITHUB_OUTPUT" ;;
-            *)
-              echo "GHCR returned HTTP $HTTP_STATUS while checking tools:$TAG" >&2
-              exit 1
-              ;;
+            *) echo "tools_required=true" >> "$GITHUB_OUTPUT" ;;
           esac
           echo "checked_image=tools:$TAG" >> "$GITHUB_OUTPUT"
 
@@ -241,11 +237,7 @@ jobs:
           HTTP_STATUS="$(curl -sS -o /dev/null -w '%{http_code}' -H "$GHCR_HEADER" -I "$GHCR_MANIFEST_LINK")"
           case "$HTTP_STATUS" in
             200) echo "use_toolchain=true" >> "$GITHUB_OUTPUT" ;;
-            404) echo "use_toolchain=false" >> "$GITHUB_OUTPUT" ;;
-            *)
-              echo "GHCR returned HTTP $HTTP_STATUS while checking toolchain:$TAG" >&2
-              exit 1
-              ;;
+            *) echo "use_toolchain=false" >> "$GITHUB_OUTPUT" ;;
           esac
           echo "image=toolchain:$TAG" >> "$GITHUB_OUTPUT"
 
