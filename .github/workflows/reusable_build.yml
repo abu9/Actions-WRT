@@ -523,8 +523,8 @@ jobs:
         run: |
           set -euo pipefail
           KEYRING_DIR="$GITHUB_WORKSPACE/openwrt/.ci-keyring"
-          KEYRING_USIGN_KEY="$(bash "$GITHUB_WORKSPACE/.github/scripts/verify-release-index.sh" resolve "$AUTHOR" "$GITHUB_WORKSPACE/openwrt" "$KEYRING_DIR" "$GITHUB_ENV")"
-          echo "Using source-pinned release verification key: $KEYRING_USIGN_KEY"
+          RELEASE_KEY_MATERIAL="$(bash "$GITHUB_WORKSPACE/.github/scripts/verify-release-index.sh" resolve "$AUTHOR" "$GITHUB_WORKSPACE/openwrt" "$KEYRING_DIR" "$GITHUB_ENV")"
+          echo "Resolved source-pinned $AUTHOR release verification material: $RELEASE_KEY_MATERIAL"
 
       - name: Fix permission
         run: chown -R buildbot:buildbot .
@@ -622,15 +622,17 @@ jobs:
           TARGET_PATH="$DOWNLOADSERVER/$TOOLCHAIN_PATH/targets/${{ inputs.target }}/${{ inputs.subtarget }}"
           curl --fail --silent --show-error --location --retry 3 "$TARGET_PATH/$TOOLCHAIN_ARCHIVE" -o "$TOOLCHAIN_ARCHIVE"
           curl --fail --silent --show-error --location --retry 3 "$TARGET_PATH/sha256sums" -o sha256sums
-          curl --fail --silent --show-error --location --retry 3 "$TARGET_PATH/sha256sums.sig" -o sha256sums.sig
 
-          # The release index is signed with the usign key shipped by the
-          # source-pinned openwrt-keyring package. Verify before trusting its
-          # SHA256 entry or extracting the archive.
-          test -n "$KEYRING_USIGN_KEY"
-          test -s "$KEYRING_USIGN_KEY"
-          test -x staging_dir/host/bin/usign
-          bash ../.github/scripts/verify-release-index.sh verify staging_dir/host/bin/usign "$KEYRING_USIGN_KEY" sha256sums sha256sums.sig
+          case "$AUTHOR" in
+            immortalwrt) SIGNATURE_FILE=sha256sums.sig ;;
+            openwrt) SIGNATURE_FILE=sha256sums.asc ;;
+            *) echo "Unsupported release-signature format for $AUTHOR" >&2; exit 1 ;;
+          esac
+          curl --fail --silent --show-error --location --retry 3 "$TARGET_PATH/$SIGNATURE_FILE" -o "$SIGNATURE_FILE"
+
+          # Verify the release index with the distribution's own release
+          # signature format and source-pinned keyring before trusting SHA256.
+          bash ../.github/scripts/verify-release-index.sh verify "$AUTHOR" staging_dir/host/bin/usign "$KEYRING_USIGN_KEY" "$KEYRING_GPG_DIR" sha256sums "$SIGNATURE_FILE"
 
           CHECKSUM="$(awk -v wanted="$TOOLCHAIN_ARCHIVE" '
             NF >= 2 && length($1) == 64 && $1 ~ /^[[:xdigit:]]+$/ {
@@ -654,7 +656,7 @@ jobs:
             *.tar.xz)  tar -xJf "$TOOLCHAIN_ARCHIVE" ;;
             *) echo "Unsupported official toolchain archive format" >&2; exit 1 ;;
           esac
-          rm -f "$TOOLCHAIN_ARCHIVE" sha256sums sha256sums.sig
+          rm -f "$TOOLCHAIN_ARCHIVE" sha256sums sha256sums.sig sha256sums.asc
 
       - name: Clean configuration
         shell: su buildbot -c "sh -e {0}"
