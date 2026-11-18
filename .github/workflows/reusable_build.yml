@@ -548,7 +548,8 @@ jobs:
           set -euo pipefail
           KEYRING_DIR="$GITHUB_WORKSPACE/.ci-keyring"
           RELEASE_KEY_MATERIAL="$(bash "$GITHUB_WORKSPACE/.github/scripts/verify-release-index.sh" resolve "$AUTHOR" "$GITHUB_WORKSPACE/openwrt" "$KEYRING_DIR" "$GITHUB_ENV")"
-          echo "Resolved $AUTHOR keyring commit $KEYRING_COMMIT; release verification material: $RELEASE_KEY_MATERIAL"
+          KEYRING_COMMIT="$(git -C "$KEYRING_DIR" rev-parse HEAD)"
+          echo "Resolved $AUTHOR official keyring commit $KEYRING_COMMIT; release verification material: $RELEASE_KEY_MATERIAL"
 
       - name: Fix permission
         run: chown -R buildbot:buildbot .
@@ -666,6 +667,7 @@ jobs:
             *) echo "Unsupported official toolchain archive format" >&2; exit 1 ;;
           esac
           rm -f "$TOOLCHAIN_ARCHIVE" sha256sums sha256sums.sig sha256sums.asc
+          rm -rf ../.ci-keyring
 
       - name: Clean configuration
         shell: su buildbot -c "sh -e {0}"
