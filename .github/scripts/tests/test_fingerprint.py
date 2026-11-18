@@ -636,6 +636,57 @@ class GHCRCheckTests(unittest.TestCase):
                 FINGERPRINT_MODULE.ghcr_check("owner", "image", "tag", {})
             mocked.assert_not_called()
 
+    def test_malformed_token_response_fails_closed(self) -> None:
+        for payload in ([], "not-an-object", None):
+            with self.subTest(payload=payload), mock.patch.object(
+                FINGERPRINT_MODULE, "urlopen", return_value=self.response(payload)
+            ):
+                with self.assertRaisesRegex(RuntimeError, "token response is not a JSON object"):
+                    FINGERPRINT_MODULE.ghcr_check(
+                        "owner", "image", "tag", {"fingerprint": "expected"}
+                    )
+
+    def test_malformed_tag_manifest_fails_closed(self) -> None:
+        for payload in ([], "not-an-object", None):
+            with self.subTest(payload=payload), mock.patch.object(
+                FINGERPRINT_MODULE, "urlopen",
+                side_effect=[self.response({"token": "pull-token"}), self.response(payload)],
+            ):
+                with self.assertRaisesRegex(RuntimeError, "invalid tag manifest"):
+                    FINGERPRINT_MODULE.ghcr_check(
+                        "owner", "image", "tag", {"fingerprint": "expected"}
+                    )
+
+    def test_malformed_platform_manifest_list_fails_closed(self) -> None:
+        with mock.patch.object(
+            FINGERPRINT_MODULE, "urlopen",
+            side_effect=[
+                self.response({"token": "pull-token"}),
+                self.response({"manifests": "not-a-list"}),
+            ],
+        ):
+            with self.assertRaisesRegex(RuntimeError, "invalid platform manifest list"):
+                FINGERPRINT_MODULE.ghcr_check(
+                    "owner", "image", "tag", {"fingerprint": "expected"}
+                )
+
+    def test_malformed_image_config_fails_closed(self) -> None:
+        digest = "sha256:" + "f" * 64
+        for payload in ([], {"config": []}, {"config": {"Labels": []}}):
+            with self.subTest(payload=payload), mock.patch.object(
+                FINGERPRINT_MODULE, "urlopen",
+                side_effect=[
+                    self.response({"token": "pull-token"}),
+                    self.response({"config": {"digest": digest}}),
+                    self.response(payload),
+                ],
+            ):
+                expected = "invalid labels" if payload == {"config": {"Labels": []}} else "invalid image config"
+                with self.assertRaisesRegex(RuntimeError, expected):
+                    FINGERPRINT_MODULE.ghcr_check(
+                        "owner", "image", "tag", {"fingerprint": "expected"}
+                    )
+
     def test_token_endpoint_http_errors_never_become_cache_misses(self) -> None:
         for status in (401, 403, 404, 429, 500, 503):
             with self.subTest(status=status):
