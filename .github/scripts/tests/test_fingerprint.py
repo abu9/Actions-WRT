@@ -380,6 +380,70 @@ class WorkflowIntegrationTests(unittest.TestCase):
         ):
             self.assertIn(recipe_command, FINGERPRINT_MODULE.TOOLCHAIN_BUILD_RECIPE)
 
+    def test_ccache_restore_keys_follow_priority_and_isolate_namespaces(self) -> None:
+        root = Path(__file__).resolve().parents[2] / "workflows"
+        reusable = (root / "reusable_build.yml").read_text(encoding="utf-8")
+        tools = (root / "reusable_build_tools.yml").read_text(encoding="utf-8")
+
+        def restore_keys(workflow: str, step_name: str) -> list[str]:
+            step_start = workflow.index(f"name: {step_name}")
+            block_start = workflow.index("restore-keys: |", step_start)
+            result: list[str] = []
+            for line in workflow[block_start:].splitlines()[1:]:
+                if not line.strip():
+                    break
+                value = line.strip()
+                if value.startswith("#"):
+                    continue
+                result.append(value)
+            return result
+
+        # The exact Firmware cache namespace must include target/subtarget.
+        # Otherwise the first same-branch prefix can match another device
+        # before the explicit same-target and cross-target fallbacks.
+        self.assertIn(
+            'CCACHE_TAG="$TARGET-$SUBTARGET-$CONTAINER_TAG"',
+            reusable,
+        )
+        self.assertNotIn('CCACHE_TAG="$CONTAINER_TAG"', reusable)
+
+        # Firmware restore order: same target/source tag, same target across
+        # source tags, then any target in the same ccache type.
+        self.assertEqual(
+            restore_keys(reusable, "Restore ccache cache"),
+            [
+                "${{ needs.setup_build.outputs.ccache_name }}-",
+                "ccache-${{ inputs.ccache_type }}-${{ inputs.target }}-${{ inputs.subtarget }}-",
+                "ccache-${{ inputs.ccache_type }}-",
+            ],
+        )
+
+        # The separate kernel save uses the kernel namespace, while regular
+        # restore prefixes remain scoped to the selected ccache_type.
+        self.assertIn(
+            "key: ccache-kernel-${{ needs.setup_build.outputs.ccache_tag}}-${{ hashFiles('openwrt/include/kernel-**') }}",
+            reusable,
+        )
+        firmware_keys = restore_keys(reusable, "Restore ccache cache")
+        self.assertTrue(all(key.startswith("ccache-${{ inputs.ccache_type }}-") or
+                            key.startswith("${{ needs.setup_build.outputs.ccache_name }}-")
+                            for key in firmware_keys))
+        self.assertFalse(any(key.startswith("ccache-kernel-") for key in firmware_keys))
+
+        # Host Tools exact keys retain the source tag; the first fallback
+        # removes only that dimension while keeping worker and runner fixed.
+        self.assertIn(
+            "key: ccache-host-tools-buildworker-v23-${{ runner.os }}-${{ runner.arch }}-${{ inputs.ccache_tag }}",
+            tools,
+        )
+        self.assertEqual(
+            restore_keys(tools, "Restore Host Tools ccache"),
+            [
+                "ccache-host-tools-buildworker-v23-${{ runner.os }}-${{ runner.arch }}-",
+                "ccache-host-tools-${{ inputs.ccache_tag }}-buildworker-v23-${{ runner.os }}-${{ runner.arch }}",
+            ],
+        )
+
     def test_prebuilt_tools_prepare_uses_upstream_refresh_script(self) -> None:
         workflow = (
             Path(__file__).resolve().parents[2]

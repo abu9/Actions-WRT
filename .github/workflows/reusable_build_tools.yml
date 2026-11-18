@@ -80,7 +80,13 @@ jobs:
         uses: actions/cache/restore@v6.1.0
         with:
           path: openwrt/.ccache
-          key: ccache-host-tools-${{ inputs.ccache_tag }}-buildworker-v23-${{ runner.os }}-${{ runner.arch }}
+          # Put stable worker/runner compatibility dimensions before the branch-scoped tag.
+          key: ccache-host-tools-buildworker-v23-${{ runner.os }}-${{ runner.arch }}-${{ inputs.ccache_tag }}
+          # Reuse across source branches only when worker/runtime and runner match.
+          # Retain a same-branch fallback for caches saved with the legacy key layout.
+          restore-keys: |
+            ccache-host-tools-buildworker-v23-${{ runner.os }}-${{ runner.arch }}-
+            ccache-host-tools-${{ inputs.ccache_tag }}-buildworker-v23-${{ runner.os }}-${{ runner.arch }}
 
       - name: Configure Host Tools ccache
         working-directory: openwrt

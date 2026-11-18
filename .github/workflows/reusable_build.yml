@@ -165,9 +165,9 @@ jobs:
           CONTAINER_NAME="$REQUESTED_CONTAINER"
           CONTAINER_TAG="${AUTHOR}_${REPO_BRANCH}"
 
-          # Preserve the existing branch-scoped ccache namespace; image tags
-          # below are content-addressed and must not fragment compiler caches.
-          CCACHE_TAG="$CONTAINER_TAG"
+          # Include target/subtarget so same-branch caches from other devices
+          # cannot outrank same-target fallback caches.
+          CCACHE_TAG="$TARGET-$SUBTARGET-$CONTAINER_TAG"
 
           if [ "$CONTAINER_NAME" = "toolchain" ]; then
             if [ -z "$TOOLCHAIN_FINGERPRINT" ]; then
@@ -603,10 +603,11 @@ jobs:
         with:
           path: openwrt/.ccache
           key: ${{ needs.setup_build.outputs.ccache_name }}-${{ hashFiles('openwrt/include/kernel-**') }}
+          # Prefer the same branch, then same target/subtarget, before a broader cache-type fallback.
           restore-keys: |
             ${{ needs.setup_build.outputs.ccache_name }}-
-            ccache-kernel-${{ needs.setup_build.outputs.ccache_tag}}-${{ hashFiles('openwrt/include/kernel-**') }}
-            ccache-kernel-${{ needs.setup_build.outputs.ccache_tag}}-
+            ccache-${{ inputs.ccache_type }}-${{ inputs.target }}-${{ inputs.subtarget }}-
+            ccache-${{ inputs.ccache_type }}-
 
       - name: Download external toolchain/sdk
         if: inputs.build_toolchain == false && steps.parse-toolchain.outputs.toolchain-type != 'internal' && steps.parse-toolchain.outputs.toolchain-type != 'external_container'
