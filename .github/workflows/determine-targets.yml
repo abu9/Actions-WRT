@@ -70,7 +70,7 @@ jobs:
 
           if [[ -n "$CONFIG_NAME" ]]; then
             case "$CONFIG_NAME" in
-              .config7981|mt7981-ax3000.config|.config7981.mtwifi-cfg|360t7-immortalwrt.conf|360t7-immortalwrt-uhttpd.conf|360t7-immortalwrt-24.10.conf|360t7-immortalwrt-25.12-ubi.conf) ;;
+              .config7981|.config7981.mtwifi-cfg|360t7-immortalwrt.conf|360t7-immortalwrt-uhttpd.conf|360t7-immortalwrt-24.10.conf|360t7-immortalwrt-25.12-ubi.conf) ;;
               *)
                 echo "Unsupported config_name: $CONFIG_NAME" >&2
                 exit 1
