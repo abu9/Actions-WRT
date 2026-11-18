@@ -670,6 +670,20 @@ class GHCRCheckTests(unittest.TestCase):
                     "owner", "image", "tag", {"fingerprint": "expected"}
                 )
 
+    def test_malformed_image_config_descriptor_fails_closed(self) -> None:
+        for descriptor in ([], "not-an-object", None):
+            with self.subTest(descriptor=descriptor), mock.patch.object(
+                FINGERPRINT_MODULE, "urlopen",
+                side_effect=[
+                    self.response({"token": "pull-token"}),
+                    self.response({"config": descriptor}),
+                ],
+            ):
+                with self.assertRaisesRegex(RuntimeError, "invalid config descriptor"):
+                    FINGERPRINT_MODULE.ghcr_check(
+                        "owner", "image", "tag", {"fingerprint": "expected"}
+                    )
+
     def test_malformed_image_config_fails_closed(self) -> None:
         digest = "sha256:" + "f" * 64
         for payload in ([], {"config": []}, {"config": {"Labels": []}}):
