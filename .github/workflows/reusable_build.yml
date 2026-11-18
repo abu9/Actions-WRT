@@ -624,7 +624,10 @@ jobs:
           TARGET: ${{ inputs.target }}
           SUBTARGET: ${{ inputs.subtarget }}
         run: |
-          set -e
+          set -euo pipefail
+          # OpenWrt's config tools require a usable terminal type when
+          # make evaluates configuration prerequisites in this container.
+          export TERM=xterm
           if [ ! -x staging_dir/host/bin/usign ]; then
             # Build only the upstream usign host utility and its declared host
             # dependencies. Do not rebuild all Host Tools.
