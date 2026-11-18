@@ -999,85 +999,115 @@ class ReleaseIndexVerifierTests(unittest.TestCase):
             encoding="utf-8"
         )
 
-    def test_production_workflow_uses_shared_key_resolution_and_verification(self) -> None:
-        self.assertIn("verify-release-index.sh\" resolve", self.workflow)
-        self.assertIn("verify-release-index.sh verify", self.workflow)
-        self.assertNotIn(
-            'staging_dir/host/bin/usign -V -m sha256sums',
-            self.workflow,
-        )
+    def test_workflow_selects_distribution_specific_signature_format(self) -> None:
+        self.assertIn("immortalwrt) SIGNATURE_FILE=sha256sums.sig", self.workflow)
+        self.assertIn("openwrt) SIGNATURE_FILE=sha256sums.asc", self.workflow)
+        self.assertIn('AUTHOR: \${{ inputs.author }}', self.workflow)
+        self.assertIn('verify "$AUTHOR" staging_dir/host/bin/usign', self.workflow)
 
-    def test_verify_mode_passes_expected_files_to_usign(self) -> None:
-        with tempfile.TemporaryDirectory(prefix="release-index-verify-") as temporary:
+    def test_immortalwrt_verify_passes_expected_files_to_usign(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="release-index-usign-") as temporary:
             root = Path(temporary)
             args_file = root / "args.txt"
             usign = root / "usign"
             usign.write_text(
-                "#!/usr/bin/env bash\\n"
-                'printf "%s\\n" "$@" > "$USIGN_ARGS_FILE"\\n',
+                "#!/usr/bin/env bash\n"
+                'printf "%s\\n" "$@" > "$USIGN_ARGS_FILE"\n',
                 encoding="utf-8",
             )
             usign.chmod(0o755)
             public_key = root / "release.pub"
             checksum_file = root / "sha256sums"
             signature_file = root / "sha256sums.sig"
-            public_key.write_text("public-key\\n", encoding="utf-8")
-            checksum_file.write_text("signed-checksum-index\\n", encoding="utf-8")
-            signature_file.write_text("signature\\n", encoding="utf-8")
+            public_key.write_text("public-key\n", encoding="utf-8")
+            checksum_file.write_text("signed-checksum-index\n", encoding="utf-8")
+            signature_file.write_text("signature\n", encoding="utf-8")
 
             result = subprocess.run(
                 [
-                    "bash",
-                    str(self.helper),
-                    "verify",
-                    str(usign),
-                    str(public_key),
-                    str(checksum_file),
+                    "bash", str(self.helper), "verify", "immortalwrt",
+                    str(usign), str(public_key), "", str(checksum_file),
                     str(signature_file),
                 ],
                 env=dict(os.environ, USIGN_ARGS_FILE=str(args_file)),
-                text=True,
-                capture_output=True,
-                check=False,
+                text=True, capture_output=True, check=False,
             )
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
             self.assertEqual(
                 args_file.read_text(encoding="utf-8").splitlines(),
                 [
-                    "-V",
-                    "-m",
-                    str(checksum_file),
-                    "-p",
-                    str(public_key),
-                    "-x",
-                    str(signature_file),
+                    "-V", "-m", str(checksum_file), "-p", str(public_key),
+                    "-x", str(signature_file),
                 ],
             )
 
-    def test_verify_mode_rejects_missing_signature_before_invoking_usign(self) -> None:
-        with tempfile.TemporaryDirectory(prefix="release-index-missing-signature-") as temporary:
+    def test_openwrt_verify_imports_official_gpg_keys_and_verifies_asc(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="release-index-gpg-") as temporary:
             root = Path(temporary)
-            usign = root / "usign"
-            usign.write_text("#!/usr/bin/env bash\\nexit 99\\n", encoding="utf-8")
-            usign.chmod(0o755)
-            public_key = root / "release.pub"
+            bin_dir = root / "bin"
+            bin_dir.mkdir()
+            keyring = root / "gpg"
+            keyring.mkdir()
+            for name in (
+                "CD54E82DADB3684D.asc",
+                "0x1D53D1877742E911.asc",
+                "626471F1.asc",
+            ):
+                (keyring / name).write_text("test public key\n", encoding="utf-8")
+            args_file = root / "gpg-args.txt"
+            fake_gpg = bin_dir / "gpg"
+            fake_gpg.write_text(
+                "#!/usr/bin/env bash\n"
+                'printf "%s\\n" "$@" >> "$GPG_ARGS_FILE"\n',
+                encoding="utf-8",
+            )
+            fake_gpg.chmod(0o755)
             checksum_file = root / "sha256sums"
-            public_key.write_text("public-key\\n", encoding="utf-8")
-            checksum_file.write_text("signed-checksum-index\\n", encoding="utf-8")
+            signature_file = root / "sha256sums.asc"
+            checksum_file.write_text("signed-checksum-index\n", encoding="utf-8")
+            signature_file.write_text("signature\n", encoding="utf-8")
 
             result = subprocess.run(
                 [
-                    "bash",
-                    str(self.helper),
-                    "verify",
-                    str(usign),
-                    str(public_key),
-                    str(checksum_file),
+                    "bash", str(self.helper), "verify", "openwrt",
+                    str(bin_dir / "unused-usign"), "", str(keyring),
+                    str(checksum_file), str(signature_file),
+                ],
+                env=dict(
+                    os.environ,
+                    PATH=f"{bin_dir}:{os.environ.get('PATH', '/usr/bin:/bin')}",
+                    GPG_ARGS_FILE=str(args_file),
+                ),
+                text=True, capture_output=True, check=False,
+            )
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            args = args_file.read_text(encoding="utf-8").splitlines()
+            self.assertIn("--import", args)
+            self.assertIn(str(keyring / "CD54E82DADB3684D.asc"), args)
+            self.assertIn(str(keyring / "0x1D53D1877742E911.asc"), args)
+            self.assertIn(str(keyring / "626471F1.asc"), args)
+            self.assertIn("--with-fingerprint", args)
+            self.assertIn("--verify", args)
+            self.assertIn(str(signature_file), args)
+
+    def test_verify_rejects_missing_signature_before_invoking_verifier(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="release-index-missing-signature-") as temporary:
+            root = Path(temporary)
+            usign = root / "usign"
+            usign.write_text("#!/usr/bin/env bash\nexit 99\n", encoding="utf-8")
+            usign.chmod(0o755)
+            public_key = root / "release.pub"
+            checksum_file = root / "sha256sums"
+            public_key.write_text("public-key\n", encoding="utf-8")
+            checksum_file.write_text("signed-checksum-index\n", encoding="utf-8")
+
+            result = subprocess.run(
+                [
+                    "bash", str(self.helper), "verify", "immortalwrt",
+                    str(usign), str(public_key), "", str(checksum_file),
                     str(root / "missing.sig"),
                 ],
-                text=True,
-                capture_output=True,
-                check=False,
+                text=True, capture_output=True, check=False,
             )
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("signature is missing or empty", result.stderr)
