@@ -259,6 +259,9 @@ jobs:
           ln -s /prebuilt_tools/build_dir/host build_dir/host
           ./scripts/ext-tools.sh --refresh
       - name: Configure all modules
+        env:
+          TARGET: ${{ inputs.target }}
+          SUBTARGET: ${{ inputs.subtarget }}
         shell: su buildbot -c "sh -e {0}"
         working-directory: openwrt
         run: |
@@ -271,8 +274,8 @@ jobs:
           echo CONFIG_DEVEL=y >> .config
           echo CONFIG_AUTOREMOVE=y >> .config
 
-          echo "CONFIG_TARGET_${{ inputs.target }}=y" >> .config
-          echo "CONFIG_TARGET_${{ inputs.target }}_${{ inputs.subtarget }}=y" >> .config
+          echo "CONFIG_TARGET_${TARGET}=y" >> .config
+          echo "CONFIG_TARGET_${TARGET}_${SUBTARGET}=y" >> .config
 
           make defconfig
 
@@ -294,22 +297,28 @@ jobs:
 
       - name: Download and check packages
         if: inputs.build_all_modules == true || inputs.build_all_kmods == true || inputs.build_full == true
-        shell: su buildbot -c "sh -e {0}"
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          CHECK_PACKAGES_LIST: ${{ inputs.check_packages_list }}
+        shell: su buildbot -c "bash --noprofile --norc -eo pipefail {0}"
         working-directory: openwrt
         run: |
-          # With push events or check_packages_list set to all check all packages
-          if [ "${{ github.event_name }}" = "push" ] || [ "${{ inputs.check_packages_list }}" = "all" ]; then
-            make package/download package/check FIXUP=1 -j$(nproc) BUILD_LOG=1 || { ret=$?; bash ../.github/scripts/show_build_failures.sh; exit "$ret"; }
-          # With every other event check only changed packages (if provided)
-          elif [ -n "${{ inputs.check_packages_list }}" ]; then
-            for package in ${{ inputs.check_packages_list }}; do
-              make package/$package/download package/$package/check FIXUP=1 -j$(nproc) BUILD_LOG=1 || { ret=$?; bash ../.github/scripts/show_build_failures.sh; exit "$ret"; }
+          if [ "$EVENT_NAME" = "push" ] || [ "$CHECK_PACKAGES_LIST" = "all" ]; then
+            make package/download package/check FIXUP=1 -j"$(nproc)" BUILD_LOG=1 || { ret=$?; bash ../.github/scripts/show_build_failures.sh; exit "$ret"; }
+          elif [ -n "$CHECK_PACKAGES_LIST" ]; then
+            read -r -a packages <<< "$CHECK_PACKAGES_LIST"
+            for package in "${packages[@]}"; do
+              if [[ ! "$package" =~ ^[[:alnum:]][[:alnum:]_.+-]*$ ]]; then
+                echo "Invalid package name in check_packages_list: $package" >&2
+                exit 1
+              fi
+              make "package/$package/download" "package/$package/check" FIXUP=1 -j"$(nproc)" BUILD_LOG=1 || { ret=$?; bash ../.github/scripts/show_build_failures.sh; exit "$ret"; }
             done
           fi
 
 
       - name: Validate checked packages
-        shell: su buildbot -c "sh -e {0}"
+        shell: su buildbot -c "bash --noprofile --norc -e {0}"
         working-directory: openwrt
         run: |
           . ../.github/scripts/ci_helpers.sh
@@ -320,9 +329,12 @@ jobs:
             err "Some package Makefiles requires fix. (run 'make package/check FIXUP=1' and force push this pr)"
             err "You can also check the provided artifacts with the refreshed patch from this CI run."
             mkdir packages-fixed
-            for f in $(git diff --name-only); do
-              cp --parents $f packages-fixed/
-            done
+            changed_files="$(mktemp)"
+            trap 'rm -f "$changed_files"' EXIT
+            git diff --name-only -z > "$changed_files"
+            while IFS= read -r -d '' file; do
+              cp --parents -- "$file" packages-fixed/
+            done < "$changed_files"
             exit 1
           fi
 
@@ -378,6 +390,9 @@ jobs:
         if: inputs.build_toolchain == false
         id: parse-toolchain
         working-directory: openwrt
+        env:
+          TARGET: ${{ inputs.target }}
+          SUBTARGET: ${{ inputs.subtarget }}
         shell: bash
         run: |
           set -eo pipefail
@@ -432,7 +447,7 @@ jobs:
             exit 0
           fi
 
-          TARGET_PATH="$DOWNLOADSERVER/$TOOLCHAIN_PATH/targets/${{ inputs.target }}/${{ inputs.subtarget }}"
+          TARGET_PATH="$DOWNLOADSERVER/$TOOLCHAIN_PATH/targets/$TARGET/$SUBTARGET"
           SUMS_URL="$TARGET_PATH/sha256sums"
           echo "Looking for official toolchain at: $TARGET_PATH"
 
@@ -618,6 +633,8 @@ jobs:
         if: inputs.build_toolchain == false && steps.parse-toolchain.outputs.toolchain-type != 'internal' && steps.parse-toolchain.outputs.toolchain-type != 'external_container'
         env:
           AUTHOR: ${{ inputs.author }}
+          TARGET: ${{ inputs.target }}
+          SUBTARGET: ${{ inputs.subtarget }}
         shell: su buildbot -c "bash --noprofile --norc -eo pipefail {0}"
         working-directory: openwrt
         run: |
@@ -738,39 +755,79 @@ jobs:
 
       - name: Configure external toolchain in container
         if: inputs.build_toolchain == false && steps.parse-toolchain.outputs.toolchain-type == 'external_container'
-        shell: su buildbot -c "sh -e {0}"
+        env:
+          TARGET: ${{ inputs.target }}
+          SUBTARGET: ${{ inputs.subtarget }}
+        shell: su buildbot -c "bash --noprofile --norc -eo pipefail {0}"
         working-directory: openwrt
         run: |
           echo CONFIG_DEVEL=y >> .config
           echo CONFIG_AUTOREMOVE=y >> .config
 
+          mapfile -t toolchain_roots < <(
+            find /external-toolchain -mindepth 1 -maxdepth 1 -type d -name '*wrt-toolchain*' -print
+          )
+          if [ "${#toolchain_roots[@]}" -ne 1 ]; then
+            echo "Expected exactly one external toolchain root, found ${#toolchain_roots[@]}." >&2
+            printf '%s\n' "${toolchain_roots[@]}" >&2
+            exit 1
+          fi
+          mapfile -t toolchain_dirs < <(
+            find "${toolchain_roots[0]}" -mindepth 1 -maxdepth 1 -type d -name 'toolchain-*' -print
+          )
+          if [ "${#toolchain_dirs[@]}" -ne 1 ]; then
+            echo "Expected exactly one external toolchain directory, found ${#toolchain_dirs[@]}." >&2
+            printf '%s\n' "${toolchain_dirs[@]}" >&2
+            exit 1
+          fi
+
           ./scripts/ext-toolchain.sh \
-            --toolchain /external-toolchain/$(ls /external-toolchain/ | grep wrt-toolchain)/toolchain-* \
+            --toolchain "${toolchain_dirs[0]}" \
             --overwrite-config \
-            --config ${{ inputs.target }}/${{ inputs.subtarget }}
+            --config "$TARGET/$SUBTARGET"
 
 
       - name: Configure external toolchain
         if: inputs.build_toolchain == false && steps.parse-toolchain.outputs.toolchain-type == 'external_toolchain'
-        shell: su buildbot -c "sh -e {0}"
+        env:
+          TARGET: ${{ inputs.target }}
+          SUBTARGET: ${{ inputs.subtarget }}
+        shell: su buildbot -c "bash --noprofile --norc -eo pipefail {0}"
         working-directory: openwrt
         run: |
           echo CONFIG_DEVEL=y >> .config
           echo CONFIG_AUTOREMOVE=y >> .config
 
+          mapfile -t toolchain_dirs < <(
+            find "$TOOLCHAIN_FILE" -mindepth 1 -maxdepth 1 -type d -name 'toolchain-*' -print
+          )
+          if [ "${#toolchain_dirs[@]}" -ne 1 ]; then
+            echo "Expected exactly one external toolchain directory, found ${#toolchain_dirs[@]}." >&2
+            printf '%s\n' "${toolchain_dirs[@]}" >&2
+            exit 1
+          fi
+
           ./scripts/ext-toolchain.sh \
-            --toolchain $TOOLCHAIN_FILE/toolchain-* \
+            --toolchain "${toolchain_dirs[0]}" \
             --overwrite-config \
-            --config ${{ inputs.target }}/${{ inputs.subtarget }}
+            --config "$TARGET/$SUBTARGET"
 
 
       - name: Adapt external sdk to external toolchain format
         if: inputs.build_toolchain == false && steps.parse-toolchain.outputs.toolchain-type == 'external_sdk'
-        shell: su buildbot -c "sh -e {0}"
+        shell: su buildbot -c "bash --noprofile --norc -eo pipefail {0}"
         working-directory: openwrt
         run: |
-          TOOLCHAIN_DIR=$TOOLCHAIN_FILE/staging_dir/$(ls $TOOLCHAIN_FILE/staging_dir | grep toolchain)
-          TOOLCHAIN_BIN=$TOOLCHAIN_DIR/bin
+          mapfile -t toolchain_dirs < <(
+            find "$TOOLCHAIN_FILE/staging_dir" -mindepth 1 -maxdepth 1 -type d -name '*toolchain*' -print
+          )
+          if [ "${#toolchain_dirs[@]}" -ne 1 ]; then
+            echo "Expected exactly one SDK toolchain directory, found ${#toolchain_dirs[@]}." >&2
+            printf '%s\n' "${toolchain_dirs[@]}" >&2
+            exit 1
+          fi
+          TOOLCHAIN_DIR="${toolchain_dirs[0]}"
+          TOOLCHAIN_BIN="$TOOLCHAIN_DIR/bin"
           OPENWRT_DIR=$(pwd)
 
           # Find target name from toolchain info.mk
@@ -795,16 +852,28 @@ jobs:
 
       - name: Configure external toolchain with sdk
         if: inputs.build_toolchain == false && steps.parse-toolchain.outputs.toolchain-type == 'external_sdk'
-        shell: su buildbot -c "sh -e {0}"
+        env:
+          TARGET: ${{ inputs.target }}
+          SUBTARGET: ${{ inputs.subtarget }}
+        shell: su buildbot -c "bash --noprofile --norc -eo pipefail {0}"
         working-directory: openwrt
         run: |
           echo CONFIG_DEVEL=y >> .config
           echo CONFIG_AUTOREMOVE=y >> .config
 
+          mapfile -t toolchain_dirs < <(
+            find "$TOOLCHAIN_FILE/staging_dir" -mindepth 1 -maxdepth 1 -type d -name 'toolchain-*' -print
+          )
+          if [ "${#toolchain_dirs[@]}" -ne 1 ]; then
+            echo "Expected exactly one SDK toolchain directory, found ${#toolchain_dirs[@]}." >&2
+            printf '%s\n' "${toolchain_dirs[@]}" >&2
+            exit 1
+          fi
+
           ./scripts/ext-toolchain.sh \
-            --toolchain $TOOLCHAIN_FILE/staging_dir/toolchain-* \
+            --toolchain "${toolchain_dirs[0]}" \
             --overwrite-config \
-            --config ${{ inputs.target }}/${{ inputs.subtarget }}
+            --config "$TARGET/$SUBTARGET"
 
 
       - name: Configure internal toolchain
@@ -920,56 +989,84 @@ jobs:
 
       - name: Coverity prepare toolchain
         if: inputs.coverity_check_packages != ''
-        shell: su buildbot -c "sh -e {0}"
+        env:
+          COVERITY_API_TOKEN: ${{ secrets.coverity_api_token }}
+          COVERITY_PROJECT_NAME: ${{ inputs.coverity_project_name }}
+          COVERITY_COMPILER_TEMPLATE_LIST: ${{ inputs.coverity_compiler_template_list }}
+        shell: su buildbot -c "bash --noprofile --norc -eo pipefail {0}"
         working-directory: openwrt
         run: |
-          wget -q https://scan.coverity.com/download/linux64 --post-data "token=${{ secrets.coverity_api_token }}&project=${{ inputs.coverity_project_name }}" -O coverity.tar.gz
-          wget -q https://scan.coverity.com/download/linux64 --post-data "token=${{ secrets.coverity_api_token }}&project=${{ inputs.coverity_project_name }}&md5=1" -O coverity.tar.gz.md5
+          wget -q https://scan.coverity.com/download/linux64 --post-data "token=$COVERITY_API_TOKEN&project=$COVERITY_PROJECT_NAME" -O coverity.tar.gz
+          wget -q https://scan.coverity.com/download/linux64 --post-data "token=$COVERITY_API_TOKEN&project=$COVERITY_PROJECT_NAME&md5=1" -O coverity.tar.gz.md5
           echo ' coverity.tar.gz' >> coverity.tar.gz.md5
           md5sum -c coverity.tar.gz.md5
 
           mkdir cov-analysis-linux64
           tar xzf coverity.tar.gz --strip 1 -C cov-analysis-linux64
-          export PATH=$(pwd)/cov-analysis-linux64/bin:$PATH
+          export PATH="$(pwd)/cov-analysis-linux64/bin:$PATH"
 
-          for template in ${{ inputs.coverity_compiler_template_list }}; do
+          read -r -a compiler_templates <<< "$COVERITY_COMPILER_TEMPLATE_LIST"
+          for template in "${compiler_templates[@]}"; do
+            if [[ ! "$template" =~ ^[[:alnum:]_.+-]+$ ]]; then
+              echo "Invalid Coverity compiler template: $template" >&2
+              exit 1
+            fi
             cov-configure --template --comptype gcc --compiler "$template"
           done
 
 
       - name: Clean and recompile packages with Coverity toolchain
         if: inputs.coverity_check_packages != ''
+        env:
+          COVERITY_CHECK_PACKAGES: ${{ inputs.coverity_check_packages }}
+          COVERITY_FORCE_COMPILE_PACKAGES: ${{ inputs.coverity_force_compile_packages }}
         shell: su buildbot -c "bash --noprofile --norc -eo pipefail {0}"
         working-directory: openwrt
         run: |
-          set -o pipefail -o errexit
+          read -r -a coverity_check_packages <<< "$COVERITY_CHECK_PACKAGES"
+          read -r -a coverity_force_compile_packages <<< "$COVERITY_FORCE_COMPILE_PACKAGES"
+          clean_targets=()
+          compile_targets=()
+          force_compile_targets=()
+          for package in "${coverity_check_packages[@]}" "${coverity_force_compile_packages[@]}"; do
+            if [[ ! "$package" =~ ^[[:alnum:]][[:alnum:]_.+-]*$ ]]; then
+              echo "Invalid Coverity package name: $package" >&2
+              exit 1
+            fi
+          done
+          for package in "${coverity_check_packages[@]}"; do
+            clean_targets+=("package/$package/clean")
+            compile_targets+=("package/$package/compile")
+          done
+          for package in "${coverity_force_compile_packages[@]}"; do
+            force_compile_targets+=("package/$package/compile")
+          done
 
-          coverity_check_packages=(${{ inputs.coverity_check_packages }})
-          printf -v clean_packages "package/%s/clean " "${coverity_check_packages[@]}"
-          make -j$(nproc) BUILD_LOG=1 $clean_packages || { ret=$?; bash ../.github/scripts/show_build_failures.sh; exit "$ret"; }
+          make -j"$(nproc)" BUILD_LOG=1 "${clean_targets[@]}" || { ret=$?; bash ../.github/scripts/show_build_failures.sh; exit "$ret"; }
+          make -j"$(nproc)" BUILD_LOG=1 "${force_compile_targets[@]}" || { ret=$?; bash ../.github/scripts/show_build_failures.sh; exit "$ret"; }
 
-          coverity_force_compile_packages=(${{ inputs.coverity_force_compile_packages }})
-          printf -v force_compile_packages "package/%s/compile " "${coverity_force_compile_packages[@]}"
-          make -j$(nproc) BUILD_LOG=1 $force_compile_packages || { ret=$?; bash ../.github/scripts/show_build_failures.sh; exit "$ret"; }
-
-          printf -v compile_packages "package/%s/compile " "${coverity_check_packages[@]}"
-          export PATH=$(pwd)/cov-analysis-linux64/bin:$PATH
-          cov-build --dir cov-int make -j $(nproc) BUILD_LOG=1 $compile_packages || { ret=$?; bash ../.github/scripts/show_build_failures.sh; exit "$ret"; }
+          export PATH="$(pwd)/cov-analysis-linux64/bin:$PATH"
+          cov-build --dir cov-int make -j"$(nproc)" BUILD_LOG=1 "${compile_targets[@]}" || { ret=$?; bash ../.github/scripts/show_build_failures.sh; exit "$ret"; }
 
 
       - name: Upload build to Coverity for analysis
         if: inputs.coverity_check_packages != ''
+        env:
+          COVERITY_API_TOKEN: ${{ secrets.coverity_api_token }}
+          COVERITY_PROJECT_NAME: ${{ inputs.coverity_project_name }}
+          REPO_BRANCH: ${{ inputs.repo_branch }}
+          SOURCE_COMMIT: ${{ github.sha }}
         shell: su buildbot -c "sh -e {0}"
         working-directory: openwrt
         run: |
           tar czf cov-int.tar.gz ./cov-int
           curl \
-            --form token="${{ secrets.coverity_api_token }}" \
+            --form token="$COVERITY_API_TOKEN" \
             --form email="contact@openwrt.org" \
             --form file=@cov-int.tar.gz \
-            --form version="${{ inputs.repo_branch }}-${{ github.sha }}" \
-            --form description="OpenWrt ${{ inputs.repo_branch }}-${{ github.sha }}" \
-            "https://scan.coverity.com/builds?project=${{ inputs.coverity_project_name }}"
+            --form version="$REPO_BRANCH-$SOURCE_COMMIT" \
+            --form description="OpenWrt $REPO_BRANCH-$SOURCE_COMMIT" \
+            "https://scan.coverity.com/builds?project=$COVERITY_PROJECT_NAME"
 
 
       - name: Upload logs
