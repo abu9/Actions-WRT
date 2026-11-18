@@ -125,6 +125,21 @@ jobs:
       packages: read
 
     steps:
+      - name: Validate target identifiers
+        env:
+          TARGET: ${{ inputs.target }}
+          SUBTARGET: ${{ inputs.subtarget }}
+        shell: bash
+        run: |
+          set -e
+          for value_name in TARGET SUBTARGET; do
+            value="${!value_name}"
+            if [[ ! "$value" =~ ^[[:alnum:]][[:alnum:]_-]*$ ]]; then
+              echo "Invalid $value_name workflow input: $value" >&2
+              exit 1
+            fi
+          done
+
       - name: Checkout
         uses: actions/checkout@v7.0.1
 
