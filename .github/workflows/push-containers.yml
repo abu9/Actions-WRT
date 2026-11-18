@@ -196,6 +196,29 @@ jobs:
             io.abu9.actions-wrt.tools-source-repository=${{ inputs.repo_url || needs.determine_targets.outputs.repo_url }}
           file: .github/dockerfiles/Dockerfile.tools
 
+      - name: Verify published Host Tools image
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          OWNER_LC: ${{ needs.determine_container_info.outputs.owner_lc }}
+          IMAGE_TAG: ${{ needs.determine_container_info.outputs.container_tag }}-${{ inputs.tools_fingerprint || needs.compute-tools-fingerprint.outputs.tools_fingerprint }}
+        shell: bash
+        run: |
+          set -e
+          GHCR_TOKEN="$(printf '%s' "$GITHUB_TOKEN" | base64 -w0)"
+          GHCR_HEADER="Authorization: Bearer $GHCR_TOKEN"
+          GHCR_MANIFEST_LINK="https://ghcr.io/v2/$OWNER_LC/tools/manifests/$IMAGE_TAG"
+          for attempt in 1 2 3 4 5; do
+            HTTP_STATUS="$(curl -sS -o /dev/null -w '%{http_code}' -H "$GHCR_HEADER" -I "$GHCR_MANIFEST_LINK")"
+            if [ "$HTTP_STATUS" = "200" ]; then
+              echo "Published Host Tools image verified: HTTP 200"
+              exit 0
+            fi
+            echo "Host Tools image not yet available: HTTP $HTTP_STATUS (attempt $attempt/5)" >&2
+            sleep 3
+          done
+          echo "Published Host Tools image verification failed: HTTP $HTTP_STATUS" >&2
+          exit 1
+
   compute-toolchain-fingerprint:
     permissions:
       contents: read
@@ -310,3 +333,26 @@ jobs:
             SOURCE_COMMIT=${{ inputs.source_commit || needs.compute-tools-fingerprint.outputs.source_commit }}
             TOOLCHAIN_NAME=${{ steps.get-toolchain-name.outputs.toolchain_name }}
             TOOLCHAIN_FINGERPRINT=${{ needs.compute-toolchain-fingerprint.outputs.toolchain_fingerprint }}
+
+      - name: Verify published target Toolchain image
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          OWNER_LC: ${{ needs.determine_container_info.outputs.owner_lc }}
+          IMAGE_TAG: ${{ inputs.target || needs.determine_targets.outputs.target }}-${{ inputs.subtarget || needs.determine_targets.outputs.subtarget }}-${{ needs.determine_container_info.outputs.container_tag }}-${{ needs.compute-toolchain-fingerprint.outputs.toolchain_cache_key }}
+        shell: bash
+        run: |
+          set -e
+          GHCR_TOKEN="$(printf '%s' "$GITHUB_TOKEN" | base64 -w0)"
+          GHCR_HEADER="Authorization: Bearer $GHCR_TOKEN"
+          GHCR_MANIFEST_LINK="https://ghcr.io/v2/$OWNER_LC/toolchain/manifests/$IMAGE_TAG"
+          for attempt in 1 2 3 4 5; do
+            HTTP_STATUS="$(curl -sS -o /dev/null -w '%{http_code}' -H "$GHCR_HEADER" -I "$GHCR_MANIFEST_LINK")"
+            if [ "$HTTP_STATUS" = "200" ]; then
+              echo "Published target Toolchain image verified: HTTP 200"
+              exit 0
+            fi
+            echo "Target Toolchain image not yet available: HTTP $HTTP_STATUS (attempt $attempt/5)" >&2
+            sleep 3
+          done
+          echo "Published target Toolchain image verification failed: HTTP $HTTP_STATUS" >&2
+          exit 1
