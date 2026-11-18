@@ -551,10 +551,17 @@ jobs:
             exit 1
           fi
 
-          test -d "$KEYRING_DIR/gpg"
+          USIGN_KEY_ID="$(grep -oE 'usign/[0-9a-f]{16}' "$KEYRING_MAKEFILE" | head -n1 | cut -d/ -f2)"
+          if [[ ! "$USIGN_KEY_ID" =~ ^[0-9a-f]{16}$ ]]; then
+            echo "Unable to resolve the source-pinned $AUTHOR usign release key." >&2
+            exit 1
+          fi
+          KEYRING_USIGN_KEY="$KEYRING_DIR/usign/$USIGN_KEY_ID"
+          test -s "$KEYRING_USIGN_KEY"
           echo "KEYRING_DIR=$KEYRING_DIR" >> "$GITHUB_ENV"
           echo "KEYRING_COMMIT=$KEYRING_COMMIT" >> "$GITHUB_ENV"
-          echo "Using $AUTHOR signing keyring commit $KEYRING_COMMIT"
+          echo "KEYRING_USIGN_KEY=$KEYRING_USIGN_KEY" >> "$GITHUB_ENV"
+          echo "Using $AUTHOR usign key $USIGN_KEY_ID from pinned keyring commit $KEYRING_COMMIT"
 
       - name: Fix permission
         run: chown -R buildbot:buildbot .
@@ -609,6 +616,32 @@ jobs:
             ccache-${{ inputs.ccache_type }}-${{ inputs.target }}-${{ inputs.subtarget }}-
             ccache-${{ inputs.ccache_type }}-
 
+      - name: Prepare usign host verifier
+        if: inputs.build_toolchain == false && (steps.parse-toolchain.outputs.toolchain-type == 'external_toolchain' || steps.parse-toolchain.outputs.toolchain-type == 'external_sdk')
+        shell: su buildbot -c "sh -e {0}"
+        working-directory: openwrt
+        env:
+          TARGET: \${{ inputs.target }}
+          SUBTARGET: \${{ inputs.subtarget }}
+        run: |
+          set -e
+          if [ ! -x staging_dir/host/bin/usign ]; then
+            # Build only the upstream usign host utility and its declared host
+            # dependencies. Do not rebuild all Host Tools.
+            touch .config
+            echo CONFIG_DEVEL=y >> .config
+            echo CONFIG_AUTOREMOVE=y >> .config
+            echo "CONFIG_TARGET_\${TARGET}=y" >> .config
+            echo "CONFIG_TARGET_\${TARGET}_\${SUBTARGET}=y" >> .config
+            make defconfig
+            make package/system/usign/host/compile -j"$(nproc)" BUILD_LOG=1 || {
+              ret=$?
+              bash ../.github/scripts/show_build_failures.sh
+              exit "$ret"
+            }
+          fi
+          test -x staging_dir/host/bin/usign
+
       - name: Download external toolchain/sdk
         if: inputs.build_toolchain == false && steps.parse-toolchain.outputs.toolchain-type != 'internal' && steps.parse-toolchain.outputs.toolchain-type != 'external_container'
         shell: su buildbot -c "bash --noprofile --norc -eo pipefail {0}"
@@ -616,38 +649,18 @@ jobs:
         run: |
           set -euo pipefail
 
-          TARGET_PATH="$DOWNLOADSERVER/$TOOLCHAIN_PATH/targets/${{ inputs.target }}/${{ inputs.subtarget }}"
+          TARGET_PATH="$DOWNLOADSERVER/$TOOLCHAIN_PATH/targets/\${{ inputs.target }}/\${{ inputs.subtarget }}"
           curl --fail --silent --show-error --location --retry 3 "$TARGET_PATH/$TOOLCHAIN_ARCHIVE" -o "$TOOLCHAIN_ARCHIVE"
           curl --fail --silent --show-error --location --retry 3 "$TARGET_PATH/sha256sums" -o sha256sums
+          curl --fail --silent --show-error --location --retry 3 "$TARGET_PATH/sha256sums.sig" -o sha256sums.sig
 
-          SIGNATURE=""
-          for candidate in sha256sums.asc sha256sums.gpg; do
-            if curl --fail --silent --show-error --location "$TARGET_PATH/$candidate" -o "$candidate"; then
-              SIGNATURE="$candidate"
-              break
-            fi
-          done
-          if [ -z "$SIGNATURE" ]; then
-            echo "No detached signature found for sha256sums" >&2
-            exit 1
-          fi
-
-          # Import only the GPG public keys from the keyring commit pinned
-          # by this exact source tree's openwrt-keyring package Makefile.
-          test -n "$KEYRING_DIR"
-          test -d "$KEYRING_DIR/gpg"
-          export GNUPGHOME="$HOME/.gnupg"
-          install -d -m 0700 "$GNUPGHOME"
-          gpg --batch --homedir "$GNUPGHOME" --import "$KEYRING_DIR"/gpg/*.asc
-
-          if ! gpg --batch --homedir "$GNUPGHOME" --status-fd 1 --verify "$SIGNATURE" sha256sums 2>&1 | tee /tmp/official-toolchain-gpg.log; then
-            echo "GPG signature verification failed for the official checksum index." >&2
-            exit 1
-          fi
-          if ! grep -q '^\[GNUPG:\] GOODSIG ' /tmp/official-toolchain-gpg.log; then
-            echo "GPG did not report a valid signature from the pinned keyring." >&2
-            exit 1
-          fi
+          # The release index is signed with the usign key shipped by the
+          # source-pinned openwrt-keyring package. Verify before trusting its
+          # SHA256 entry or extracting the archive.
+          test -n "$KEYRING_USIGN_KEY"
+          test -s "$KEYRING_USIGN_KEY"
+          test -x staging_dir/host/bin/usign
+          staging_dir/host/bin/usign -V -m sha256sums -p "$KEYRING_USIGN_KEY" -x sha256sums.sig
 
           CHECKSUM="$(awk -v wanted="$TOOLCHAIN_ARCHIVE" '
             NF >= 2 && length($1) == 64 && $1 ~ /^[[:xdigit:]]+$/ {
@@ -671,8 +684,7 @@ jobs:
             *.tar.xz)  tar -xJf "$TOOLCHAIN_ARCHIVE" ;;
             *) echo "Unsupported official toolchain archive format" >&2; exit 1 ;;
           esac
-          rm -f "$TOOLCHAIN_ARCHIVE" sha256sums "$SIGNATURE"
-
+          rm -f "$TOOLCHAIN_ARCHIVE" sha256sums sha256sums.sig
 
       - name: Clean configuration
         shell: su buildbot -c "sh -e {0}"
