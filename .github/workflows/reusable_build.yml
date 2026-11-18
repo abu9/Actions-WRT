@@ -837,7 +837,9 @@ jobs:
           echo CONFIG_DEVEL=y >> .config
           echo CONFIG_AUTOREMOVE=y >> .config
 
-internal toolchain target overrides          make defconfig
+          # The selected device config already defines TARGET and SUBTARGET.
+          # Re-appending these symbols can trigger Kconfig choice-override warnings.
+          make defconfig
 
 
       - name: Show configuration
