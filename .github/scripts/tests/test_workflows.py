@@ -232,6 +232,7 @@ class WorkflowIntegrationTests(unittest.TestCase):
         determine = (workflows / "determine-targets.yml").read_text(encoding="utf-8")
         reusable = (workflows / "reusable_build.yml").read_text(encoding="utf-8")
         self.assertIn('[[ ! "$value" =~ ^[[:alnum:]][[:alnum:]_-]*$ ]]', determine)
+        self.assertIn("Invalid $value_name workflow input", reusable)
         self.assertNotIn('CONFIG_TARGET_${{ inputs.target }}', reusable)
         self.assertNotIn('targets/${{ inputs.target }}/${{ inputs.subtarget }}', reusable)
         self.assertIn('CONFIG_TARGET_${TARGET}', reusable)
