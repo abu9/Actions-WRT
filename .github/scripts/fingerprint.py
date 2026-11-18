@@ -101,9 +101,12 @@ def ghcr_check(owner: str,image: str,tag: str,labels: dict[str,str]) -> bool:
         manifest=get(f"manifests/{digest}","application/vnd.oci.image.manifest.v1+json, application/vnd.docker.distribution.manifest.v2+json")
     if not isinstance(manifest,dict):
         raise RuntimeError("GHCR returned an invalid image manifest.")
-    image_config_digest=(manifest.get("config") or {}).get("digest")
-    if not image_config_digest:
-        raise RuntimeError("GHCR image manifest has no config digest.")
+    config_descriptor = manifest.get("config")
+    if not isinstance(config_descriptor, dict):
+        raise RuntimeError("GHCR image manifest has an invalid config descriptor.")
+    image_config_digest = config_descriptor.get("digest")
+    if not isinstance(image_config_digest, str) or not image_config_digest:
+        raise RuntimeError("GHCR image manifest has no valid config digest.")
     config=get(f"blobs/{image_config_digest}","application/json")
     if not isinstance(config, dict) or not isinstance(config.get("config"), dict):
         raise RuntimeError("GHCR returned an invalid image config.")
