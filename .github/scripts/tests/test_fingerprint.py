@@ -1366,7 +1366,7 @@ class ReleaseIndexVerifierTests(unittest.TestCase):
             self.assertNotEqual(invalid.returncode, 0)
 
             (root / "sha256sums").write_text(
-                f"{digest} *not-the-selected-archive.tar.zst\\n",
+                f"{digest} *not-the-selected-archive.tar.zst\n",
                 encoding="utf-8",
             )
             unmatched = subprocess.run(
