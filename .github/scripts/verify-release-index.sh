@@ -70,7 +70,6 @@ case "$command" in
     }
 
     if [[ -n "$github_env" ]]; then
-      [[ -n "${GITHUB_ENV:-}" || "$github_env" != "" ]] || true
       {
         printf 'KEYRING_DIR=%s\n' "$keyring_dir"
         printf 'KEYRING_COMMIT=%s\n' "$keyring_commit"
