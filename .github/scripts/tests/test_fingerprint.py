@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import importlib.util
 import json
 import os
@@ -1231,6 +1232,7 @@ class ReleaseIndexVerifierTests(unittest.TestCase):
             self.assertIn("--with-fingerprint", args)
             self.assertIn("--verify", args)
             self.assertIn(str(signature_file), args)
+            self.assertIn(str(checksum_file), args)
 
     def test_verify_rejects_missing_signature_before_invoking_verifier(self) -> None:
         with tempfile.TemporaryDirectory(prefix="release-index-missing-signature-") as temporary:
@@ -1284,7 +1286,7 @@ class ReleaseIndexVerifierTests(unittest.TestCase):
             checksum_file = root / "sha256sums"
             payload = b"0123456789abcdef"
             checksum_file.write_text(
-                __import__("hashlib").sha256(payload).hexdigest() + " *toolchain.tar.zst\n",
+                hashlib.sha256(payload).hexdigest() + " *toolchain.tar.zst\n",
                 encoding="utf-8",
             )
             subprocess.run(
@@ -1329,7 +1331,6 @@ class ReleaseIndexVerifierTests(unittest.TestCase):
             root = Path(temporary)
             archive = root / "toolchain.tar.zst"
             archive.write_bytes(b"verified archive fixture")
-            import hashlib
             digest = hashlib.sha256(archive.read_bytes()).hexdigest()
             (root / "sha256sums").write_text(
                 f"{digest} *toolchain.tar.zst\n"
