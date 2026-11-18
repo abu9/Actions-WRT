@@ -661,7 +661,7 @@ jobs:
           # upstream OpenWrt checksum command to verify the downloaded archive.
           bash ../.github/scripts/verify-release-index.sh verify "$AUTHOR" staging_dir/host/bin/usign "$KEYRING_USIGN_KEY" "$KEYRING_GPG_DIR" sha256sums "$SIGNATURE_FILE"
           CHECKSUM_OUTPUT="$(sha256sum --check --ignore-missing sha256sums)"
-          printf '%s\\n' "$CHECKSUM_OUTPUT"
+          printf '%s\n' "$CHECKSUM_OUTPUT"
           if ! grep -Fq "$TOOLCHAIN_ARCHIVE: OK" <<<"$CHECKSUM_OUTPUT"; then
             echo "The signed checksum index did not verify the selected archive: $TOOLCHAIN_ARCHIVE" >&2
             exit 1
