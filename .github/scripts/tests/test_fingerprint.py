@@ -1397,5 +1397,140 @@ class ReleaseIndexVerifierTests(unittest.TestCase):
             self.assertIn("no file was verified", unmatched.stderr)
 
 
+    def test_immortalwrt_usign_real_crypto_positive_tamper_and_wrong_key(self) -> None:
+        usign_value = os.environ.get("USIGN_BIN")
+        if not usign_value:
+            self.skipTest("USIGN_BIN is not configured; CI builds upstream usign")
+        usign = Path(usign_value)
+        if not usign.is_file() or not os.access(usign, os.X_OK):
+            self.fail(f"USIGN_BIN is not an executable file: {usign}")
+
+        with tempfile.TemporaryDirectory(prefix="release-index-real-usign-") as temporary:
+            root = Path(temporary)
+            public_key = root / "release.pub"
+            secret_key = root / "release.sec"
+            wrong_public_key = root / "wrong.pub"
+            wrong_secret_key = root / "wrong.sec"
+            checksum_file = root / "sha256sums"
+            signature_file = root / "sha256sums.sig"
+            checksum_file.write_text(
+                hashlib.sha256(b"toolchain archive fixture").hexdigest()
+                + " *toolchain.tar.zst\\n",
+                encoding="utf-8",
+            )
+            subprocess.run(
+                [str(usign), "-G", "-c", "Actions-WRT CI test key",
+                 "-s", str(secret_key), "-p", str(public_key)],
+                check=True, text=True, capture_output=True,
+            )
+            subprocess.run(
+                [str(usign), "-S", "-m", str(checksum_file),
+                 "-s", str(secret_key), "-x", str(signature_file)],
+                check=True, text=True, capture_output=True,
+            )
+            command = [
+                "bash", str(self.helper), "verify", "immortalwrt",
+                str(usign), str(public_key), "", str(checksum_file),
+                str(signature_file),
+            ]
+            valid = subprocess.run(command, text=True, capture_output=True, check=False)
+            self.assertEqual(valid.returncode, 0, valid.stdout + valid.stderr)
+
+            checksum_file.write_text(
+                checksum_file.read_text(encoding="utf-8") + "# tampered\\n",
+                encoding="utf-8",
+            )
+            tampered = subprocess.run(command, text=True, capture_output=True, check=False)
+            self.assertNotEqual(tampered.returncode, 0)
+
+            checksum_file.write_text(
+                hashlib.sha256(b"toolchain archive fixture").hexdigest()
+                + " *toolchain.tar.zst\\n",
+                encoding="utf-8",
+            )
+            subprocess.run(
+                [str(usign), "-G", "-c", "Actions-WRT wrong test key",
+                 "-s", str(wrong_secret_key), "-p", str(wrong_public_key)],
+                check=True, text=True, capture_output=True,
+            )
+            wrong_key_command = command.copy()
+            wrong_key_command[wrong_key_command.index(str(public_key))] = str(wrong_public_key)
+            wrong_key = subprocess.run(
+                wrong_key_command, text=True, capture_output=True, check=False
+            )
+            self.assertNotEqual(wrong_key.returncode, 0)
+
+    def test_failed_real_usign_verification_prevents_archive_extraction(self) -> None:
+        usign_value = os.environ.get("USIGN_BIN")
+        if not usign_value:
+            self.skipTest("USIGN_BIN is not configured; CI builds upstream usign")
+        usign = Path(usign_value)
+        if not usign.is_file() or not os.access(usign, os.X_OK):
+            self.fail(f"USIGN_BIN is not an executable file: {usign}")
+
+        with tempfile.TemporaryDirectory(prefix="release-index-no-extract-") as temporary:
+            root = Path(temporary)
+            public_key = root / "release.pub"
+            secret_key = root / "release.sec"
+            checksum_file = root / "sha256sums"
+            signature_file = root / "sha256sums.sig"
+            archive = root / "toolchain.tar.zst"
+            archive.write_bytes(b"archive fixture")
+            checksum_file.write_text(
+                hashlib.sha256(b"archive fixture").hexdigest()
+                + " *toolchain.tar.zst\\n",
+                encoding="utf-8",
+            )
+            subprocess.run(
+                [str(usign), "-G", "-c", "Actions-WRT fail-closed test key",
+                 "-s", str(secret_key), "-p", str(public_key)],
+                check=True, text=True, capture_output=True,
+            )
+            subprocess.run(
+                [str(usign), "-S", "-m", str(checksum_file),
+                 "-s", str(secret_key), "-x", str(signature_file)],
+                check=True, text=True, capture_output=True,
+            )
+            checksum_file.write_text(
+                checksum_file.read_text(encoding="utf-8") + "# post-signature tamper\\n",
+                encoding="utf-8",
+            )
+
+            bin_dir = root / "bin"
+            bin_dir.mkdir()
+            tar_marker = root / "tar-was-called"
+            tar = bin_dir / "tar"
+            tar.write_text(
+                "#!/usr/bin/env bash\\n"
+                'touch "$TAR_MARKER"\\n'
+                "exit 99\\n",
+                encoding="utf-8",
+            )
+            tar.chmod(0o755)
+            shell = (
+                "set -euo pipefail\\n"
+                'bash "$HELPER" verify immortalwrt "$USIGN_BIN" "$PUBLIC_KEY" "" '
+                '"$CHECKSUM_FILE" "$SIGNATURE_FILE"\\n'
+                'tar --zstd -xf "$ARCHIVE"\\n'
+            )
+            result = subprocess.run(
+                ["bash", "-c", shell],
+                env=dict(
+                    os.environ,
+                    PATH=f"{bin_dir}:{os.environ.get('PATH', '/usr/bin:/bin')}",
+                    HELPER=str(self.helper),
+                    USIGN_BIN=str(usign),
+                    PUBLIC_KEY=str(public_key),
+                    CHECKSUM_FILE=str(checksum_file),
+                    SIGNATURE_FILE=str(signature_file),
+                    ARCHIVE=str(archive),
+                    TAR_MARKER=str(tar_marker),
+                ),
+                text=True, capture_output=True, check=False,
+            )
+            self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
+            self.assertFalse(tar_marker.exists(), "tar ran after signature verification failed")
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
