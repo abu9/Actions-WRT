@@ -1,0 +1,58 @@
+name: Pre-merge cleanup smoke tests
+
+on:
+  push:
+    branches:
+      - test/premerge-cleanup-2026-11-18
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: Build-free regression and workflow validation
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7.0.1
+
+      - name: Run Python regression tests
+        run: |
+          set -euo pipefail
+          python3 -m py_compile .github/scripts/fingerprint.py
+          python3 -m unittest discover -s .github/scripts/tests -p 'test_*.py' -v
+
+      - name: Install pinned actionlint
+        env:
+          ACTIONLINT_VERSION: '1.7.12'
+          ACTIONLINT_SHA256: '8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8'
+        run: |
+          set -euo pipefail
+          archive="actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz"
+          url="https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/${archive}"
+          mkdir -p "${RUNNER_TEMP}/actionlint" "${RUNNER_TEMP}/bin"
+          curl --fail --location --silent --show-error "$url" --output "${RUNNER_TEMP}/actionlint/$archive"
+          echo "${ACTIONLINT_SHA256}  ${RUNNER_TEMP}/actionlint/$archive" | sha256sum --check --strict
+          tar -xzf "${RUNNER_TEMP}/actionlint/$archive" -C "${RUNNER_TEMP}/actionlint" actionlint
+          install -m 0755 "${RUNNER_TEMP}/actionlint/actionlint" "${RUNNER_TEMP}/bin/actionlint"
+          echo "${RUNNER_TEMP}/bin" >> "$GITHUB_PATH"
+
+      - name: Install ShellCheck
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends shellcheck
+
+      - name: Lint workflows and shell scripts
+        run: |
+          set -euo pipefail
+          cat > "${RUNNER_TEMP}/shellcheck-errors-only" <<'WRAPPER'
+          #!/usr/bin/env bash
+          set -euo pipefail
+          exec shellcheck --severity=error "$@"
+          WRAPPER
+          chmod 0755 "${RUNNER_TEMP}/shellcheck-errors-only"
+          actionlint -shellcheck="${RUNNER_TEMP}/shellcheck-errors-only" -color .github/workflows/*.yml
+          shellcheck --severity=error .github/scripts/*.sh
+          git diff --check
