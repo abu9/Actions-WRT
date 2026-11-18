@@ -4,17 +4,12 @@
 from __future__ import annotations
 
 import hashlib
-import importlib.util
-import json
 import os
 import shutil
 import subprocess
 import tempfile
 import unittest
 from pathlib import Path
-from unittest import mock
-from urllib.error import HTTPError, URLError
-
 
 
 class ReleaseIndexVerifierTests(unittest.TestCase):
