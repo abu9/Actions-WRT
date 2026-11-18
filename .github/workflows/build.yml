@@ -123,17 +123,16 @@ jobs:
           EXPECTED_FINGERPRINT: ${{ needs.tools_fingerprint.outputs.tools_fingerprint }}
           SOURCE_REPOSITORY: ${{ needs.determine_targets.outputs.repo_url }}
         run: |
-          set +e
           TAG="$AUTHOR"_"$REPO_BRANCH-$EXPECTED_FINGERPRINT"
-          python3 .github/scripts/fingerprint.py ghcr-check --owner "$OWNER" --image tools --tag "$TAG"             --label "io.abu9.actions-wrt.tools-fingerprint=$EXPECTED_FINGERPRINT"             --label "io.abu9.actions-wrt.tools-source-repository=$SOURCE_REPOSITORY"
-          rc=$?
-          set -e
-          if [ "$rc" -eq 0 ]; then
+          if python3 .github/scripts/fingerprint.py ghcr-check --owner "$OWNER" --image tools --tag "$TAG"             --label "io.abu9.actions-wrt.tools-fingerprint=$EXPECTED_FINGERPRINT"             --label "io.abu9.actions-wrt.tools-source-repository=$SOURCE_REPOSITORY"; then
             echo "tools_required=false" >> "$GITHUB_OUTPUT"
-          elif [ "$rc" -eq 1 ]; then
-            echo "tools_required=true" >> "$GITHUB_OUTPUT"
           else
-            exit "$rc"
+            rc=$?
+            if [ "$rc" -eq 1 ]; then
+              echo "tools_required=true" >> "$GITHUB_OUTPUT"
+            else
+              exit "$rc"
+            fi
           fi
           echo "checked_image=tools:$TAG" >> "$GITHUB_OUTPUT"
 
@@ -182,7 +181,6 @@ jobs:
           TOOLS_REQUIRED: ${{ needs.check_tools_container.outputs.tools_required }}
           BUILD_RESULT: ${{ needs.build_tools_container.result }}
         run: |
-          set -eo pipefail
           if [ "$TOOLS_REQUIRED" = "true" ]; then test "$BUILD_RESULT" = success; fi
           TAG="$(printf '%s' "$CHECKED_IMAGE" | cut -d: -f2-)"
           python3 .github/scripts/fingerprint.py ghcr-check --owner "$OWNER" --image tools --tag "$TAG"             --label "io.abu9.actions-wrt.tools-fingerprint=$EXPECTED_FINGERPRINT"             --label "io.abu9.actions-wrt.tools-source-repository=$SOURCE_REPOSITORY"
@@ -230,23 +228,21 @@ jobs:
           TOOLS_FINGERPRINT: ${{ needs.tools_fingerprint.outputs.tools_fingerprint }}
         shell: bash
         run: |
-          set -eo pipefail
           TAG="$TARGET-$SUBTARGET-$AUTHOR"_"$REPO_BRANCH-${FINGERPRINT:0:32}"
-          set +e
-          python3 .github/scripts/fingerprint.py ghcr-check \
+          if python3 .github/scripts/fingerprint.py ghcr-check \
             --owner "$OWNER" \
             --image toolchain \
             --tag "$TAG" \
             --label "io.abu9.actions-wrt.toolchain-fingerprint=$FINGERPRINT" \
-            --label "io.abu9.actions-wrt.tools-fingerprint=$TOOLS_FINGERPRINT"
-          rc=$?
-          set -e
-          if [ "$rc" -eq 0 ]; then
+            --label "io.abu9.actions-wrt.tools-fingerprint=$TOOLS_FINGERPRINT"; then
             echo "use_toolchain=true" >> "$GITHUB_OUTPUT"
-          elif [ "$rc" -eq 1 ]; then
-            echo "use_toolchain=false" >> "$GITHUB_OUTPUT"
           else
-            exit "$rc"
+            rc=$?
+            if [ "$rc" -eq 1 ]; then
+              echo "use_toolchain=false" >> "$GITHUB_OUTPUT"
+            else
+              exit "$rc"
+            fi
           fi
           echo "image=toolchain:$TAG" >> "$GITHUB_OUTPUT"
 

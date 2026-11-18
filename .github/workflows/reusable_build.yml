@@ -161,7 +161,6 @@ jobs:
           TOOLCHAIN_FINGERPRINT: ${{ inputs.toolchain_fingerprint }}
         shell: bash
         run: |
-          set -eo pipefail
           CONTAINER_NAME="$REQUESTED_CONTAINER"
           CONTAINER_TAG="${AUTHOR}_${REPO_BRANCH}"
 
@@ -177,23 +176,23 @@ jobs:
               TOOLCHAIN_BASE_TAG="$TARGET-$SUBTARGET-$CONTAINER_TAG"
               CCACHE_TAG="$TOOLCHAIN_BASE_TAG"
               TOOLCHAIN_TAG="$TOOLCHAIN_BASE_TAG-${TOOLCHAIN_FINGERPRINT:0:32}"
-              set +e
-              python3 .github/scripts/fingerprint.py ghcr-check \
+              if python3 .github/scripts/fingerprint.py ghcr-check \
                 --owner "$GHCR_OWNER" \
                 --image toolchain \
                 --tag "$TOOLCHAIN_TAG" \
                 --label "io.abu9.actions-wrt.toolchain-fingerprint=$TOOLCHAIN_FINGERPRINT" \
-                --label "io.abu9.actions-wrt.tools-fingerprint=$TOOLS_FINGERPRINT"
-              rc=$?
-              set -e
-              case "$rc" in
-                0) CONTAINER_TAG="$TOOLCHAIN_TAG" ;;
-                1)
-                  echo "Fingerprint-matched target toolchain image not found; falling back to tools image."
-                  CONTAINER_NAME=tools
-                  ;;
-                *) echo "GHCR target toolchain fingerprint verification failed." >&2; exit "$rc" ;;
-              esac
+                --label "io.abu9.actions-wrt.tools-fingerprint=$TOOLS_FINGERPRINT"; then
+                CONTAINER_TAG="$TOOLCHAIN_TAG"
+              else
+                rc=$?
+                case "$rc" in
+                  1)
+                    echo "Fingerprint-matched target toolchain image not found; falling back to tools image."
+                    CONTAINER_NAME=tools
+                    ;;
+                  *) echo "GHCR target toolchain fingerprint verification failed." >&2; exit "$rc" ;;
+                esac
+              fi
             fi
           fi
 
@@ -898,13 +897,13 @@ jobs:
         shell: su buildbot -c "bash --noprofile --norc -eo pipefail {0}"
         working-directory: openwrt
         run: |
-          set -eo pipefail
           # make -q returns 0 when up to date, 1 when a rebuild is needed,
           # and 2 when the optional target cannot be queried.
-          set +e
-          TOPDIR="$(pwd)" make -C target/linux dtb -q >/dev/null 2>&1
-          dtb_status=$?
-          set -e
+          if TOPDIR="$(pwd)" make -C target/linux dtb -q >/dev/null 2>&1; then
+            dtb_status=0
+          else
+            dtb_status=$?
+          fi
 
           case "$dtb_status" in
             0|1) ;;
