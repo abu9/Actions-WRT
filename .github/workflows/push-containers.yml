@@ -98,7 +98,7 @@ jobs:
 
   determine_container_info:
     name: Determine tools image tag
-    if: ${{ !cancelled() && ((needs.determine_targets.result == 'success' || inputs.target != '') || inputs.target != '') }}
+    if: ${{ !cancelled() && (needs.determine_targets.result == 'success' || inputs.target != '') }}
     needs: determine_targets
     runs-on: ubuntu-24.04
     outputs:
