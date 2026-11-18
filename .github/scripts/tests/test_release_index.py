@@ -21,6 +21,11 @@ class ReleaseIndexVerifierTests(unittest.TestCase):
             encoding="utf-8"
         )
 
+    def test_release_verifier_uses_only_required_shell_options(self) -> None:
+        source = self.helper.read_text(encoding="utf-8")
+        self.assertIn("set -euo pipefail", source)
+        self.assertNotIn("set -Eeuo pipefail", source)
+
     def test_workflow_selects_distribution_specific_signature_format(self) -> None:
         self.assertIn("immortalwrt) SIGNATURE_FILE=sha256sums.sig", self.workflow)
         self.assertIn("openwrt) SIGNATURE_FILE=sha256sums.asc", self.workflow)
