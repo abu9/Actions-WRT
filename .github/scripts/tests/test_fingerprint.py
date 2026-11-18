@@ -937,15 +937,15 @@ class DiyPart1InvocationTests(unittest.TestCase):
         workflow = (root / ".github/workflows/reusable_build.yml").read_text(
             encoding="utf-8"
         )
-        start = workflow.index("      - name: Load pre-custom script\\n")
-        end = workflow.index("\\n      - name: ", start + 1)
+        start = workflow.index("      - name: Load pre-custom script\n")
+        end = workflow.index("\n      - name: ", start + 1)
         step = workflow[start:end]
-        run_marker = "        run: |\\n"
+        run_marker = "        run: |\n"
         cls.run_script = step.split(run_marker, 1)[1]
-        cls.run_script = "\\n".join(
+        cls.run_script = "\n".join(
             line[10:] if line.startswith("          ") else line
             for line in cls.run_script.splitlines()
-        ) + "\\n"
+        ) + "\n"
 
     def test_workspace_is_resolved_inside_the_buildbot_shell(self) -> None:
         self.assertIn('GITHUB_WORKSPACE="$(cd .. && pwd)"', self.run_script)
@@ -960,10 +960,10 @@ class DiyPart1InvocationTests(unittest.TestCase):
             openwrt.mkdir()
             script = workspace / "diy-part1.sh"
             script.write_text(
-                '#!/usr/bin/env bash\\n'
-                'set -euo pipefail\\n'
-                ': "${GITHUB_WORKSPACE:?GITHUB_WORKSPACE was not resolved}"\\n'
-                'printf "%s\\n" "$GITHUB_WORKSPACE" > "$GITHUB_WORKSPACE/observed-workspace"\\n',
+                '#!/usr/bin/env bash\n'
+                'set -euo pipefail\n'
+                ': "${GITHUB_WORKSPACE:?GITHUB_WORKSPACE was not resolved}"\n'
+                'printf "%s\n" "$GITHUB_WORKSPACE" > "$GITHUB_WORKSPACE/observed-workspace"\n',
                 encoding="utf-8",
             )
             result = subprocess.run(
