@@ -168,6 +168,44 @@ class WorkflowIntegrationTests(unittest.TestCase):
         self.assertNotIn("GITHUB_ACTOR:", reusable)
         self.assertNotIn("io.abu9.actions-wrt.toolchain-fingerprint=", reusable)
 
+    def test_container_workflow_reuses_resolved_build_inputs(self) -> None:
+        workflows = Path(__file__).resolve().parents[2] / "workflows"
+        build = (workflows / "build.yml").read_text(encoding="utf-8")
+        push = (workflows / "push-containers.yml").read_text(encoding="utf-8")
+
+        # A build caller passes its already-resolved target metadata and
+        # fingerprint. Manual dispatch retains the self-resolving path.
+        self.assertIn("if: ${{ inputs.target == '' }}", push)
+        self.assertIn("inputs.tools_fingerprint == ''", push)
+        self.assertIn("inputs.target || needs.determine_targets.outputs.target", push)
+        self.assertIn("inputs.repo_url || needs.determine_targets.outputs.repo_url", push)
+        self.assertIn("inputs.tools_fingerprint || needs.compute-tools-fingerprint.outputs.tools_fingerprint", push)
+        self.assertIn("target: ${{ needs.determine_targets.outputs.target }}", build)
+        self.assertIn("tools_fingerprint: ${{ needs.tools_fingerprint.outputs.tools_fingerprint }}", build)
+
+    def test_host_tools_cache_hit_skips_redundant_second_head_request(self) -> None:
+        build = (
+            Path(__file__).resolve().parents[2] / "workflows" / "build.yml"
+        ).read_text(encoding="utf-8")
+        ready = build.split("  tools_ready:", 1)[1].split(
+            "  toolchain_fingerprint:", 1
+        )[0]
+        self.assertIn('if [ "$TOOLS_REQUIRED" != "true" ]; then', ready)
+        self.assertIn("Host Tools image was already confirmed by the cache check.", ready)
+        self.assertIn('if [ "$HTTP_STATUS" != "200" ]; then', ready)
+        self.assertNotIn("checked_image:", ready)
+
+    def test_target_config_is_parsed_without_shell_eval(self) -> None:
+        workflow = (
+            Path(__file__).resolve().parents[2]
+            / "workflows"
+            / "determine-targets.yml"
+        ).read_text(encoding="utf-8")
+        self.assertNotIn('eval "$(grep', workflow)
+        self.assertIn('CONFIG_TARGET_BOARD="$(sed -n', workflow)
+        self.assertIn('CONFIG_TARGET_SUBTARGET="$(sed -n', workflow)
+        self.assertIn('CONFIG_ARCH="$(sed -n', workflow)
+
     def test_image_tags_remain_content_addressed(self) -> None:
         root = Path(__file__).resolve().parents[2] / "workflows"
         build = (root / "build.yml").read_text(encoding="utf-8")
@@ -175,8 +213,8 @@ class WorkflowIntegrationTests(unittest.TestCase):
 
         self.assertIn('TAG="$AUTHOR"_"$REPO_BRANCH-$EXPECTED_FINGERPRINT"', build)
         self.assertIn('TAG="$TARGET-$SUBTARGET-$AUTHOR"_"$REPO_BRANCH-${FINGERPRINT:0:32}"', build)
-        self.assertIn("tools:${{ needs.determine_container_info.outputs.container_tag }}-${{ needs.compute-tools-fingerprint.outputs.tools_fingerprint }}", push)
-        self.assertIn("toolchain:${{ needs.determine_targets.outputs.target }}-${{ needs.determine_targets.outputs.subtarget }}-${{ needs.determine_container_info.outputs.container_tag }}-${{ needs.compute-toolchain-fingerprint.outputs.toolchain_cache_key }}", push)
+        self.assertIn("tools:${{ needs.determine_container_info.outputs.container_tag }}-${{ inputs.tools_fingerprint || needs.compute-tools-fingerprint.outputs.tools_fingerprint }}", push)
+        self.assertIn("toolchain:${{ inputs.target || needs.determine_targets.outputs.target }}-${{ inputs.subtarget || needs.determine_targets.outputs.subtarget }}-${{ needs.determine_container_info.outputs.container_tag }}-${{ needs.compute-toolchain-fingerprint.outputs.toolchain_cache_key }}", push)
 
     def test_toolchain_build_uses_same_run_host_tools_artifact_in_parallel(self) -> None:
         workflows = Path(__file__).resolve().parents[2] / "workflows"
