@@ -660,7 +660,12 @@ jobs:
           # Authenticate the complete checksum index first, then use the
           # upstream OpenWrt checksum command to verify the downloaded archive.
           bash ../.github/scripts/verify-release-index.sh verify "$AUTHOR" staging_dir/host/bin/usign "$KEYRING_USIGN_KEY" "$KEYRING_GPG_DIR" sha256sums "$SIGNATURE_FILE"
-          sha256sum --check --ignore-missing sha256sums
+          CHECKSUM_OUTPUT="$(sha256sum --check --ignore-missing sha256sums)"
+          printf '%s\\n' "$CHECKSUM_OUTPUT"
+          if ! grep -Fq "$TOOLCHAIN_ARCHIVE: OK" <<<"$CHECKSUM_OUTPUT"; then
+            echo "The signed checksum index did not verify the selected archive: $TOOLCHAIN_ARCHIVE" >&2
+            exit 1
+          fi
           case "$TOOLCHAIN_ARCHIVE" in
             *.tar.zst) tar --zstd -xf "$TOOLCHAIN_ARCHIVE" ;;
             *.tar.xz)  tar -xJf "$TOOLCHAIN_ARCHIVE" ;;
