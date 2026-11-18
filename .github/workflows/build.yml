@@ -155,6 +155,9 @@ jobs:
     needs: [determine_targets, tools_fingerprint, check_tools_container, build_tools_container]
     if: ${{ github.event_name != 'pull_request' && !cancelled() && needs.check_tools_container.result == 'success' && (needs.build_tools_container.result == 'success' || needs.build_tools_container.result == 'skipped') }}
     runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      packages: read
     outputs:
       checked_image: ${{ needs.check_tools_container.outputs.checked_image }}
       tools_image: ${{ steps.image.outputs.tools_image }}
