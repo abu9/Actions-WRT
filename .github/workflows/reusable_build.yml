@@ -640,7 +640,7 @@ jobs:
         run: |
           set -eo pipefail
 
-          TARGET_PATH="$DOWNLOADSERVER/$TOOLCHAIN_PATH/targets/${{ inputs.target }}/${{ inputs.subtarget }}"
+          TARGET_PATH="$DOWNLOADSERVER/$TOOLCHAIN_PATH/targets/$TARGET/$SUBTARGET"
           curl --fail --silent --show-error --location --retry 3 "$TARGET_PATH/$TOOLCHAIN_ARCHIVE" -o "$TOOLCHAIN_ARCHIVE"
           curl --fail --silent --show-error --location --retry 3 "$TARGET_PATH/sha256sums" -o sha256sums
 
