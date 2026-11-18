@@ -73,15 +73,16 @@ def ghcr_check(owner: str,image: str,tag: str,labels: dict[str,str]) -> bool:
         raise RuntimeError("GHCR token response is not a JSON object.")
     bearer=payload.get("token") or payload.get("access_token")
     if not isinstance(bearer, str) or not bearer:
-        raise RuntimeError("GHCR returned an empty or invalid pull token.")
+        raise RuntimeError("GHCR returned an empty pull token or invalid token type.")
+    cache_miss = object()
     def get(path,accept, *, missing_ok=False):
         try:
             with urlopen(Request(f"https://ghcr.io/v2/{owner}/{image}/{path}",headers={"Authorization":f"Bearer {bearer}","Accept":accept}),timeout=30) as r:return json.load(r)
         except HTTPError as e:
-            if e.code==404 and missing_ok:return None
+            if e.code==404 and missing_ok:return cache_miss
             raise RuntimeError(f"GHCR request failed: HTTP {e.code}") from e
     manifest=get(f"manifests/{tag}","application/vnd.oci.image.index.v1+json, application/vnd.docker.distribution.manifest.list.v2+json, application/vnd.oci.image.manifest.v1+json, application/vnd.docker.distribution.manifest.v2+json", missing_ok=True)
-    if manifest is None:return False
+    if manifest is cache_miss:return False
     if not isinstance(manifest, dict):
         raise RuntimeError("GHCR returned an invalid tag manifest.")
     if "manifests" in manifest:
