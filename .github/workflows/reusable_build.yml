@@ -514,7 +514,31 @@ jobs:
           echo "TOOLCHAIN_PATH=$TOOLCHAIN_PATH" >> "$GITHUB_ENV"
           echo "DOWNLOADSERVER=$DOWNLOADSERVER" >> "$GITHUB_ENV"
 
-      - name: Fetch source-pinned release signing keyring
+      - name: Checkout OpenWrt release GPG keyring
+        if: inputs.author == 'openwrt' && (steps.parse-toolchain.outputs.toolchain-type == 'external_toolchain' || steps.parse-toolchain.outputs.toolchain-type == 'external_sdk')
+        uses: actions/checkout@v7.0.1
+        with:
+          repository: openwrt/keyring
+          path: .ci-keyring
+          persist-credentials: false
+          sparse-checkout: |
+            gpg/CD54E82DADB3684D.asc
+            gpg/0x1D53D1877742E911.asc
+            gpg/626471F1.asc
+          sparse-checkout-cone-mode: false
+
+      - name: Checkout ImmortalWrt release usign keyring
+        if: inputs.author == 'immortalwrt' && (steps.parse-toolchain.outputs.toolchain-type == 'external_toolchain' || steps.parse-toolchain.outputs.toolchain-type == 'external_sdk')
+        uses: actions/checkout@v7.0.1
+        with:
+          repository: immortalwrt/keyring
+          path: .ci-keyring
+          persist-credentials: false
+          sparse-checkout: |
+            usign/
+          sparse-checkout-cone-mode: false
+
+      - name: Resolve official release signing material
         if: steps.parse-toolchain.outputs.toolchain-type == 'external_toolchain' || steps.parse-toolchain.outputs.toolchain-type == 'external_sdk'
         working-directory: openwrt
         env:
@@ -522,9 +546,10 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          KEYRING_DIR="$GITHUB_WORKSPACE/openwrt/.ci-keyring"
-          KEYRING_USIGN_KEY="$(bash "$GITHUB_WORKSPACE/.github/scripts/verify-release-index.sh" resolve "$AUTHOR" "$GITHUB_WORKSPACE/openwrt" "$KEYRING_DIR" "$GITHUB_ENV")"
-          echo "Using source-pinned release verification key: $KEYRING_USIGN_KEY"
+          KEYRING_DIR="$GITHUB_WORKSPACE/.ci-keyring"
+          RELEASE_KEY_MATERIAL="$(bash "$GITHUB_WORKSPACE/.github/scripts/verify-release-index.sh" resolve "$AUTHOR" "$GITHUB_WORKSPACE/openwrt" "$KEYRING_DIR" "$GITHUB_ENV")"
+          KEYRING_COMMIT="$(git -C "$KEYRING_DIR" rev-parse HEAD)"
+          echo "Resolved $AUTHOR official keyring commit $KEYRING_COMMIT; release verification material: $RELEASE_KEY_MATERIAL"
 
       - name: Fix permission
         run: chown -R buildbot:buildbot .
@@ -614,6 +639,8 @@ jobs:
 
       - name: Download external toolchain/sdk
         if: inputs.build_toolchain == false && steps.parse-toolchain.outputs.toolchain-type != 'internal' && steps.parse-toolchain.outputs.toolchain-type != 'external_container'
+        env:
+          AUTHOR: ${{ inputs.author }}
         shell: su buildbot -c "bash --noprofile --norc -eo pipefail {0}"
         working-directory: openwrt
         run: |
@@ -622,39 +649,30 @@ jobs:
           TARGET_PATH="$DOWNLOADSERVER/$TOOLCHAIN_PATH/targets/${{ inputs.target }}/${{ inputs.subtarget }}"
           curl --fail --silent --show-error --location --retry 3 "$TARGET_PATH/$TOOLCHAIN_ARCHIVE" -o "$TOOLCHAIN_ARCHIVE"
           curl --fail --silent --show-error --location --retry 3 "$TARGET_PATH/sha256sums" -o sha256sums
-          curl --fail --silent --show-error --location --retry 3 "$TARGET_PATH/sha256sums.sig" -o sha256sums.sig
 
-          # The release index is signed with the usign key shipped by the
-          # source-pinned openwrt-keyring package. Verify before trusting its
-          # SHA256 entry or extracting the archive.
-          test -n "$KEYRING_USIGN_KEY"
-          test -s "$KEYRING_USIGN_KEY"
-          test -x staging_dir/host/bin/usign
-          bash ../.github/scripts/verify-release-index.sh verify staging_dir/host/bin/usign "$KEYRING_USIGN_KEY" sha256sums sha256sums.sig
+          case "$AUTHOR" in
+            immortalwrt) SIGNATURE_FILE=sha256sums.sig ;;
+            openwrt) SIGNATURE_FILE=sha256sums.asc ;;
+            *) echo "Unsupported release-signature format for $AUTHOR" >&2; exit 1 ;;
+          esac
+          curl --fail --silent --show-error --location --retry 3 "$TARGET_PATH/$SIGNATURE_FILE" -o "$SIGNATURE_FILE"
 
-          CHECKSUM="$(awk -v wanted="$TOOLCHAIN_ARCHIVE" '
-            NF >= 2 && length($1) == 64 && $1 ~ /^[[:xdigit:]]+$/ {
-              filename=$2
-              sub(/^\*/, "", filename)
-              sub(/^\.\//, "", filename)
-              sub(/^.*\//, "", filename)
-              if (filename == wanted) {
-                print $1
-                exit
-              }
-            }
-          ' sha256sums)"
-          if [ -z "$CHECKSUM" ]; then
-            echo "No SHA256 entry found for $TOOLCHAIN_ARCHIVE." >&2
+          # Authenticate the complete checksum index first, then use the
+          # upstream OpenWrt checksum command to verify the downloaded archive.
+          bash ../.github/scripts/verify-release-index.sh verify "$AUTHOR" staging_dir/host/bin/usign "$KEYRING_USIGN_KEY" "$KEYRING_GPG_DIR" sha256sums "$SIGNATURE_FILE"
+          CHECKSUM_OUTPUT="$(sha256sum --check --ignore-missing sha256sums)"
+          printf '%s\n' "$CHECKSUM_OUTPUT"
+          if ! grep -Fq "$TOOLCHAIN_ARCHIVE: OK" <<<"$CHECKSUM_OUTPUT"; then
+            echo "The signed checksum index did not verify the selected archive: $TOOLCHAIN_ARCHIVE" >&2
             exit 1
           fi
-          printf '%s  %s\n' "$CHECKSUM" "$TOOLCHAIN_ARCHIVE" | sha256sum --check -
           case "$TOOLCHAIN_ARCHIVE" in
             *.tar.zst) tar --zstd -xf "$TOOLCHAIN_ARCHIVE" ;;
             *.tar.xz)  tar -xJf "$TOOLCHAIN_ARCHIVE" ;;
             *) echo "Unsupported official toolchain archive format" >&2; exit 1 ;;
           esac
-          rm -f "$TOOLCHAIN_ARCHIVE" sha256sums sha256sums.sig
+          rm -f "$TOOLCHAIN_ARCHIVE" sha256sums sha256sums.sig sha256sums.asc
+          rm -rf ../.ci-keyring
 
       - name: Clean configuration
         shell: su buildbot -c "sh -e {0}"
@@ -840,7 +858,6 @@ jobs:
 
 
       - name: Build toolchain
-        if: inputs.build_toolchain == true || steps.parse-toolchain.outputs.toolchain-type == 'internal'
         shell: su buildbot -c "sh -e {0}"
         working-directory: openwrt
         run: |
