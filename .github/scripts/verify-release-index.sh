@@ -15,7 +15,7 @@ shift
 case "$command" in
   resolve)
     [[ $# -ge 3 && $# -le 4 ]] || usage
-    author="$1"; source_root="$2"; keyring_dir="$3"; github_env="\${4:-}"
+    author="$1"; source_root="$2"; keyring_dir="$3"; github_env="${4:-}"
     keyring_makefile="$source_root/package/system/openwrt-keyring/Makefile"
     [[ -f "$keyring_makefile" ]] || { echo "Source-pinned openwrt-keyring Makefile is missing: $keyring_makefile" >&2; exit 1; }
     keyring_commit="$(sed -n 's/^PKG_SOURCE_VERSION:=//p' "$keyring_makefile" | head -n1)"
