@@ -25,9 +25,9 @@ on:
         type: choice
         options:
           - '.config7981'
-          - 'mt7981-ax3000.config'
           - '.config7981.mtwifi-cfg'
           - '360t7-immortalwrt.conf'
+          - '360t7-immortalwrt-uhttpd.conf'
           - '360t7-immortalwrt-24.10.conf'
           - '360t7-immortalwrt-25.12-ubi.conf'
         default: '360t7-immortalwrt-25.12-ubi.conf'

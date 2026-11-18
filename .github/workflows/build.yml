@@ -34,7 +34,6 @@ on:
         type: choice
         options:
           - '.config7981'
-          - 'mt7981-ax3000.config'
           - '.config7981.mtwifi-cfg'
           - '360t7-immortalwrt.conf'
           - '360t7-immortalwrt-uhttpd.conf'
@@ -55,26 +54,10 @@ on:
       build_full:
         type: boolean
         default: true
-      container_name:
-        type: choice
-        default: 'tools'
-        options:
-          - 'tools'
-          - 'toolchain'
 
 concurrency:
   group: build-wrt-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
-
-env:
-  FEEDS_CONF:
-  CONFIG_FILE: ${{ github.event.client_payload.config_name || inputs.config_name || '360t7-immortalwrt-25.12-ubi.conf' }}
-  DIY_P1_SH: diy-part1.sh
-  DIY_P2_SH: diy-part2.sh
-  UPLOAD_BIN_DIR: false
-  UPLOAD_FIRMWARE: true
-  UPLOAD_RELEASE: false
-  TZ: Asia/Shanghai
 
 permissions:
   contents: read

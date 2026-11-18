@@ -137,7 +137,7 @@ def is_host_tool_input(path: str) -> bool:
     return path == "toolchain/Config.in" or (
         path.startswith("toolchain/") and path.endswith("/Config.in")
     )
-def compute_tools_fingerprint(source_dir: Path,local_repo_dir: Path,source_repo: str,source_ref: str) -> tuple[str,dict]:
+def compute_tools_fingerprint(source_dir: Path,local_repo_dir: Path,source_repo: str) -> tuple[str,dict]:
     source_dir=source_dir.resolve(); local_repo_dir=local_repo_dir.resolve()
     source_files=sorted(p for p in run_git(source_dir,"ls-files","-z").decode().split("\0") if p and is_host_tool_input(p))
     if not source_files: raise RuntimeError("No tracked host-tools source inputs were found.")
@@ -370,7 +370,6 @@ def compute_manifest(
     source_dir: Path,
     local_repo_dir: Path,
     source_repo: str,
-    source_ref: str,
     target: str,
     subtarget: str,
     tools_fingerprint: str,
@@ -499,15 +498,15 @@ def compute_toolchain_fingerprint(*args,**kwargs):
     manifest=compute_manifest(*args,**kwargs); return canonical_sha256(manifest, ensure_ascii=False),manifest
 def main():
     p=argparse.ArgumentParser(); s=p.add_subparsers(dest="command",required=True)
-    q=s.add_parser("tools"); q.add_argument("--source-dir",required=True,type=Path); q.add_argument("--local-repo-dir",required=True,type=Path); q.add_argument("--source-repo",required=True); q.add_argument("--source-ref",required=True)
-    q=s.add_parser("toolchain"); q.add_argument("--source-dir",required=True,type=Path); q.add_argument("--local-repo-dir",required=True,type=Path); q.add_argument("--source-repo",required=True); q.add_argument("--source-ref",required=True); q.add_argument("--target",required=True); q.add_argument("--subtarget",required=True); q.add_argument("--tools-fingerprint",required=True); q.add_argument("--output-file",type=Path,help="Write Actions outputs to this file instead of GITHUB_OUTPUT")
+    q=s.add_parser("tools"); q.add_argument("--source-dir",required=True,type=Path); q.add_argument("--local-repo-dir",required=True,type=Path); q.add_argument("--source-repo",required=True)
+    q=s.add_parser("toolchain"); q.add_argument("--source-dir",required=True,type=Path); q.add_argument("--local-repo-dir",required=True,type=Path); q.add_argument("--source-repo",required=True); q.add_argument("--target",required=True); q.add_argument("--subtarget",required=True); q.add_argument("--tools-fingerprint",required=True); q.add_argument("--output-file",type=Path,help="Write Actions outputs to this file instead of GITHUB_OUTPUT")
     q=s.add_parser("publish-toolchain-outputs"); q.add_argument("--input-file",required=True,type=Path); q.add_argument("--expected-source-commit",required=True); q.add_argument("--github-output",required=True,type=Path)
     q=s.add_parser("ghcr-check"); q.add_argument("--owner",required=True); q.add_argument("--image",required=True); q.add_argument("--tag",required=True); q.add_argument("--label",action="append",default=[])
     a=p.parse_args()
     if a.command=="tools":
-        f,_=compute_tools_fingerprint(a.source_dir,a.local_repo_dir,a.source_repo,a.source_ref); write_outputs({"tools_fingerprint":f,"source_commit":run_git(a.source_dir,"rev-parse","HEAD").decode().strip()}); print(f); return 0
+        f,_=compute_tools_fingerprint(a.source_dir,a.local_repo_dir,a.source_repo); write_outputs({"tools_fingerprint":f,"source_commit":run_git(a.source_dir,"rev-parse","HEAD").decode().strip()}); print(f); return 0
     if a.command=="toolchain":
-        f,_=compute_toolchain_fingerprint(a.source_dir,a.local_repo_dir,a.source_repo,a.source_ref,a.target,a.subtarget,a.tools_fingerprint); write_outputs({"toolchain_fingerprint":f,"toolchain_cache_key":f[:32],"source_commit":run_git(a.source_dir,"rev-parse","HEAD").decode().strip()}, a.output_file); print(f); return 0
+        f,_=compute_toolchain_fingerprint(a.source_dir,a.local_repo_dir,a.source_repo,a.target,a.subtarget,a.tools_fingerprint); write_outputs({"toolchain_fingerprint":f,"toolchain_cache_key":f[:32],"source_commit":run_git(a.source_dir,"rev-parse","HEAD").decode().strip()}, a.output_file); print(f); return 0
     if a.command=="publish-toolchain-outputs":
         publish_toolchain_outputs(a.input_file,a.expected_source_commit,a.github_output); return 0
     labels={}; 
@@ -515,6 +514,16 @@ def main():
         if "=" not in item: raise ValueError("Invalid label")
         k,v=item.split("=",1); labels[k]=v
     return 0 if ghcr_check(a.owner,a.image,a.tag,labels) else 1
-if __name__=="__main__":
-    try: raise SystemExit(main())
-    except (OSError,RuntimeError,ValueError,subprocess.CalledProcessError,URLError) as e: print(f"fingerprint: {e}",file=sys.stderr); raise SystemExit(2)
+def run_cli():
+    try:
+        raise SystemExit(main())
+    except (OSError, RuntimeError, ValueError, subprocess.CalledProcessError, URLError) as e:
+        print(f"fingerprint: {e}", file=sys.stderr)
+        raise SystemExit(2)
+    except Exception as e:
+        print(f"fingerprint: unexpected {type(e).__name__}: {e}", file=sys.stderr)
+        raise SystemExit(2)
+
+
+if __name__ == "__main__":
+    run_cli()

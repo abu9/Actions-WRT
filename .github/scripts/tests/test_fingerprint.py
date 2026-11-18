@@ -150,7 +150,6 @@ class ToolchainFingerprintTests(unittest.TestCase):
             source_dir=self.source,
             local_repo_dir=self.local,
             source_repo="immortalwrt/immortalwrt",
-            source_ref="openwrt-25.12",
             target="mediatek",
             subtarget="filogic",
             tools_fingerprint=tools_fingerprint,
@@ -164,7 +163,6 @@ class ToolchainFingerprintTests(unittest.TestCase):
             source_dir=self.source,
             local_repo_dir=self.local,
             source_repo="immortalwrt/immortalwrt",
-            source_ref="openwrt-25.12",
             target="mediatek",
             subtarget="filogic",
             tools_fingerprint="a" * 64,
@@ -195,7 +193,6 @@ class ToolchainFingerprintTests(unittest.TestCase):
             source_dir=self.source,
             local_repo_dir=self.local,
             source_repo="immortalwrt/immortalwrt",
-            source_ref="openwrt-25.12",
             target="mediatek",
             subtarget="filogic",
             tools_fingerprint="a" * 64,
@@ -324,20 +321,6 @@ class ToolchainFingerprintTests(unittest.TestCase):
                     )
                 self.assertFalse(github_output.exists())
                 self.assertTrue(handoff.exists())
-
-    def test_source_ref_is_metadata_only(self) -> None:
-        baseline = self.fingerprint()
-        fingerprint, manifest = FINGERPRINT_MODULE.compute_toolchain_fingerprint(
-            source_dir=self.source,
-            local_repo_dir=self.local,
-            source_repo="immortalwrt/immortalwrt",
-            source_ref="unrelated-upstream-ref",
-            target="mediatek",
-            subtarget="filogic",
-            tools_fingerprint="a" * 64,
-        )
-        self.assertEqual(fingerprint, baseline)
-        self.assertNotIn("source_commit", manifest)
 
     def test_exported_kernel_header_patch_change_invalidates(self) -> None:
         baseline = self.fingerprint()
@@ -542,13 +525,13 @@ class HostToolsFingerprintTests(unittest.TestCase):
             (local/".github/workflows/reusable_build_tools.yml").write_text("container: ghcr.io/openwrt/buildbot/buildworker-v3.11.8:v23\n",encoding="utf-8")
             (local/".github/dockerfiles/Dockerfile.tools").write_text("FROM ghcr.io/openwrt/buildbot/buildworker-v3.11.8:v23\n",encoding="utf-8")
             subprocess.run(["git","init","-q",str(source)],check=True); subprocess.run(["git","-C",str(source),"config","user.email","test@example.invalid"],check=True); subprocess.run(["git","-C",str(source),"config","user.name","Fingerprint Test"],check=True); subprocess.run(["git","-C",str(source),"add","-A"],check=True); subprocess.run(["git","-C",str(source),"commit","-qm","fixture"],check=True)
-            baseline,manifest=FINGERPRINT_MODULE.compute_tools_fingerprint(source,local,"test/repo","main")
+            baseline,manifest=FINGERPRINT_MODULE.compute_tools_fingerprint(source,local,"test/repo")
             self.assertFalse(any(item["path"] == "scripts/ext-tools.sh" for item in manifest["files"]))
             (source/"scripts/ext-tools.sh").write_text("changed refresh implementation",encoding="utf-8")
             (source/"toolchain/gcc/Makefile").write_text("changed toolchain implementation",encoding="utf-8")
             (source/"package/foo/Makefile").write_text("changed package",encoding="utf-8")
             (source/"target/x/Config.in").write_text("changed target",encoding="utf-8")
-            updated,_=FINGERPRINT_MODULE.compute_tools_fingerprint(source,local,"test/repo","main")
+            updated,_=FINGERPRINT_MODULE.compute_tools_fingerprint(source,local,"test/repo")
             self.assertEqual(baseline,updated)
 
     def test_toolchain_kconfig_changes_invalidate_host_tools_fingerprint(self):
@@ -560,9 +543,9 @@ class HostToolsFingerprintTests(unittest.TestCase):
             (local/".github/workflows/reusable_build_tools.yml").write_text("container: ghcr.io/openwrt/buildbot/buildworker-v3.11.8:v23\n",encoding="utf-8")
             (local/".github/dockerfiles/Dockerfile.tools").write_text("FROM ghcr.io/openwrt/buildbot/buildworker-v3.11.8:v23\n",encoding="utf-8")
             subprocess.run(["git","init","-q",str(source)],check=True); subprocess.run(["git","-C",str(source),"config","user.email","test@example.invalid"],check=True); subprocess.run(["git","-C",str(source),"config","user.name","Fingerprint Test"],check=True); subprocess.run(["git","-C",str(source),"add","-A"],check=True); subprocess.run(["git","-C",str(source),"commit","-qm","fixture"],check=True)
-            baseline,_=FINGERPRINT_MODULE.compute_tools_fingerprint(source,local,"test/repo","main")
+            baseline,_=FINGERPRINT_MODULE.compute_tools_fingerprint(source,local,"test/repo")
             (source/"toolchain/gcc/Config.in").write_text("changed Kconfig definition",encoding="utf-8")
-            updated,_=FINGERPRINT_MODULE.compute_tools_fingerprint(source,local,"test/repo","main")
+            updated,_=FINGERPRINT_MODULE.compute_tools_fingerprint(source,local,"test/repo")
             self.assertNotEqual(baseline,updated)
 
 
@@ -635,6 +618,21 @@ class GHCRCheckTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 FINGERPRINT_MODULE.ghcr_check("owner", "image", "tag", {})
             mocked.assert_not_called()
+
+    def test_unexpected_cli_exception_exits_as_error_not_cache_miss(self) -> None:
+        argv = [
+            "fingerprint.py", "ghcr-check", "--owner", "owner",
+            "--image", "tools", "--tag", "tag",
+            "--label", "fingerprint=expected",
+        ]
+        with mock.patch.object(FINGERPRINT_MODULE.sys, "argv", argv):
+            with mock.patch.object(
+                FINGERPRINT_MODULE, "ghcr_check",
+                side_effect=TypeError("unexpected registry response shape"),
+            ):
+                with self.assertRaises(SystemExit) as raised:
+                    FINGERPRINT_MODULE.run_cli()
+        self.assertEqual(raised.exception.code, 2)
 
     def test_malformed_token_response_fails_closed(self) -> None:
         for payload in ([], "not-an-object", None):

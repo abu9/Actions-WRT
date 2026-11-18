@@ -78,15 +78,13 @@ jobs:
         id: fp
         env:
           SOURCE_REPO: ${{ inputs.repo_url }}
-          SOURCE_REF: ${{ inputs.repo_branch }}
         shell: bash
         run: |
           set -euo pipefail
           python3 actions-wrt/.github/scripts/fingerprint.py tools \
             --source-dir openwrt \
             --local-repo-dir actions-wrt \
-            --source-repo "$SOURCE_REPO" \
-            --source-ref "$SOURCE_REF"
+            --source-repo "$SOURCE_REPO"
 
   toolchain:
     if: ${{ inputs.mode == 'toolchain' }}
@@ -159,7 +157,6 @@ jobs:
       - name: Compute Toolchain fingerprint
         env:
           SOURCE_REPO: ${{ inputs.repo_url }}
-          SOURCE_REF: ${{ inputs.repo_branch }}
           TARGET: ${{ inputs.target }}
           SUBTARGET: ${{ inputs.subtarget }}
           TOOLS_FINGERPRINT: ${{ inputs.tools_fingerprint }}
@@ -170,7 +167,6 @@ jobs:
             --source-dir openwrt \
             --local-repo-dir actions-wrt \
             --source-repo "$SOURCE_REPO" \
-            --source-ref "$SOURCE_REF" \
             --target "$TARGET" \
             --subtarget "$SUBTARGET" \
             --tools-fingerprint "$TOOLS_FINGERPRINT" \

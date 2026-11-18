@@ -100,6 +100,5 @@ git_clone https://github.com/gSpotx2f/luci-app-log
 case $REPO_URL in
     immortalwrt/immortalwrt)
         git apply "${GITHUB_WORKSPACE}/patchs/0001-fix-default-settings-depends.patch"
-        git_sparse_clone master "https://github.com/openwrt/packages" "officialpkgs" libs/libffi # fix libffi compile issue with external-toolchain
         ;;
 esac
