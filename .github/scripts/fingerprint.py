@@ -1,9 +1,8 @@
 #!/usr/bin/env python3
-"""Content fingerprints and GHCR image verification."""
+"""Content fingerprints for OpenWrt build caches."""
 from __future__ import annotations
 
 import argparse
-import base64
 import hashlib
 import json
 import os
@@ -11,8 +10,6 @@ import re
 import subprocess
 import sys
 from pathlib import Path
-from urllib.error import HTTPError, URLError
-from urllib.request import Request, urlopen
 
 
 def run_git(repo: Path, *args: str) -> bytes:
@@ -88,75 +85,6 @@ def publish_toolchain_outputs(
     input_file.unlink()
 
 
-def ghcr_check(owner: str,image: str,tag: str,labels: dict[str,str]) -> bool:
-    if not re.fullmatch(r"[a-z0-9_.-]+", owner.lower()):
-        raise ValueError("Invalid GHCR owner.")
-    if not re.fullmatch(r"[a-z0-9_.-]+", image):
-        raise ValueError("Invalid GHCR image name.")
-    if not re.fullmatch(r"[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}", tag):
-        raise ValueError("Invalid GHCR image tag.")
-    if not labels or any(not key or not value for key,value in labels.items()):
-        raise ValueError("At least one non-empty expected image label is required.")
-    owner=owner.lower(); actor=os.environ.get("GITHUB_ACTOR"); token=os.environ.get("GITHUB_TOKEN")
-    if not actor or not token: raise RuntimeError("GITHUB_ACTOR and GITHUB_TOKEN are required for GHCR verification.")
-    basic=base64.b64encode(f"{actor}:{token}".encode()).decode()
-    try:
-        with urlopen(Request(f"https://ghcr.io/token?scope=repository:{owner}/{image}:pull",headers={"Authorization":f"Basic {basic}"}),timeout=30) as r: payload=json.load(r)
-    except HTTPError as e:
-        # A cache miss is established only by a 404 for the requested tag
-        # manifest, after the registry token has been acquired successfully.
-        raise RuntimeError(f"GHCR token request failed: HTTP {e.code}") from e
-    if not isinstance(payload, dict):
-        raise RuntimeError("GHCR token response is not a JSON object.")
-    bearer=payload.get("token") or payload.get("access_token")
-    if not isinstance(bearer, str) or not bearer:
-        raise RuntimeError("GHCR returned an empty pull token or invalid token type.")
-    cache_miss = object()
-    def get(path,accept, *, missing_ok=False):
-        try:
-            with urlopen(Request(f"https://ghcr.io/v2/{owner}/{image}/{path}",headers={"Authorization":f"Bearer {bearer}","Accept":accept}),timeout=30) as r:return json.load(r)
-        except HTTPError as e:
-            if e.code==404 and missing_ok:return cache_miss
-            raise RuntimeError(f"GHCR request failed: HTTP {e.code}") from e
-    manifest=get(f"manifests/{tag}","application/vnd.oci.image.index.v1+json, application/vnd.docker.distribution.manifest.list.v2+json, application/vnd.oci.image.manifest.v1+json, application/vnd.docker.distribution.manifest.v2+json", missing_ok=True)
-    if manifest is cache_miss:return False
-    if not isinstance(manifest, dict):
-        raise RuntimeError("GHCR returned an invalid tag manifest.")
-    if "manifests" in manifest:
-        platform_manifests = manifest["manifests"]
-        if not isinstance(platform_manifests, list):
-            raise RuntimeError("GHCR tag manifest has an invalid platform manifest list.")
-        digest=next((
-            item.get("digest")
-            for item in platform_manifests
-            if isinstance(item, dict)
-            and isinstance(item.get("platform"), dict)
-            and item["platform"].get("os") == "linux"
-            and item["platform"].get("architecture") == "amd64"
-        ), None)
-        if not digest:
-            raise RuntimeError("GHCR tag manifest exists but has no linux/amd64 image manifest.")
-        manifest=get(f"manifests/{digest}","application/vnd.oci.image.manifest.v1+json, application/vnd.docker.distribution.manifest.v2+json")
-    if not isinstance(manifest,dict):
-        raise RuntimeError("GHCR returned an invalid image manifest.")
-    config_descriptor = manifest.get("config")
-    if not isinstance(config_descriptor, dict):
-        raise RuntimeError("GHCR image manifest has an invalid config descriptor.")
-    image_config_digest = config_descriptor.get("digest")
-    if not isinstance(image_config_digest, str) or not image_config_digest:
-        raise RuntimeError("GHCR image manifest has no valid config digest.")
-    config=get(f"blobs/{image_config_digest}","application/json")
-    if not isinstance(config, dict) or not isinstance(config.get("config"), dict):
-        raise RuntimeError("GHCR returned an invalid image config.")
-    actual_labels=config["config"].get("Labels")
-    if actual_labels is None:
-        actual_labels = {}
-    elif not isinstance(actual_labels, dict):
-        raise RuntimeError("GHCR image config contains invalid labels.")
-    mismatches=[key for key,value in labels.items() if actual_labels.get(key)!=value]
-    if mismatches:
-        raise RuntimeError("GHCR image labels do not match the expected fingerprints: "+", ".join(sorted(mismatches)))
-    return True
 
 # OpenWrt's push-containers.yml is the upstream policy boundary for
 # rebuilding the published build containers. Keep this list aligned with
@@ -314,7 +242,6 @@ def main():
     q=s.add_parser("tools"); q.add_argument("--source-dir",required=True,type=Path); q.add_argument("--local-repo-dir",required=True,type=Path); q.add_argument("--source-repo",required=True)
     q=s.add_parser("toolchain"); q.add_argument("--source-dir",required=True,type=Path); q.add_argument("--local-repo-dir",required=True,type=Path); q.add_argument("--source-repo",required=True); q.add_argument("--target",required=True); q.add_argument("--subtarget",required=True); q.add_argument("--tools-fingerprint",required=True); q.add_argument("--output-file",type=Path,help="Write Actions outputs to this file instead of GITHUB_OUTPUT")
     q=s.add_parser("publish-toolchain-outputs"); q.add_argument("--input-file",required=True,type=Path); q.add_argument("--expected-source-commit",required=True); q.add_argument("--github-output",required=True,type=Path)
-    q=s.add_parser("ghcr-check"); q.add_argument("--owner",required=True); q.add_argument("--image",required=True); q.add_argument("--tag",required=True); q.add_argument("--label",action="append",default=[])
     a=p.parse_args()
     if a.command=="tools":
         f,_=compute_tools_fingerprint(a.source_dir,a.local_repo_dir,a.source_repo); write_outputs({"tools_fingerprint":f,"source_commit":run_git(a.source_dir,"rev-parse","HEAD").decode().strip()}); print(f); return 0
@@ -322,11 +249,7 @@ def main():
         f,_=compute_toolchain_fingerprint(a.source_dir,a.local_repo_dir,a.source_repo,a.target,a.subtarget,a.tools_fingerprint); write_outputs({"toolchain_fingerprint":f,"toolchain_cache_key":f[:32],"source_commit":run_git(a.source_dir,"rev-parse","HEAD").decode().strip()}, a.output_file); print(f); return 0
     if a.command=="publish-toolchain-outputs":
         publish_toolchain_outputs(a.input_file,a.expected_source_commit,a.github_output); return 0
-    labels={}; 
-    for item in a.label:
-        if "=" not in item: raise ValueError("Invalid label")
-        k,v=item.split("=",1); labels[k]=v
-    return 0 if ghcr_check(a.owner,a.image,a.tag,labels) else 1
+    raise AssertionError(f"Unhandled command: {a.command}")
 def run_cli():
     try:
         raise SystemExit(main())
