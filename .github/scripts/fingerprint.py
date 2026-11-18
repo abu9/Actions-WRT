@@ -69,8 +69,11 @@ def ghcr_check(owner: str,image: str,tag: str,labels: dict[str,str]) -> bool:
         # A cache miss is established only by a 404 for the requested tag
         # manifest, after the registry token has been acquired successfully.
         raise RuntimeError(f"GHCR token request failed: HTTP {e.code}") from e
+    if not isinstance(payload, dict):
+        raise RuntimeError("GHCR token response is not a JSON object.")
     bearer=payload.get("token") or payload.get("access_token")
-    if not bearer: raise RuntimeError("GHCR returned an empty pull token.")
+    if not isinstance(bearer, str) or not bearer:
+        raise RuntimeError("GHCR returned an empty or invalid pull token.")
     def get(path,accept, *, missing_ok=False):
         try:
             with urlopen(Request(f"https://ghcr.io/v2/{owner}/{image}/{path}",headers={"Authorization":f"Bearer {bearer}","Accept":accept}),timeout=30) as r:return json.load(r)
@@ -79,18 +82,34 @@ def ghcr_check(owner: str,image: str,tag: str,labels: dict[str,str]) -> bool:
             raise RuntimeError(f"GHCR request failed: HTTP {e.code}") from e
     manifest=get(f"manifests/{tag}","application/vnd.oci.image.index.v1+json, application/vnd.docker.distribution.manifest.list.v2+json, application/vnd.oci.image.manifest.v1+json, application/vnd.docker.distribution.manifest.v2+json", missing_ok=True)
     if manifest is None:return False
-    if isinstance(manifest.get("manifests"),list):
-        digest=next((m.get("digest") for m in manifest["manifests"] if (m.get("platform") or {}).get("os")=="linux" and (m.get("platform") or {}).get("architecture")=="amd64"),None)
+    if not isinstance(manifest, dict):
+        raise RuntimeError("GHCR returned an invalid tag manifest.")
+    if "manifests" in manifest:
+        platform_manifests = manifest["manifests"]
+        if not isinstance(platform_manifests, list):
+            raise RuntimeError("GHCR tag manifest has an invalid platform manifest list.")
+        digest=next((
+            item.get("digest")
+            for item in platform_manifests
+            if isinstance(item, dict)
+            and isinstance(item.get("platform"), dict)
+            and item["platform"].get("os") == "linux"
+            and item["platform"].get("architecture") == "amd64"
+        ), None)
         if not digest:
             raise RuntimeError("GHCR tag manifest exists but has no linux/amd64 image manifest.")
         manifest=get(f"manifests/{digest}","application/vnd.oci.image.manifest.v1+json, application/vnd.docker.distribution.manifest.v2+json")
     if not isinstance(manifest,dict):
         raise RuntimeError("GHCR returned an invalid image manifest.")
-    digest=(manifest.get("config") or {}).get("digest")
-    if not digest:
+    image_config_digest=(manifest.get("config") or {}).get("digest")
+    if not image_config_digest:
         raise RuntimeError("GHCR image manifest has no config digest.")
-    config=get(f"blobs/{digest}","application/json")
-    actual_labels=config.get("config",{}).get("Labels") or {}
+    config=get(f"blobs/{image_config_digest}","application/json")
+    if not isinstance(config, dict) or not isinstance(config.get("config"), dict):
+        raise RuntimeError("GHCR returned an invalid image config.")
+    actual_labels=config["config"].get("Labels") or {}
+    if not isinstance(actual_labels, dict):
+        raise RuntimeError("GHCR image config contains invalid labels.")
     mismatches=[key for key,value in labels.items() if actual_labels.get(key)!=value]
     if mismatches:
         raise RuntimeError("GHCR image labels do not match the expected fingerprints: "+", ".join(sorted(mismatches)))
