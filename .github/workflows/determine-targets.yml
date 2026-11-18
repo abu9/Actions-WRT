@@ -120,9 +120,9 @@ jobs:
           cp -f -- "$CONFIG_NAME" openwrt/.config
           cd openwrt
           make defconfig
-          CONFIG_TARGET_BOARD="$(sed -n 's/^CONFIG_TARGET_BOARD="\\([^"]*\\)"$/\\1/p' .config)"
-          CONFIG_TARGET_SUBTARGET="$(sed -n 's/^CONFIG_TARGET_SUBTARGET="\\([^"]*\\)"$/\\1/p' .config)"
-          CONFIG_ARCH="$(sed -n 's/^CONFIG_ARCH="\\([^"]*\\)"$/\\1/p' .config)"
+          CONFIG_TARGET_BOARD="$(sed -n 's/^CONFIG_TARGET_BOARD="\([^"]*\)"$/\1/p' .config)"
+          CONFIG_TARGET_SUBTARGET="$(sed -n 's/^CONFIG_TARGET_SUBTARGET="\([^"]*\)"$/\1/p' .config)"
+          CONFIG_ARCH="$(sed -n 's/^CONFIG_ARCH="\([^"]*\)"$/\1/p' .config)"
           TARGET=${TARGET:-$CONFIG_TARGET_BOARD}
           SUBTARGET=${SUBTARGET:-$CONFIG_TARGET_SUBTARGET}
           ARCH=${ARCH:-$CONFIG_ARCH}
