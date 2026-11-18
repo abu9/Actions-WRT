@@ -145,7 +145,6 @@ jobs:
       source_commit: ${{ needs.tools_fingerprint.outputs.source_commit }}
       target: ${{ needs.determine_targets.outputs.target }}
       subtarget: ${{ needs.determine_targets.outputs.subtarget }}
-      arch: ${{ needs.determine_targets.outputs.arch }}
       repo_url: ${{ needs.determine_targets.outputs.repo_url }}
       repo_branch: ${{ needs.determine_targets.outputs.repo_branch }}
       author: ${{ needs.determine_targets.outputs.author }}
