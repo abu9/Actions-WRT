@@ -25,8 +25,6 @@ on:
         type: boolean
       build_toolchain:
         type: boolean
-      include_feeds:
-        type: boolean
       build_full:
         type: boolean
       build_kernel:
@@ -104,6 +102,9 @@ on:
         type: string
       debug:
         type: boolean
+
+env:
+  TZ: Asia/Shanghai
 
 permissions:
   contents: read
@@ -569,10 +570,10 @@ jobs:
       - name: Prepare custom scripts
         if: inputs.build_full == true
         shell: su buildbot -c "sh -e {0}"
-        continue-on-error: true
         run: |
-          [ -d "files" ] && mv -f files openwrt/files
-          [ -e "${FEEDS_CONF}" ] && cp -f "${FEEDS_CONF}" openwrt/feeds.conf.default
+          if [ -d "files" ]; then
+            mv -f files openwrt/files
+          fi
           echo "Prepare custom scripts done"
 
 
@@ -836,10 +837,7 @@ jobs:
           echo CONFIG_DEVEL=y >> .config
           echo CONFIG_AUTOREMOVE=y >> .config
 
-          echo "CONFIG_TARGET_${{ inputs.target }}=y" >> .config
-          echo "CONFIG_TARGET_${{ inputs.target }}_${{ inputs.subtarget }}=y" >> .config
-
-          make defconfig
+internal toolchain target overrides          make defconfig
 
 
       - name: Show configuration
