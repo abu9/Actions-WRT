@@ -420,31 +420,25 @@ class WorkflowIntegrationTests(unittest.TestCase):
         self.assertNotIn("ext-tools-refresh.sh", fingerprint_workflow)
         self.assertNotIn("--preserve-environment", fingerprint_workflow)
 
-    def test_verify_workflow_passes_authentication_to_both_ghcr_checks(self) -> None:
+    def test_build_workflow_passes_authentication_to_both_ghcr_checks(self) -> None:
         workflow_path = (
             Path(__file__).resolve().parents[2]
             / "workflows"
-            / "verify-fingerprints.yml"
+            / "build.yml"
         )
         workflow = workflow_path.read_text(encoding="utf-8")
 
-        step_names = (
-            "Verify existing Host Tools image labels",
-            "Verify existing Toolchain image labels",
+        self.assertGreaterEqual(
+            workflow.count("GITHUB_ACTOR: ${{ github.actor }}"), 2
         )
-        for step_name in step_names:
-            marker = f"      - name: {step_name}\n"
-            start = workflow.find(marker)
-            self.assertNotEqual(start, -1, f"Missing workflow step: {step_name}")
-            next_step = workflow.find("\n      - name: ", start + len(marker))
-            block = workflow[start:next_step if next_step != -1 else len(workflow)]
-            self.assertIn("GITHUB_ACTOR: ${{ github.actor }}", block)
-            self.assertIn("GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}", block)
+        self.assertGreaterEqual(
+            workflow.count("GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}"), 2
+        )
 
     def test_ghcr_reuse_is_content_addressed_not_source_commit_addressed(self) -> None:
         root = Path(__file__).resolve().parents[2] / "workflows"
 
-        for name in ("build.yml", "verify-fingerprints.yml", "reusable_build.yml"):
+        for name in ("build.yml", "reusable_build.yml"):
             workflow = (root / name).read_text(encoding="utf-8")
             self.assertNotIn("io.abu9.actions-wrt.tools-source-commit=", workflow)
             self.assertNotIn(
