@@ -420,8 +420,8 @@ jobs:
               DOWNLOADSERVER="https://downloads.immortalwrt.org"
               if [[ "$REPO_BRANCH" =~ ^openwrt-([0-9]+\.[0-9]+)$ ]]; then
                 TOOLCHAIN_PATH="releases/${BASH_REMATCH[1]}-SNAPSHOT"
-              elif [[ "$REPO_BRANCH" =~ ^openwrt-([0-9]+\.[0-9]+\.[0-9]+)$ ]]; then
-                TOOLCHAIN_PATH="releases/${BASH_REMATCH[1]}"
+              elif [[ "$REPO_BRANCH" =~ ^(openwrt-|v)([0-9]+\.[0-9]+\.[0-9]+)$ ]]; then
+                TOOLCHAIN_PATH="releases/${BASH_REMATCH[2]}"
               else
                 TOOLCHAIN_PATH="snapshots"
               fi
@@ -624,7 +624,7 @@ jobs:
           TARGET: ${{ inputs.target }}
           SUBTARGET: ${{ inputs.subtarget }}
         run: |
-          set -euo pipefail
+          set -eu
           # OpenWrt's config tools require a usable terminal type when
           # make evaluates configuration prerequisites in this container.
           export TERM=xterm
