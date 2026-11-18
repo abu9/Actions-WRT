@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Resolve trusted distribution key material from an independently checked-out keyring.
 # Verify the detached release checksum index before sha256sum checks any archive.
-set -Eeuo pipefail
+set -euo pipefail
 
 usage() {
   cat >&2 <<'USAGE'
