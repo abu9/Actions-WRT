@@ -248,7 +248,7 @@ class WorkflowIntegrationTests(unittest.TestCase):
         self.assertNotIn("$(ls $TOOLCHAIN_FILE/staging_dir | grep toolchain)", reusable)
         self.assertGreaterEqual(reusable.count('if [ "${#toolchain_dirs[@]}" -ne 1 ]; then'), 3)
         self.assertIn('if [ "${#toolchain_roots[@]}" -ne 1 ]; then', reusable)
-        self.assertIn('find "$TOOLCHAIN_FILE/staging_dir"', reusable)
+        self.assertIn('find -H "$TOOLCHAIN_FILE/staging_dir"', reusable)
 
     def test_package_and_coverity_lists_are_parsed_without_shell_expansion(self) -> None:
         reusable = (
