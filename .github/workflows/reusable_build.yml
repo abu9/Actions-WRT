@@ -850,22 +850,26 @@ jobs:
           OPENWRT_DIR=$(pwd)
 
           # Find target name from toolchain info.mk
-          GNU_TARGET_NAME=$(cat $TOOLCHAIN_DIR/info.mk | grep TARGET_CROSS | sed 's/^TARGET_CROSS=\(.*\)-$/\1/')
+          GNU_TARGET_NAME="$(sed -n 's/^TARGET_CROSS=\(.*\)-$/\1/p' "$TOOLCHAIN_DIR/info.mk")"
+          test -n "$GNU_TARGET_NAME"
+          test -d "$TOOLCHAIN_BIN"
 
-          cd $TOOLCHAIN_BIN
+          cd "$TOOLCHAIN_BIN"
 
           # Revert sdk wrapper scripts applied to all the bins
-          for app in $(find . -name "*.bin"); do
-            TARGET_APP=$(echo $app | sed 's/\.\/\.\(.*\)\.bin/\1/')
-            rm $TARGET_APP
-            mv .$TARGET_APP.bin $TARGET_APP
-          done
+          while IFS= read -r -d '' app_file; do
+            TARGET_APP="$(printf '%s' "$app_file" | sed 's/^\.\/\.\(.*\)\.bin$/\1/')"
+            rm -- "$TARGET_APP"
+            mv -- "$app_file" "$TARGET_APP"
+          done < <(find . -type f -name '*.bin' -print0)
 
           # Setup the wrapper script in the sdk toolchain dir simulating an external toolchain build
-          cp $OPENWRT_DIR/target/toolchain/files/wrapper.sh $GNU_TARGET_NAME-wrapper.sh
-          for app in cc gcc g++ c++ cpp ld as ; do
-            [ -f $GNU_TARGET_NAME-$app ] && mv $GNU_TARGET_NAME-$app $GNU_TARGET_NAME-$app.bin
-            ln -sf $GNU_TARGET_NAME-wrapper.sh $GNU_TARGET_NAME-$app
+          cp -- "$OPENWRT_DIR/target/toolchain/files/wrapper.sh" "$GNU_TARGET_NAME-wrapper.sh"
+          for app in cc gcc g++ c++ cpp ld as; do
+            if [ -f "$GNU_TARGET_NAME-$app" ]; then
+              mv -- "$GNU_TARGET_NAME-$app" "$GNU_TARGET_NAME-$app.bin"
+            fi
+            ln -sf -- "$GNU_TARGET_NAME-wrapper.sh" "$GNU_TARGET_NAME-$app"
           done
 
 
