@@ -522,46 +522,9 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-
-          KEYRING_MAKEFILE="package/system/openwrt-keyring/Makefile"
-          test -f "$KEYRING_MAKEFILE"
-          KEYRING_COMMIT="$(sed -n 's/^PKG_SOURCE_VERSION:=//p' "$KEYRING_MAKEFILE" | head -n1)"
-          if [[ ! "$KEYRING_COMMIT" =~ ^[0-9a-f]{40}$ ]]; then
-            echo "Unable to resolve a pinned 40-character keyring commit from $KEYRING_MAKEFILE" >&2
-            exit 1
-          fi
-
-          case "$AUTHOR" in
-            immortalwrt) KEYRING_URL="https://github.com/immortalwrt/keyring.git" ;;
-            openwrt) KEYRING_URL="https://git.openwrt.org/keyring.git" ;;
-            *)
-              echo "No trusted signing-keyring repository mapping for '$AUTHOR'." >&2
-              exit 1
-              ;;
-          esac
-
-          KEYRING_DIR="$PWD/.ci-keyring"
-          git init "$KEYRING_DIR"
-          git -C "$KEYRING_DIR" remote add origin "$KEYRING_URL"
-          git -C "$KEYRING_DIR" fetch --depth 1 origin "$KEYRING_COMMIT"
-          git -C "$KEYRING_DIR" checkout --detach FETCH_HEAD
-          ACTUAL_KEYRING_COMMIT="$(git -C "$KEYRING_DIR" rev-parse HEAD)"
-          if [ "$ACTUAL_KEYRING_COMMIT" != "$KEYRING_COMMIT" ]; then
-            echo "Fetched keyring commit does not match the source-pinned commit." >&2
-            exit 1
-          fi
-
-          USIGN_KEY_ID="$(grep -oE 'usign/[0-9a-f]{16}' "$KEYRING_MAKEFILE" | head -n1 | cut -d/ -f2)"
-          if [[ ! "$USIGN_KEY_ID" =~ ^[0-9a-f]{16}$ ]]; then
-            echo "Unable to resolve the source-pinned $AUTHOR usign release key." >&2
-            exit 1
-          fi
-          KEYRING_USIGN_KEY="$KEYRING_DIR/usign/$USIGN_KEY_ID"
-          test -s "$KEYRING_USIGN_KEY"
-          echo "KEYRING_DIR=$KEYRING_DIR" >> "$GITHUB_ENV"
-          echo "KEYRING_COMMIT=$KEYRING_COMMIT" >> "$GITHUB_ENV"
-          echo "KEYRING_USIGN_KEY=$KEYRING_USIGN_KEY" >> "$GITHUB_ENV"
-          echo "Using $AUTHOR usign key $USIGN_KEY_ID from pinned keyring commit $KEYRING_COMMIT"
+          KEYRING_DIR="$GITHUB_WORKSPACE/openwrt/.ci-keyring"
+          KEYRING_USIGN_KEY="$(bash "$GITHUB_WORKSPACE/.github/scripts/verify-release-index.sh" resolve "$AUTHOR" "$GITHUB_WORKSPACE/openwrt" "$KEYRING_DIR" "$GITHUB_ENV")"
+          echo "Using source-pinned release verification key: $KEYRING_USIGN_KEY"
 
       - name: Fix permission
         run: chown -R buildbot:buildbot .
@@ -667,7 +630,7 @@ jobs:
           test -n "$KEYRING_USIGN_KEY"
           test -s "$KEYRING_USIGN_KEY"
           test -x staging_dir/host/bin/usign
-          staging_dir/host/bin/usign -V -m sha256sums -p "$KEYRING_USIGN_KEY" -x sha256sums.sig
+          bash ../.github/scripts/verify-release-index.sh verify staging_dir/host/bin/usign "$KEYRING_USIGN_KEY" sha256sums sha256sums.sig
 
           CHECKSUM="$(awk -v wanted="$TOOLCHAIN_ARCHIVE" '
             NF >= 2 && length($1) == 64 && $1 ~ /^[[:xdigit:]]+$/ {
