@@ -514,7 +514,31 @@ jobs:
           echo "TOOLCHAIN_PATH=$TOOLCHAIN_PATH" >> "$GITHUB_ENV"
           echo "DOWNLOADSERVER=$DOWNLOADSERVER" >> "$GITHUB_ENV"
 
-      - name: Fetch source-pinned release signing keyring
+      - name: Checkout OpenWrt release GPG keyring
+        if: inputs.author == 'openwrt' && (steps.parse-toolchain.outputs.toolchain-type == 'external_toolchain' || steps.parse-toolchain.outputs.toolchain-type == 'external_sdk')
+        uses: actions/checkout@v7.0.1
+        with:
+          repository: openwrt/keyring
+          path: .ci-keyring
+          persist-credentials: false
+          sparse-checkout: |
+            gpg/CD54E82DADB3684D.asc
+            gpg/0x1D53D1877742E911.asc
+            gpg/626471F1.asc
+          sparse-checkout-cone-mode: false
+
+      - name: Checkout ImmortalWrt release usign keyring
+        if: inputs.author == 'immortalwrt' && (steps.parse-toolchain.outputs.toolchain-type == 'external_toolchain' || steps.parse-toolchain.outputs.toolchain-type == 'external_sdk')
+        uses: actions/checkout@v7.0.1
+        with:
+          repository: immortalwrt/keyring
+          path: .ci-keyring
+          persist-credentials: false
+          sparse-checkout: |
+            usign/
+          sparse-checkout-cone-mode: false
+
+      - name: Resolve official release signing material
         if: steps.parse-toolchain.outputs.toolchain-type == 'external_toolchain' || steps.parse-toolchain.outputs.toolchain-type == 'external_sdk'
         working-directory: openwrt
         env:
@@ -522,9 +546,9 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          KEYRING_DIR="$GITHUB_WORKSPACE/openwrt/.ci-keyring"
+          KEYRING_DIR="$GITHUB_WORKSPACE/.ci-keyring"
           RELEASE_KEY_MATERIAL="$(bash "$GITHUB_WORKSPACE/.github/scripts/verify-release-index.sh" resolve "$AUTHOR" "$GITHUB_WORKSPACE/openwrt" "$KEYRING_DIR" "$GITHUB_ENV")"
-          echo "Resolved source-pinned $AUTHOR release verification material: $RELEASE_KEY_MATERIAL"
+          echo "Resolved $AUTHOR keyring commit $KEYRING_COMMIT; release verification material: $RELEASE_KEY_MATERIAL"
 
       - name: Fix permission
         run: chown -R buildbot:buildbot .
@@ -632,27 +656,10 @@ jobs:
           esac
           curl --fail --silent --show-error --location --retry 3 "$TARGET_PATH/$SIGNATURE_FILE" -o "$SIGNATURE_FILE"
 
-          # Verify the release index with the distribution's own release
-          # signature format and source-pinned keyring before trusting SHA256.
+          # Authenticate the complete checksum index first, then use the
+          # upstream OpenWrt checksum command to verify the downloaded archive.
           bash ../.github/scripts/verify-release-index.sh verify "$AUTHOR" staging_dir/host/bin/usign "$KEYRING_USIGN_KEY" "$KEYRING_GPG_DIR" sha256sums "$SIGNATURE_FILE"
-
-          CHECKSUM="$(awk -v wanted="$TOOLCHAIN_ARCHIVE" '
-            NF >= 2 && length($1) == 64 && $1 ~ /^[[:xdigit:]]+$/ {
-              filename=$2
-              sub(/^\*/, "", filename)
-              sub(/^\.\//, "", filename)
-              sub(/^.*\//, "", filename)
-              if (filename == wanted) {
-                print $1
-                exit
-              }
-            }
-          ' sha256sums)"
-          if [ -z "$CHECKSUM" ]; then
-            echo "No SHA256 entry found for $TOOLCHAIN_ARCHIVE." >&2
-            exit 1
-          fi
-          printf '%s  %s\n' "$CHECKSUM" "$TOOLCHAIN_ARCHIVE" | sha256sum --check -
+          sha256sum --check --ignore-missing sha256sums
           case "$TOOLCHAIN_ARCHIVE" in
             *.tar.zst) tar --zstd -xf "$TOOLCHAIN_ARCHIVE" ;;
             *.tar.xz)  tar -xJf "$TOOLCHAIN_ARCHIVE" ;;
