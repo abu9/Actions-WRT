@@ -253,7 +253,7 @@ def main():
 def run_cli():
     try:
         raise SystemExit(main())
-    except (OSError, RuntimeError, ValueError, subprocess.CalledProcessError, URLError) as e:
+    except (OSError, RuntimeError, ValueError, subprocess.CalledProcessError) as e:
         print(f"fingerprint: {e}", file=sys.stderr)
         raise SystemExit(2)
     except Exception as e:
