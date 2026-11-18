@@ -22,7 +22,7 @@ jobs:
 
       - name: Verify executable script modes
         run: |
-          set -euo pipefail
+          set -eo pipefail
           for script in diy-part1.sh diy-part2.sh; do
             mode="$(git ls-tree HEAD -- "$script" | awk '{print $1}')"
             if [ "$mode" != "100755" ]; then
@@ -36,7 +36,7 @@ jobs:
           ACTIONLINT_VERSION: '1.7.12'
           ACTIONLINT_SHA256: '8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8'
         run: |
-          set -euo pipefail
+          set -eo pipefail
 
           archive="actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz"
           url="https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/${archive}"
@@ -53,22 +53,22 @@ jobs:
 
       - name: Install ShellCheck
         run: |
-          set -euo pipefail
+          set -eo pipefail
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends shellcheck
 
       - name: Create ShellCheck error-only wrapper
         run: |
-          set -euo pipefail
+          set -eo pipefail
           cat > "$RUNNER_TEMP/shellcheck-errors-only" <<'WRAPPER'
           #!/usr/bin/env bash
-          set -euo pipefail
+          set -eo pipefail
           exec shellcheck --severity=error "$@"
           WRAPPER
           chmod 0755 "$RUNNER_TEMP/shellcheck-errors-only"
 
       - name: Lint all workflow files and embedded shell
         run: |
-          set -euo pipefail
+          set -eo pipefail
           actionlint -shellcheck="$RUNNER_TEMP/shellcheck-errors-only" -color .github/workflows/*.yml
           shellcheck --severity=error .github/scripts/*.sh

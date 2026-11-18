@@ -90,7 +90,7 @@ jobs:
           OWNER: ${{ github.repository_owner }}
         shell: bash
         run: |
-          set -euo pipefail
+          set -eo pipefail
           OWNER_LC="${OWNER,,}"
           # This is the branch-scoped base tag. The published generic tools
           # image appends the computed content fingerprint to this value.
@@ -266,7 +266,7 @@ jobs:
         id: get-toolchain-name
         shell: bash
         run: |
-          set -euo pipefail
+          set -eo pipefail
           TOOLCHAIN_NAME="$(find . -maxdepth 1 -type f -name '*toolchain*' -printf '%f\n' | head -n1)"
           test -n "$TOOLCHAIN_NAME"
           echo "toolchain_name=$TOOLCHAIN_NAME" >> "$GITHUB_OUTPUT"

@@ -47,7 +47,7 @@ jobs:
         env:
           EXPECTED_SOURCE_COMMIT: ${{ inputs.source_commit }}
         run: |
-          set -euo pipefail
+          set -eo pipefail
           ACTUAL_SOURCE_COMMIT="$(git rev-parse HEAD)"
           if [ "$ACTUAL_SOURCE_COMMIT" != "$EXPECTED_SOURCE_COMMIT" ]; then
             echo "Host Tools source commit mismatch: expected $EXPECTED_SOURCE_COMMIT, got $ACTUAL_SOURCE_COMMIT" >&2
@@ -94,7 +94,7 @@ jobs:
           CCACHE_DIR: ${{ github.workspace }}/openwrt/.ccache
         shell: su buildbot -c "bash --noprofile --norc -eo pipefail {0}"
         run: |
-          set -euo pipefail
+          set -eo pipefail
           install -d staging_dir/host/etc .ccache
           touch staging_dir/host/etc/ccache.conf
           {
@@ -124,7 +124,7 @@ jobs:
           CCACHE_DIR: ${{ github.workspace }}/openwrt/.ccache
         shell: su buildbot -c "bash --noprofile --norc -eo pipefail {0}"
         run: |
-          set -euo pipefail
+          set -eo pipefail
           CCACHE_BIN="$PWD/staging_dir/host/bin/ccache"
           if [ -x "$CCACHE_BIN" ]; then
             "$CCACHE_BIN" --show-stats

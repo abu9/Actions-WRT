@@ -53,7 +53,7 @@ jobs:
           CONFIG_NAME: ${{ inputs.config_name }}
         shell: bash
         run: |
-          set -euo pipefail
+          set -eo pipefail
 
           if [[ "$SOURCE_BRANCH" =~ ^immortalwrt/immortalwrt@v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
             :
@@ -112,7 +112,7 @@ jobs:
           CONFIG_NAME: ${{ inputs.config_name }}
         shell: bash
         run: |
-          set -euo pipefail
+          set -eo pipefail
           if [[ -d files ]]; then
             mv -f -- files openwrt/files
           fi

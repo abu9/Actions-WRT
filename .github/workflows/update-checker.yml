@@ -48,7 +48,7 @@ jobs:
       env:
         COMMIT_HASH: ${{ steps.getHash.outputs.commitHash }}
       run: |
-        set -euo pipefail
+        set -eo pipefail
         printf '%s\n' "$COMMIT_HASH" | tee .commitHash
 
     - name: Trigger build

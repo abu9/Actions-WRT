@@ -182,7 +182,7 @@ jobs:
           TOOLS_REQUIRED: ${{ needs.check_tools_container.outputs.tools_required }}
           BUILD_RESULT: ${{ needs.build_tools_container.result }}
         run: |
-          set -euo pipefail
+          set -eo pipefail
           if [ "$TOOLS_REQUIRED" = "true" ]; then test "$BUILD_RESULT" = success; fi
           TAG="$(printf '%s' "$CHECKED_IMAGE" | cut -d: -f2-)"
           python3 .github/scripts/fingerprint.py ghcr-check --owner "$OWNER" --image tools --tag "$TAG"             --label "io.abu9.actions-wrt.tools-fingerprint=$EXPECTED_FINGERPRINT"             --label "io.abu9.actions-wrt.tools-source-repository=$SOURCE_REPOSITORY"
@@ -230,7 +230,7 @@ jobs:
           TOOLS_FINGERPRINT: ${{ needs.tools_fingerprint.outputs.tools_fingerprint }}
         shell: bash
         run: |
-          set -euo pipefail
+          set -eo pipefail
           TAG="$TARGET-$SUBTARGET-$AUTHOR"_"$REPO_BRANCH-${FINGERPRINT:0:32}"
           set +e
           python3 .github/scripts/fingerprint.py ghcr-check \

@@ -161,7 +161,7 @@ jobs:
           TOOLCHAIN_FINGERPRINT: ${{ inputs.toolchain_fingerprint }}
         shell: bash
         run: |
-          set -euo pipefail
+          set -eo pipefail
           CONTAINER_NAME="$REQUESTED_CONTAINER"
           CONTAINER_TAG="${AUTHOR}_${REPO_BRANCH}"
 
@@ -234,7 +234,7 @@ jobs:
           CONFIG_NAME: ${{ inputs.config_name }}
         shell: bash
         run: |
-          set -euo pipefail
+          set -eo pipefail
           test -f "$CONFIG_NAME"
           mv -- "$CONFIG_NAME" .config
 
@@ -403,7 +403,7 @@ jobs:
         working-directory: openwrt
         shell: bash
         run: |
-          set -euo pipefail
+          set -eo pipefail
 
           if [ -d /external-toolchain/ ]; then
             echo "toolchain-type=external_container" >> "$GITHUB_OUTPUT"
@@ -545,7 +545,7 @@ jobs:
           AUTHOR: ${{ inputs.author }}
         shell: bash
         run: |
-          set -euo pipefail
+          set -eo pipefail
           KEYRING_DIR="$GITHUB_WORKSPACE/.ci-keyring"
           RELEASE_KEY_MATERIAL="$(bash "$GITHUB_WORKSPACE/.github/scripts/verify-release-index.sh" resolve "$AUTHOR" "$GITHUB_WORKSPACE/openwrt" "$KEYRING_DIR" "$GITHUB_ENV")"
           KEYRING_COMMIT="$(git -C "$KEYRING_DIR" rev-parse HEAD)"
@@ -616,7 +616,7 @@ jobs:
           TARGET: ${{ inputs.target }}
           SUBTARGET: ${{ inputs.subtarget }}
         run: |
-          set -eu
+          set -e
           # OpenWrt's config tools require a usable terminal type when
           # make evaluates configuration prerequisites in this container.
           export TERM=xterm
@@ -644,7 +644,7 @@ jobs:
         shell: su buildbot -c "bash --noprofile --norc -eo pipefail {0}"
         working-directory: openwrt
         run: |
-          set -euo pipefail
+          set -eo pipefail
 
           TARGET_PATH="$DOWNLOADSERVER/$TOOLCHAIN_PATH/targets/${{ inputs.target }}/${{ inputs.subtarget }}"
           curl --fail --silent --show-error --location --retry 3 "$TARGET_PATH/$TOOLCHAIN_ARCHIVE" -o "$TOOLCHAIN_ARCHIVE"
@@ -697,7 +697,7 @@ jobs:
           CONFIG_NAME: ${{ inputs.config_name }}
         shell: su buildbot -c "bash --noprofile --norc -eo pipefail {0}"
         run: |
-          set -euo pipefail
+          set -eo pipefail
           test -f "$CONFIG_NAME"
           cp -f -- "$CONFIG_NAME" openwrt/.config
 
@@ -898,7 +898,7 @@ jobs:
         shell: su buildbot -c "bash --noprofile --norc -eo pipefail {0}"
         working-directory: openwrt
         run: |
-          set -euo pipefail
+          set -eo pipefail
           # make -q returns 0 when up to date, 1 when a rebuild is needed,
           # and 2 when the optional target cannot be queried.
           set +e
@@ -1049,7 +1049,7 @@ jobs:
           SUBTARGET: ${{ inputs.subtarget }}
         shell: bash
         run: |
-          set -euo pipefail
+          set -eo pipefail
           mapfile -t candidates < <(
             find "bin/targets/${TARGET}/${SUBTARGET}" -maxdepth 1 -type f -name '*toolchain*.tar*' -print | sort
           )
