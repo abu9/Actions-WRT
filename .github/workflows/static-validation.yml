@@ -20,6 +20,17 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v7.0.1
 
+      - name: Verify executable script modes
+        run: |
+          set -euo pipefail
+          for script in diy-part1.sh diy-part2.sh; do
+            mode="$(git ls-tree HEAD -- "$script" | awk '{print $1}')"
+            if [ "$mode" != "100755" ]; then
+              echo "Expected $script to have Git mode 100755; got ${mode:-missing}." >&2
+              exit 1
+            fi
+          done
+
       - name: Install pinned actionlint binary
         env:
           ACTIONLINT_VERSION: '1.7.12'

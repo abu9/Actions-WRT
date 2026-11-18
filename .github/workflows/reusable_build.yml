@@ -584,7 +584,7 @@ jobs:
         env:
           REPO_URL: ${{ inputs.repo_url }}        
         run: |
-          ${GITHUB_WORKSPACE}/diy-part1.sh
+          bash "${GITHUB_WORKSPACE}/diy-part1.sh"
 
 
       - name: Update & Install feeds
