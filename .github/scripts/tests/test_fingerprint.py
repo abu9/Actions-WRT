@@ -989,5 +989,99 @@ class DiyPart1InvocationTests(unittest.TestCase):
             )
 
 
+
+class ReleaseIndexVerifierTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.root = Path(__file__).resolve().parents[3]
+        cls.helper = cls.root / ".github/scripts/verify-release-index.sh"
+        cls.workflow = (cls.root / ".github/workflows/reusable_build.yml").read_text(
+            encoding="utf-8"
+        )
+
+    def test_production_workflow_uses_shared_key_resolution_and_verification(self) -> None:
+        self.assertIn("verify-release-index.sh\" resolve", self.workflow)
+        self.assertIn("verify-release-index.sh verify", self.workflow)
+        self.assertNotIn(
+            'staging_dir/host/bin/usign -V -m sha256sums',
+            self.workflow,
+        )
+
+    def test_verify_mode_passes_expected_files_to_usign(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="release-index-verify-") as temporary:
+            root = Path(temporary)
+            args_file = root / "args.txt"
+            usign = root / "usign"
+            usign.write_text(
+                "#!/usr/bin/env bash\\n"
+                'printf "%s\\n" "$@" > "$USIGN_ARGS_FILE"\\n',
+                encoding="utf-8",
+            )
+            usign.chmod(0o755)
+            public_key = root / "release.pub"
+            checksum_file = root / "sha256sums"
+            signature_file = root / "sha256sums.sig"
+            public_key.write_text("public-key\\n", encoding="utf-8")
+            checksum_file.write_text("signed-checksum-index\\n", encoding="utf-8")
+            signature_file.write_text("signature\\n", encoding="utf-8")
+
+            result = subprocess.run(
+                [
+                    "bash",
+                    str(self.helper),
+                    "verify",
+                    str(usign),
+                    str(public_key),
+                    str(checksum_file),
+                    str(signature_file),
+                ],
+                env=dict(os.environ, USIGN_ARGS_FILE=str(args_file)),
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            self.assertEqual(
+                args_file.read_text(encoding="utf-8").splitlines(),
+                [
+                    "-V",
+                    "-m",
+                    str(checksum_file),
+                    "-p",
+                    str(public_key),
+                    "-x",
+                    str(signature_file),
+                ],
+            )
+
+    def test_verify_mode_rejects_missing_signature_before_invoking_usign(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="release-index-missing-signature-") as temporary:
+            root = Path(temporary)
+            usign = root / "usign"
+            usign.write_text("#!/usr/bin/env bash\\nexit 99\\n", encoding="utf-8")
+            usign.chmod(0o755)
+            public_key = root / "release.pub"
+            checksum_file = root / "sha256sums"
+            public_key.write_text("public-key\\n", encoding="utf-8")
+            checksum_file.write_text("signed-checksum-index\\n", encoding="utf-8")
+
+            result = subprocess.run(
+                [
+                    "bash",
+                    str(self.helper),
+                    "verify",
+                    str(usign),
+                    str(public_key),
+                    str(checksum_file),
+                    str(root / "missing.sig"),
+                ],
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("signature is missing or empty", result.stderr)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
