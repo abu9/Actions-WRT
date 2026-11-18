@@ -1009,9 +1009,10 @@ class ReleaseIndexVerifierTests(unittest.TestCase):
         self.assertIn("repository: immortalwrt/keyring", self.workflow)
         self.assertNotIn("source-pinned release signing keyring", self.workflow)
         self.assertIn('verify "$AUTHOR" staging_dir/host/bin/usign', self.workflow)
-        self.assertIn("sha256sum --check --ignore-missing sha256sums", self.workflow)
+        self.assertIn('CHECKSUM_OUTPUT="$(sha256sum --check --ignore-missing sha256sums)"', self.workflow)
+        self.assertIn('grep -Fq "$TOOLCHAIN_ARCHIVE: OK" <<<"$CHECKSUM_OUTPUT"', self.workflow)
         verify_index = self.workflow.index('verify "$AUTHOR" staging_dir/host/bin/usign')
-        verify_archive = self.workflow.index("sha256sum --check --ignore-missing sha256sums")
+        verify_archive = self.workflow.index('CHECKSUM_OUTPUT="$(sha256sum --check --ignore-missing sha256sums)"')
         extract_archive = self.workflow.index('tar --zstd -xf "$TOOLCHAIN_ARCHIVE"')
         self.assertLess(verify_index, verify_archive)
         self.assertLess(verify_archive, extract_archive)
@@ -1363,6 +1364,17 @@ class ReleaseIndexVerifierTests(unittest.TestCase):
                 cwd=root, text=True, capture_output=True, check=False,
             )
             self.assertNotEqual(invalid.returncode, 0)
+
+            (root / "sha256sums").write_text(
+                f"{digest} *not-the-selected-archive.tar.zst\\n",
+                encoding="utf-8",
+            )
+            unmatched = subprocess.run(
+                ["sha256sum", "--check", "--ignore-missing", "sha256sums"],
+                cwd=root, text=True, capture_output=True, check=False,
+            )
+            self.assertNotEqual(unmatched.returncode, 0)
+            self.assertIn("no file was verified", unmatched.stderr)
 
 
 if __name__ == "__main__":
