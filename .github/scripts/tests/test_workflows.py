@@ -145,12 +145,13 @@ class WorkflowIntegrationTests(unittest.TestCase):
     def test_build_workflows_use_upstream_style_ghcr_head_checks(self) -> None:
         root = Path(__file__).resolve().parents[2] / "workflows"
         build = (root / "build.yml").read_text(encoding="utf-8")
+        push = (root / "push-containers.yml").read_text(encoding="utf-8")
         reusable = (root / "reusable_build.yml").read_text(encoding="utf-8")
 
         # HTTP 200 is a hit; every other HTTP response is a cache miss.
         # A curl transport failure still fails the step.
-        self.assertEqual(build.count("curl -sS -o /dev/null -w '%{http_code}'"), 3)
-        self.assertEqual(build.count('GHCR_TOKEN="$(printf \'%s\' "$GITHUB_TOKEN" | base64 -w0)"'), 3)
+        self.assertEqual(build.count("curl -sS -o /dev/null -w '%{http_code}'"), 2)
+        self.assertEqual(build.count('GHCR_TOKEN="$(printf \'%s\' "$GITHUB_TOKEN" | base64 -w0)"'), 2)
         self.assertIn("https://ghcr.io/v2/$OWNER_LC/tools/manifests/$TAG", build)
         self.assertIn("https://ghcr.io/v2/$OWNER_LC/toolchain/manifests/$TAG", build)
         self.assertIn('200) echo "tools_required=false"', build)
@@ -159,10 +160,15 @@ class WorkflowIntegrationTests(unittest.TestCase):
         self.assertIn('200) echo "use_toolchain=true"', build)
         self.assertIn('*) echo "use_toolchain=false"', build)
         self.assertNotIn('404) echo "use_toolchain=false"', build)
-        self.assertIn('if [ "$HTTP_STATUS" != "200" ]; then', build)
+        self.assertNotIn("Verify selected image", build)
 
-        # The reusable workflow consumes the selected image and does not
-        # independently query GHCR or inspect image labels.
+        # Publication owns strict post-push verification for both image types.
+        self.assertEqual(push.count("curl -sS -o /dev/null -w '%{http_code}'"), 2)
+        self.assertIn("Verify published Host Tools image", push)
+        self.assertIn("Verify published target Toolchain image", push)
+        self.assertEqual(push.count('if [ "$HTTP_STATUS" = "200" ]; then'), 2)
+
+        # The reusable build consumes selected images and does not query GHCR.
         self.assertNotIn("ghcr-check", reusable)
         self.assertNotIn("GHCR_TOKEN", reusable)
         self.assertNotIn("GITHUB_ACTOR:", reusable)
@@ -183,17 +189,18 @@ class WorkflowIntegrationTests(unittest.TestCase):
         self.assertIn("target: ${{ needs.determine_targets.outputs.target }}", build)
         self.assertIn("tools_fingerprint: ${{ needs.tools_fingerprint.outputs.tools_fingerprint }}", build)
 
-    def test_host_tools_cache_hit_skips_redundant_second_head_request(self) -> None:
-        build = (
-            Path(__file__).resolve().parents[2] / "workflows" / "build.yml"
-        ).read_text(encoding="utf-8")
+    def test_host_tools_ready_uses_publisher_verification_without_duplicate_head(self) -> None:
+        workflows = Path(__file__).resolve().parents[2] / "workflows"
+        build = (workflows / "build.yml").read_text(encoding="utf-8")
+        push = (workflows / "push-containers.yml").read_text(encoding="utf-8")
         ready = build.split("  tools_ready:", 1)[1].split(
             "  toolchain_fingerprint:", 1
         )[0]
-        self.assertIn('if [ "$TOOLS_REQUIRED" != "true" ]; then', ready)
-        self.assertIn("Host Tools image was already confirmed by the cache check.", ready)
-        self.assertIn('if [ "$HTTP_STATUS" != "200" ]; then', ready)
-        self.assertNotIn("checked_image:", ready)
+        self.assertIn('tools_image: ${{ steps.image.outputs.tools_image }}', ready)
+        self.assertNotIn("curl ", ready)
+        self.assertNotIn("Verify selected image", ready)
+        self.assertIn("Verify published Host Tools image", push)
+        self.assertIn('if [ "$HTTP_STATUS" = "200" ]; then', push)
 
     def test_target_config_is_parsed_without_shell_eval(self) -> None:
         workflow = (
@@ -205,6 +212,68 @@ class WorkflowIntegrationTests(unittest.TestCase):
         self.assertIn('CONFIG_TARGET_BOARD="$(sed -n', workflow)
         self.assertIn('CONFIG_TARGET_SUBTARGET="$(sed -n', workflow)
         self.assertIn('CONFIG_ARCH="$(sed -n', workflow)
+
+    def test_update_checker_preserves_rev_parse_failure(self) -> None:
+        workflow = (
+            Path(__file__).resolve().parents[2]
+            / "workflows"
+            / "update-checker.yml"
+        ).read_text(encoding="utf-8")
+        step = workflow.split("    - name: Get Commit Hash", 1)[1].split(
+            "    - name: Compare Commit Hash", 1
+        )[0]
+        self.assertIn("set -e", step)
+        self.assertIn('COMMIT_HASH="$(git rev-parse HEAD)"', step)
+        self.assertIn("printf 'commitHash=%s\\n' \"$COMMIT_HASH\"", step)
+        self.assertNotIn('echo "commitHash=$(git rev-parse HEAD)"', step)
+
+    def test_target_identifiers_are_validated_before_shell_use(self) -> None:
+        workflows = Path(__file__).resolve().parents[2] / "workflows"
+        determine = (workflows / "determine-targets.yml").read_text(encoding="utf-8")
+        reusable = (workflows / "reusable_build.yml").read_text(encoding="utf-8")
+        self.assertIn('[[ ! "$value" =~ ^[[:alnum:]][[:alnum:]_-]*$ ]]', determine)
+        self.assertNotIn('CONFIG_TARGET_${{ inputs.target }}', reusable)
+        self.assertNotIn('targets/${{ inputs.target }}/${{ inputs.subtarget }}', reusable)
+        self.assertIn('CONFIG_TARGET_${TARGET}', reusable)
+        self.assertIn('--config "$TARGET/$SUBTARGET"', reusable)
+
+    def test_external_toolchain_directories_must_be_unique(self) -> None:
+        reusable = (
+            Path(__file__).resolve().parents[2]
+            / "workflows"
+            / "reusable_build.yml"
+        ).read_text(encoding="utf-8")
+        self.assertNotIn("$(ls /external-toolchain/ | grep wrt-toolchain)", reusable)
+        self.assertNotIn("$(ls $TOOLCHAIN_FILE/staging_dir | grep toolchain)", reusable)
+        self.assertGreaterEqual(reusable.count('if [ "${#toolchain_dirs[@]}" -ne 1 ]; then'), 3)
+        self.assertIn('if [ "${#toolchain_roots[@]}" -ne 1 ]; then', reusable)
+        self.assertIn('find "$TOOLCHAIN_FILE/staging_dir"', reusable)
+
+    def test_package_and_coverity_lists_are_parsed_without_shell_expansion(self) -> None:
+        reusable = (
+            Path(__file__).resolve().parents[2]
+            / "workflows"
+            / "reusable_build.yml"
+        ).read_text(encoding="utf-8")
+        self.assertIn('CHECK_PACKAGES_LIST: ${{ inputs.check_packages_list }}', reusable)
+        self.assertIn('read -r -a packages <<< "$CHECK_PACKAGES_LIST"', reusable)
+        self.assertNotIn('for package in ${{ inputs.check_packages_list }}', reusable)
+        self.assertIn('COVERITY_API_TOKEN: ${{ secrets.coverity_api_token }}', reusable)
+        self.assertIn('read -r -a compiler_templates <<< "$COVERITY_COMPILER_TEMPLATE_LIST"', reusable)
+        self.assertIn('read -r -a coverity_check_packages <<< "$COVERITY_CHECK_PACKAGES"', reusable)
+        self.assertNotIn('coverity_check_packages=(${{ inputs.coverity_check_packages }})', reusable)
+        self.assertNotIn('for template in ${{ inputs.coverity_compiler_template_list }}', reusable)
+
+    def test_changed_package_paths_are_nul_delimited(self) -> None:
+        reusable = (
+            Path(__file__).resolve().parents[2]
+            / "workflows"
+            / "reusable_build.yml"
+        ).read_text(encoding="utf-8")
+        self.assertIn("git diff --name-only -z", reusable)
+        self.assertIn("while IFS= read -r -d '' file;", reusable)
+        self.assertIn('cp --parents -- "$file" packages-fixed/', reusable)
+        self.assertNotIn("for f in $(git diff --name-only)", reusable)
 
     def test_image_tags_remain_content_addressed(self) -> None:
         root = Path(__file__).resolve().parents[2] / "workflows"
