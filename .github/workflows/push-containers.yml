@@ -63,9 +63,6 @@ on:
       subtarget:
         type: string
         default: ''
-      arch:
-        type: string
-        default: ''
       repo_url:
         type: string
         default: ''
