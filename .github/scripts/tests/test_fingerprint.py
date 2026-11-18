@@ -525,7 +525,7 @@ class HostToolsFingerprintTests(unittest.TestCase):
             (local/".github/workflows/reusable_build_tools.yml").write_text("container: ghcr.io/openwrt/buildbot/buildworker-v3.11.8:v23\n",encoding="utf-8")
             (local/".github/dockerfiles/Dockerfile.tools").write_text("FROM ghcr.io/openwrt/buildbot/buildworker-v3.11.8:v23\n",encoding="utf-8")
             subprocess.run(["git","init","-q",str(source)],check=True); subprocess.run(["git","-C",str(source),"config","user.email","test@example.invalid"],check=True); subprocess.run(["git","-C",str(source),"config","user.name","Fingerprint Test"],check=True); subprocess.run(["git","-C",str(source),"add","-A"],check=True); subprocess.run(["git","-C",str(source),"commit","-qm","fixture"],check=True)
-            baseline,manifest=FINGERPRINT_MODULE.compute_tools_fingerprint(source,local,"test/repo","main")
+            baseline,manifest=FINGERPRINT_MODULE.compute_tools_fingerprint(source,local,"test/repo")
             self.assertFalse(any(item["path"] == "scripts/ext-tools.sh" for item in manifest["files"]))
             (source/"scripts/ext-tools.sh").write_text("changed refresh implementation",encoding="utf-8")
             (source/"toolchain/gcc/Makefile").write_text("changed toolchain implementation",encoding="utf-8")
