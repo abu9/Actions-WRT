@@ -498,7 +498,7 @@ def compute_toolchain_fingerprint(*args,**kwargs):
     manifest=compute_manifest(*args,**kwargs); return canonical_sha256(manifest, ensure_ascii=False),manifest
 def main():
     p=argparse.ArgumentParser(); s=p.add_subparsers(dest="command",required=True)
-    q=s.add_parser("tools"); q.add_argument("--source-dir",required=True,type=Path); q.add_argument("--local-repo-dir",required=True,type=Path); q.add_argument("--source-repo",required=True); q.add_argument("--source-ref",required=True)
+    q=s.add_parser("tools"); q.add_argument("--source-dir",required=True,type=Path); q.add_argument("--local-repo-dir",required=True,type=Path); q.add_argument("--source-repo",required=True)
     q=s.add_parser("toolchain"); q.add_argument("--source-dir",required=True,type=Path); q.add_argument("--local-repo-dir",required=True,type=Path); q.add_argument("--source-repo",required=True); q.add_argument("--target",required=True); q.add_argument("--subtarget",required=True); q.add_argument("--tools-fingerprint",required=True); q.add_argument("--output-file",type=Path,help="Write Actions outputs to this file instead of GITHUB_OUTPUT")
     q=s.add_parser("publish-toolchain-outputs"); q.add_argument("--input-file",required=True,type=Path); q.add_argument("--expected-source-commit",required=True); q.add_argument("--github-output",required=True,type=Path)
     q=s.add_parser("ghcr-check"); q.add_argument("--owner",required=True); q.add_argument("--image",required=True); q.add_argument("--tag",required=True); q.add_argument("--label",action="append",default=[])
