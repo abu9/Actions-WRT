@@ -186,8 +186,8 @@ class WorkflowIntegrationTests(unittest.TestCase):
 
         self.assertIn('TAG="$AUTHOR"_"$REPO_BRANCH-$EXPECTED_FINGERPRINT"', build)
         self.assertIn('TAG="$TARGET-$SUBTARGET-$AUTHOR"_"$REPO_BRANCH-${FINGERPRINT:0:32}"', build)
-        self.assertIn("tools:${{ needs.compute-tools-fingerprint.outputs.tools_fingerprint }}", push)
-        self.assertIn("toolchain:${{ needs.compute-toolchain-fingerprint.outputs.toolchain_cache_key }}", push)
+        self.assertIn("tools:${{ needs.determine_container_info.outputs.container_tag }}-${{ needs.compute-tools-fingerprint.outputs.tools_fingerprint }}", push)
+        self.assertIn("toolchain:${{ needs.determine_targets.outputs.target }}-${{ needs.determine_targets.outputs.subtarget }}-${{ needs.determine_container_info.outputs.container_tag }}-${{ needs.compute-toolchain-fingerprint.outputs.toolchain_cache_key }}", push)
 
     def test_toolchain_fingerprint_handoff_separates_buildbot_and_runner_outputs(self) -> None:
         workflow = (
