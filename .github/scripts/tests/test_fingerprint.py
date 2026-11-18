@@ -1002,7 +1002,7 @@ class ReleaseIndexVerifierTests(unittest.TestCase):
     def test_workflow_selects_distribution_specific_signature_format(self) -> None:
         self.assertIn("immortalwrt) SIGNATURE_FILE=sha256sums.sig", self.workflow)
         self.assertIn("openwrt) SIGNATURE_FILE=sha256sums.asc", self.workflow)
-        self.assertIn('AUTHOR: \${{ inputs.author }}', self.workflow)
+        self.assertIn('AUTHOR: ${{ inputs.author }}', self.workflow)
         self.assertIn('verify "$AUTHOR" staging_dir/host/bin/usign', self.workflow)
 
     def test_immortalwrt_verify_passes_expected_files_to_usign(self) -> None:
