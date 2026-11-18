@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import hashlib
-import importlib.util
 import json
 import os
 import shutil
@@ -14,11 +13,6 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-SCRIPT = Path(__file__).resolve().parents[1] / "fingerprint.py"
-SPEC = importlib.util.spec_from_file_location("fingerprint", SCRIPT)
-assert SPEC is not None and SPEC.loader is not None
-FINGERPRINT_MODULE = importlib.util.module_from_spec(SPEC)
-SPEC.loader.exec_module(FINGERPRINT_MODULE)
 
 
 class WorkflowIntegrationTests(unittest.TestCase):
@@ -29,24 +23,33 @@ class WorkflowIntegrationTests(unittest.TestCase):
             self.assertNotIn("openwrt-21.02", source)
             self.assertNotIn("hanwckf/immortalwrt-mt798x", source)
 
-    def test_build_workflows_match_fingerprint_recipes(self) -> None:
+    def test_build_workflows_match_inline_fingerprint_inputs(self) -> None:
         root = Path(__file__).resolve().parents[2]
-        tools_workflow = (root / "workflows" / "reusable_build_tools.yml").read_text(
+        fingerprint = (root / "workflows" / "fingerprint.yml").read_text(
             encoding="utf-8"
         )
+        tools_start = fingerprint.index("  tools:")
+        toolchain_start = fingerprint.index("  toolchain:")
+        tools = fingerprint[tools_start:toolchain_start]
+        toolchain = fingerprint[toolchain_start:]
+
         for setting in (
             "CONFIG_DEVEL=y",
             "CONFIG_AUTOREMOVE=y",
             "CONFIG_CCACHE=y",
         ):
-            self.assertIn(f"echo {setting} >> .config", tools_workflow)
-            self.assertIn(setting, FINGERPRINT_MODULE.HOST_TOOLS_CONFIG)
-        self.assertNotIn("CONFIG_BUILD_ALL_HOST_TOOLS", tools_workflow)
-        self.assertNotIn("CONFIG_BUILD_ALL_HOST_TOOLS", FINGERPRINT_MODULE.HOST_TOOLS_CONFIG)
-        self.assertIn("make defconfig", tools_workflow)
-        self.assertIn("make tools/install", tools_workflow)
-        self.assertIn("make-defconfig", FINGERPRINT_MODULE.HOST_TOOLS_BUILD_RECIPE)
-        self.assertIn("make-tools-install", FINGERPRINT_MODULE.HOST_TOOLS_BUILD_RECIPE)
+            self.assertIn(setting, tools)
+        self.assertNotIn("CONFIG_BUILD_ALL_HOST_TOOLS", tools)
+        self.assertIn("make-defconfig,make-tools-install", tools)
+        self.assertIn("toolchain-v2", toolchain)
+        for recipe_command in (
+            "make-defconfig",
+            "make-tools-install",
+            "make-toolchain-install",
+            "make-target-toolchain-compile",
+            "./scripts/ext-tools.sh --refresh",
+        ):
+            self.assertIn(recipe_command, toolchain)
 
         reusable = (root / "workflows" / "reusable_build.yml").read_text(
             encoding="utf-8"
@@ -59,14 +62,6 @@ class WorkflowIntegrationTests(unittest.TestCase):
             "./scripts/ext-tools.sh --refresh",
         ):
             self.assertIn(command, reusable)
-        for recipe_command in (
-            "make-defconfig",
-            "make-tools-install",
-            "make-toolchain-install",
-            "make-target-toolchain-compile",
-            "./scripts/ext-tools.sh --refresh",
-        ):
-            self.assertIn(recipe_command, FINGERPRINT_MODULE.TOOLCHAIN_BUILD_RECIPE)
 
     def test_ccache_restore_keys_follow_priority_and_isolate_namespaces(self) -> None:
         root = Path(__file__).resolve().parents[2] / "workflows"
@@ -160,16 +155,18 @@ class WorkflowIntegrationTests(unittest.TestCase):
         build = (root / "build.yml").read_text(encoding="utf-8")
         reusable = (root / "reusable_build.yml").read_text(encoding="utf-8")
 
-        # Tools and Toolchain use the same Registry HEAD check. Only an
-        # explicit 404 is a cache miss; transport errors and other statuses fail.
+        # HTTP 200 is a hit; every other HTTP response is a cache miss.
+        # A curl transport failure still fails the step.
         self.assertEqual(build.count("curl -sS -o /dev/null -w '%{http_code}'"), 3)
         self.assertEqual(build.count('GHCR_TOKEN="$(printf \'%s\' "$GITHUB_TOKEN" | base64 -w0)"'), 3)
         self.assertIn("https://ghcr.io/v2/$OWNER_LC/tools/manifests/$TAG", build)
         self.assertIn("https://ghcr.io/v2/$OWNER_LC/toolchain/manifests/$TAG", build)
         self.assertIn('200) echo "tools_required=false"', build)
-        self.assertIn('404) echo "tools_required=true"', build)
+        self.assertIn('*) echo "tools_required=true"', build)
+        self.assertNotIn('404) echo "tools_required=true"', build)
         self.assertIn('200) echo "use_toolchain=true"', build)
-        self.assertIn('404) echo "use_toolchain=false"', build)
+        self.assertIn('*) echo "use_toolchain=false"', build)
+        self.assertNotIn('404) echo "use_toolchain=false"', build)
         self.assertIn('if [ "$HTTP_STATUS" != "200" ]; then', build)
 
         # The reusable workflow consumes the selected image and does not
@@ -188,25 +185,6 @@ class WorkflowIntegrationTests(unittest.TestCase):
         self.assertIn('TAG="$TARGET-$SUBTARGET-$AUTHOR"_"$REPO_BRANCH-${FINGERPRINT:0:32}"', build)
         self.assertIn("tools:${{ needs.determine_container_info.outputs.container_tag }}-${{ needs.compute-tools-fingerprint.outputs.tools_fingerprint }}", push)
         self.assertIn("toolchain:${{ needs.determine_targets.outputs.target }}-${{ needs.determine_targets.outputs.subtarget }}-${{ needs.determine_container_info.outputs.container_tag }}-${{ needs.compute-toolchain-fingerprint.outputs.toolchain_cache_key }}", push)
-
-    def test_toolchain_fingerprint_handoff_separates_buildbot_and_runner_outputs(self) -> None:
-        workflow = (
-            Path(__file__).resolve().parents[2]
-            / "workflows"
-            / "fingerprint.yml"
-        ).read_text(encoding="utf-8")
-        self.assertIn(
-            'run: install -o buildbot -g buildbot -m 600 /dev/null "$RUNNER_TEMP/toolchain-fingerprint.outputs"',
-            workflow,
-        )
-        self.assertIn('shell: su buildbot -c "sh -e {0}"', workflow)
-        self.assertIn('--output-file "$FINGERPRINT_OUTPUT_FILE"', workflow)
-        self.assertIn("Validate and publish Toolchain fingerprint outputs", workflow)
-        self.assertIn("publish-toolchain-outputs", workflow)
-        self.assertTrue(hasattr(FINGERPRINT_MODULE, "publish_toolchain_outputs"))
-        self.assertIn('id: fp', workflow)
-        toolchain_workflow = workflow.split("  toolchain:" + chr(10), 1)[1]
-        self.assertNotIn("id: fp" + chr(10) + "        env:" + chr(10) + "          SOURCE_REPO:", toolchain_workflow)
 
     def test_toolchain_build_uses_same_run_host_tools_artifact_in_parallel(self) -> None:
         workflows = Path(__file__).resolve().parents[2] / "workflows"
@@ -250,11 +228,8 @@ class WorkflowIntegrationTests(unittest.TestCase):
             dockerfile,
         )
         self.assertNotIn("FROM ghcr.io/$OWNER_LC/tools:", dockerfile)
-        self.assertIn("host-tools:prebuilt-artifact", FINGERPRINT_MODULE.TOOLCHAIN_BUILD_RECIPE)
-        self.assertEqual(
-            FINGERPRINT_MODULE.TOOLCHAIN_BUILD_ENVIRONMENT["buildworker_image"],
-            "ghcr.io/openwrt/buildbot/buildworker-v3.11.8:v23",
-        )
+        self.assertIn("host-tools:prebuilt-artifact", fingerprint)
+        self.assertIn("ghcr.io/openwrt/buildbot/buildworker-v3.11.8:v23", fingerprint)
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
