@@ -13,7 +13,6 @@ import tempfile
 import unittest
 from pathlib import Path
 from unittest import mock
-from urllib.error import HTTPError, URLError
 
 SCRIPT = Path(__file__).resolve().parents[1] / "fingerprint.py"
 SPEC = importlib.util.spec_from_file_location("fingerprint", SCRIPT)
@@ -156,50 +155,39 @@ class WorkflowIntegrationTests(unittest.TestCase):
         self.assertNotIn("ext-tools-refresh.sh", fingerprint_workflow)
         self.assertNotIn("--preserve-environment", fingerprint_workflow)
 
-    def test_build_workflow_passes_authentication_to_both_ghcr_checks(self) -> None:
-        workflow_path = (
-            Path(__file__).resolve().parents[2]
-            / "workflows"
-            / "build.yml"
-        )
-        workflow = workflow_path.read_text(encoding="utf-8")
-
-        self.assertGreaterEqual(
-            workflow.count("GITHUB_ACTOR: ${{ github.actor }}"), 2
-        )
-        self.assertGreaterEqual(
-            workflow.count("GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}"), 2
-        )
-
-    def test_ghcr_reuse_is_content_addressed_not_source_commit_addressed(self) -> None:
+    def test_build_workflows_use_upstream_style_ghcr_head_checks(self) -> None:
         root = Path(__file__).resolve().parents[2] / "workflows"
-
-        for name in ("build.yml", "reusable_build.yml"):
-            workflow = (root / name).read_text(encoding="utf-8")
-            self.assertNotIn("io.abu9.actions-wrt.tools-source-commit=", workflow)
-            self.assertNotIn(
-                "SOURCE_COMMIT: ${{ needs.tools_fingerprint.outputs.source_commit }}",
-                workflow,
-            )
-
-        build_workflow = (root / "build.yml").read_text(encoding="utf-8")
-        self.assertIn(
-            'io.abu9.actions-wrt.tools-source-repository=$SOURCE_REPOSITORY',
-            build_workflow,
-        )
+        build = (root / "build.yml").read_text(encoding="utf-8")
         reusable = (root / "reusable_build.yml").read_text(encoding="utf-8")
-        workflow_lines = reusable.splitlines()
-        start = workflow_lines.index("      - name: Determine container name")
-        end = workflow_lines.index("      - name: Determine container", start + 1)
-        block = "\n".join(workflow_lines[start:end])
-        self.assertIn("GITHUB_ACTOR: ${{ github.actor }}", block)
-        self.assertIn("GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}", block)
-        self.assertNotIn("SOURCE_COMMIT", block)
-        self.assertNotIn("GHCR_USER:", block)
-        self.assertNotIn("GHCR_PASSWORD:", block)
-        self.assertNotIn("tools_image_fingerprint", reusable)
 
+        # Tools and Toolchain use the same Registry HEAD check. Only an
+        # explicit 404 is a cache miss; transport errors and other statuses fail.
+        self.assertEqual(build.count("curl -sS -o /dev/null -w '%{http_code}'"), 3)
+        self.assertEqual(build.count('GHCR_TOKEN="$(printf \'%s\' "$GITHUB_TOKEN" | base64 -w0)"'), 3)
+        self.assertIn("https://ghcr.io/v2/$OWNER_LC/tools/manifests/$TAG", build)
+        self.assertIn("https://ghcr.io/v2/$OWNER_LC/toolchain/manifests/$TAG", build)
+        self.assertIn('200) echo "tools_required=false"', build)
+        self.assertIn('404) echo "tools_required=true"', build)
+        self.assertIn('200) echo "use_toolchain=true"', build)
+        self.assertIn('404) echo "use_toolchain=false"', build)
+        self.assertIn('if [ "$HTTP_STATUS" != "200" ]; then', build)
 
+        # The reusable workflow consumes the selected image and does not
+        # independently query GHCR or inspect image labels.
+        self.assertNotIn("ghcr-check", reusable)
+        self.assertNotIn("GHCR_TOKEN", reusable)
+        self.assertNotIn("GITHUB_ACTOR:", reusable)
+        self.assertNotIn("io.abu9.actions-wrt.toolchain-fingerprint=", reusable)
+
+    def test_image_tags_remain_content_addressed(self) -> None:
+        root = Path(__file__).resolve().parents[2] / "workflows"
+        build = (root / "build.yml").read_text(encoding="utf-8")
+        push = (root / "push-containers.yml").read_text(encoding="utf-8")
+
+        self.assertIn('TAG="$AUTHOR"_"$REPO_BRANCH-$EXPECTED_FINGERPRINT"', build)
+        self.assertIn('TAG="$TARGET-$SUBTARGET-$AUTHOR"_"$REPO_BRANCH-${FINGERPRINT:0:32}"', build)
+        self.assertIn("tools:${{ needs.compute-tools-fingerprint.outputs.tools_fingerprint }}", push)
+        self.assertIn("toolchain:${{ needs.compute-toolchain-fingerprint.outputs.toolchain_cache_key }}", push)
 
     def test_toolchain_fingerprint_handoff_separates_buildbot_and_runner_outputs(self) -> None:
         workflow = (
