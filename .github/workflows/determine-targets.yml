@@ -130,11 +130,18 @@ jobs:
             echo "Unable to resolve target, subtarget, and architecture from .config." >&2
             exit 1
           }
+          for value_name in TARGET SUBTARGET; do
+            value="${!value_name}"
+            if [[ ! "$value" =~ ^[[:alnum:]][[:alnum:]_-]*$ ]]; then
+              echo "Invalid $value_name value in resolved .config: $value" >&2
+              exit 1
+            fi
+          done
           SOURCE_COMMIT="$(git rev-parse HEAD)"
-          [[ -n ${SOURCE_COMMIT} ]] && echo "source_commit=$SOURCE_COMMIT" >> "${GITHUB_OUTPUT}"
-          [[ -n ${TARGET} ]] && echo "target=$TARGET" >> ${GITHUB_OUTPUT}
-          [[ -n ${SUBTARGET} ]] && echo "subtarget=$SUBTARGET" >> ${GITHUB_OUTPUT}
-          [[ -n ${ARCH} ]] && echo "arch=$ARCH" >> ${GITHUB_OUTPUT}
+          printf 'source_commit=%s\n' "$SOURCE_COMMIT" >> "$GITHUB_OUTPUT"
+          printf 'target=%s\n' "$TARGET" >> "$GITHUB_OUTPUT"
+          printf 'subtarget=%s\n' "$SUBTARGET" >> "$GITHUB_OUTPUT"
+          printf 'arch=%s\n' "$ARCH" >> "$GITHUB_OUTPUT"
 
       - name: Show configuration
         if: inputs.config_name != ''
