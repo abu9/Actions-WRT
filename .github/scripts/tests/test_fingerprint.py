@@ -1017,6 +1017,15 @@ class ReleaseIndexVerifierTests(unittest.TestCase):
         self.assertLess(verify_archive, extract_archive)
         self.assertNotIn('CHECKSUM="$(awk', self.workflow)
 
+    def test_toolchain_install_stage_is_unconditional_like_upstream(self) -> None:
+        marker = "      - name: Build toolchain\\n"
+        start = self.workflow.index(marker)
+        end = self.workflow.find("\\n      - name:", start + len(marker))
+        self.assertNotEqual(end, -1, "Build toolchain step must be followed by another workflow step")
+        step = self.workflow[start:end]
+        self.assertNotIn("\\n        if:", step)
+        self.assertIn("make toolchain/install", step)
+
     @staticmethod
     def _create_keyring_checkout(root: Path, origin: str, files: dict[str, str]) -> tuple[Path, str]:
         keyring = root / "keyring"
