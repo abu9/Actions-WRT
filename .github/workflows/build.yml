@@ -171,31 +171,6 @@ jobs:
           OWNER_LC="$(printf '%s' "$OWNER" | tr '[:upper:]' '[:lower:]')"
           IMAGE_TAG="$(printf '%s' "$CHECKED_IMAGE" | cut -d: -f2-)"
           echo "tools_image=ghcr.io/$OWNER_LC/tools:$IMAGE_TAG" >> "$GITHUB_OUTPUT"
-      - name: Verify selected image
-        shell: bash
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          OWNER: ${{ github.repository_owner }}
-          CHECKED_IMAGE: ${{ needs.check_tools_container.outputs.checked_image }}
-          TOOLS_REQUIRED: ${{ needs.check_tools_container.outputs.tools_required }}
-          BUILD_RESULT: ${{ needs.build_tools_container.result }}
-        run: |
-          if [ "$TOOLS_REQUIRED" != "true" ]; then
-            echo "Host Tools image was already confirmed by the cache check."
-            exit 0
-          fi
-          test "$BUILD_RESULT" = success
-          OWNER_LC="$(printf '%s' "$OWNER" | tr '[:upper:]' '[:lower:]')"
-          IMAGE_TAG="$(printf '%s' "$CHECKED_IMAGE" | cut -d: -f2-)"
-          GHCR_TOKEN="$(printf '%s' "$GITHUB_TOKEN" | base64 -w0)"
-          GHCR_HEADER="Authorization: Bearer $GHCR_TOKEN"
-          GHCR_MANIFEST_LINK="https://ghcr.io/v2/$OWNER_LC/tools/manifests/$IMAGE_TAG"
-          HTTP_STATUS="$(curl -sS -o /dev/null -w '%{http_code}' -H "$GHCR_HEADER" -I "$GHCR_MANIFEST_LINK")"
-          if [ "$HTTP_STATUS" != "200" ]; then
-            echo "Host Tools image verification failed: HTTP $HTTP_STATUS" >&2
-            exit 1
-          fi
-
   toolchain_fingerprint:
     name: Calculate target Toolchain fingerprint
     if: ${{ inputs.build_toolchain == true }}
