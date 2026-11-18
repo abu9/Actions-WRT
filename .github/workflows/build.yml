@@ -143,6 +143,13 @@ jobs:
       source_branch: ${{ github.event.client_payload.source_branch || inputs.source_branch || 'immortalwrt/immortalwrt@openwrt-25.12' }}
       config_name: ${{ github.event.client_payload.config_name || inputs.config_name || '360t7-immortalwrt-25.12-ubi.conf' }}
       source_commit: ${{ needs.tools_fingerprint.outputs.source_commit }}
+      target: ${{ needs.determine_targets.outputs.target }}
+      subtarget: ${{ needs.determine_targets.outputs.subtarget }}
+      arch: ${{ needs.determine_targets.outputs.arch }}
+      repo_url: ${{ needs.determine_targets.outputs.repo_url }}
+      repo_branch: ${{ needs.determine_targets.outputs.repo_branch }}
+      author: ${{ needs.determine_targets.outputs.author }}
+      tools_fingerprint: ${{ needs.tools_fingerprint.outputs.tools_fingerprint }}
       build_tools: true
       build_toolchain: false
 
@@ -155,7 +162,6 @@ jobs:
       contents: read
       packages: read
     outputs:
-      checked_image: ${{ needs.check_tools_container.outputs.checked_image }}
       tools_image: ${{ steps.image.outputs.tools_image }}
     steps:
       - id: image
@@ -175,9 +181,11 @@ jobs:
           TOOLS_REQUIRED: ${{ needs.check_tools_container.outputs.tools_required }}
           BUILD_RESULT: ${{ needs.build_tools_container.result }}
         run: |
-          if [ "$TOOLS_REQUIRED" = "true" ]; then
-            test "$BUILD_RESULT" = success
+          if [ "$TOOLS_REQUIRED" != "true" ]; then
+            echo "Host Tools image was already confirmed by the cache check."
+            exit 0
           fi
+          test "$BUILD_RESULT" = success
           OWNER_LC="$(printf '%s' "$OWNER" | tr '[:upper:]' '[:lower:]')"
           IMAGE_TAG="$(printf '%s' "$CHECKED_IMAGE" | cut -d: -f2-)"
           GHCR_TOKEN="$(printf '%s' "$GITHUB_TOKEN" | base64 -w0)"
