@@ -307,6 +307,10 @@ jobs:
             make package/download package/check FIXUP=1 -j"$(nproc)" BUILD_LOG=1 || { ret=$?; bash ../.github/scripts/show_build_failures.sh; exit "$ret"; }
           elif [ -n "$CHECK_PACKAGES_LIST" ]; then
             read -r -a packages <<< "$CHECK_PACKAGES_LIST"
+            if [ "${#packages[@]}" -eq 0 ]; then
+              echo "check_packages_list did not contain any package names." >&2
+              exit 1
+            fi
             for package in "${packages[@]}"; do
               if [[ ! "$package" =~ ^[[:alnum:]][[:alnum:]_.+-]*$ ]]; then
                 echo "Invalid package name in check_packages_list: $package" >&2
@@ -1025,6 +1029,10 @@ jobs:
         run: |
           read -r -a coverity_check_packages <<< "$COVERITY_CHECK_PACKAGES"
           read -r -a coverity_force_compile_packages <<< "$COVERITY_FORCE_COMPILE_PACKAGES"
+          if [ "${#coverity_check_packages[@]}" -eq 0 ]; then
+            echo "coverity_check_packages did not contain any package names." >&2
+            exit 1
+          fi
           clean_targets=()
           compile_targets=()
           force_compile_targets=()
@@ -1043,7 +1051,9 @@ jobs:
           done
 
           make -j"$(nproc)" BUILD_LOG=1 "${clean_targets[@]}" || { ret=$?; bash ../.github/scripts/show_build_failures.sh; exit "$ret"; }
-          make -j"$(nproc)" BUILD_LOG=1 "${force_compile_targets[@]}" || { ret=$?; bash ../.github/scripts/show_build_failures.sh; exit "$ret"; }
+          if [ "${#force_compile_targets[@]}" -gt 0 ]; then
+            make -j"$(nproc)" BUILD_LOG=1 "${force_compile_targets[@]}" || { ret=$?; bash ../.github/scripts/show_build_failures.sh; exit "$ret"; }
+          fi
 
           export PATH="$(pwd)/cov-analysis-linux64/bin:$PATH"
           cov-build --dir cov-int make -j"$(nproc)" BUILD_LOG=1 "${compile_targets[@]}" || { ret=$?; bash ../.github/scripts/show_build_failures.sh; exit "$ret"; }
