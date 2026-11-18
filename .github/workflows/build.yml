@@ -42,7 +42,7 @@ on:
           - '360t7-immortalwrt-25.12-ubi.conf'
         default: '360t7-immortalwrt-25.12-ubi.conf'
       build_toolchain:
-        description: 'Build the target toolchain from source; disable to use the official prebuilt toolchain/SDK when available'
+        description: 'Check for and reuse a fingerprint-matched target Toolchain image; build the target Toolchain from source if unavailable. When disabled, use the normal official-release or internal-toolchain path.'
         type: boolean
         default: false
       debug:
