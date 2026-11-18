@@ -175,11 +175,10 @@ jobs:
             CONTAINER_TAG="$TOOLCHAIN_BASE_TAG-${TOOLCHAIN_FINGERPRINT:0:32}"
           fi
 
-          # Both generic host-tools and target-toolchain images are selected
-          # with the exact Host Tools fingerprint.
+          # The generic Host Tools image is selected with its content fingerprint.
           if [ "$CONTAINER_NAME" = "tools" ]; then
             if [ -z "$TOOLS_FINGERPRINT" ]; then
-              echo "No verified Host Tools image fingerprint supplied." >&2
+              echo "No Host Tools fingerprint supplied." >&2
               exit 1
             fi
             CONTAINER_TAG="${CONTAINER_TAG}-${TOOLS_FINGERPRINT}"
