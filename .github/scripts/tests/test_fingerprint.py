@@ -1016,6 +1016,19 @@ class ReleaseIndexVerifierTests(unittest.TestCase):
         extract_archive = self.workflow.index('tar --zstd -xf "$TOOLCHAIN_ARCHIVE"')
         self.assertLess(verify_index, verify_archive)
         self.assertLess(verify_archive, extract_archive)
+
+        lines = self.workflow.splitlines()
+        download_start = next(
+            index for index, line in enumerate(lines)
+            if line == "      - name: Download external toolchain/sdk"
+        )
+        download_end = next(
+            index for index in range(download_start + 1, len(lines))
+            if lines[index].startswith("      - name: ")
+        )
+        download_step = lines[download_start:download_end]
+        self.assertIn("set -euo pipefail", download_step)
+        self.assertIn('shell: su buildbot -c "bash --noprofile --norc -eo pipefail {0}"', download_step)
         self.assertNotIn('CHECKSUM="$(awk', self.workflow)
 
     def test_toolchain_install_stage_is_unconditional_like_upstream(self) -> None:
