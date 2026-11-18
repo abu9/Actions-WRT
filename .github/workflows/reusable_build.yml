@@ -784,7 +784,7 @@ jobs:
           echo CONFIG_AUTOREMOVE=y >> .config
 
           mapfile -t toolchain_roots < <(
-            find /external-toolchain -mindepth 1 -maxdepth 1 -type d -name '*wrt-toolchain*' -print
+            find -H /external-toolchain -mindepth 1 -maxdepth 1 -type d -name '*wrt-toolchain*' -print
           )
           if [ "${#toolchain_roots[@]}" -ne 1 ]; then
             echo "Expected exactly one external toolchain root, found ${#toolchain_roots[@]}." >&2
@@ -792,7 +792,7 @@ jobs:
             exit 1
           fi
           mapfile -t toolchain_dirs < <(
-            find "${toolchain_roots[0]}" -mindepth 1 -maxdepth 1 -type d -name 'toolchain-*' -print
+            find -H "${toolchain_roots[0]}" -mindepth 1 -maxdepth 1 -type d -name 'toolchain-*' -print
           )
           if [ "${#toolchain_dirs[@]}" -ne 1 ]; then
             echo "Expected exactly one external toolchain directory, found ${#toolchain_dirs[@]}." >&2
@@ -818,7 +818,7 @@ jobs:
           echo CONFIG_AUTOREMOVE=y >> .config
 
           mapfile -t toolchain_dirs < <(
-            find "$TOOLCHAIN_FILE" -mindepth 1 -maxdepth 1 -type d -name 'toolchain-*' -print
+            find -H "$TOOLCHAIN_FILE" -mindepth 1 -maxdepth 1 -type d -name 'toolchain-*' -print
           )
           if [ "${#toolchain_dirs[@]}" -ne 1 ]; then
             echo "Expected exactly one external toolchain directory, found ${#toolchain_dirs[@]}." >&2
@@ -838,7 +838,7 @@ jobs:
         working-directory: openwrt
         run: |
           mapfile -t toolchain_dirs < <(
-            find "$TOOLCHAIN_FILE/staging_dir" -mindepth 1 -maxdepth 1 -type d -name '*toolchain*' -print
+            find -H "$TOOLCHAIN_FILE/staging_dir" -mindepth 1 -maxdepth 1 -type d -name '*toolchain*' -print
           )
           if [ "${#toolchain_dirs[@]}" -ne 1 ]; then
             echo "Expected exactly one SDK toolchain directory, found ${#toolchain_dirs[@]}." >&2
@@ -885,7 +885,7 @@ jobs:
           echo CONFIG_AUTOREMOVE=y >> .config
 
           mapfile -t toolchain_dirs < <(
-            find "$TOOLCHAIN_FILE/staging_dir" -mindepth 1 -maxdepth 1 -type d -name 'toolchain-*' -print
+            find -H "$TOOLCHAIN_FILE/staging_dir" -mindepth 1 -maxdepth 1 -type d -name 'toolchain-*' -print
           )
           if [ "${#toolchain_dirs[@]}" -ne 1 ]; then
             echo "Expected exactly one SDK toolchain directory, found ${#toolchain_dirs[@]}." >&2
