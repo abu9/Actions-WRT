@@ -33,8 +33,10 @@ jobs:
     - name: Get Commit Hash
       id: getHash
       run: |
+        set -e
         git clone --depth 1 "$REPO_URL" -b "$REPO_BRANCH" .
-        echo "commitHash=$(git rev-parse HEAD)" >> $GITHUB_OUTPUT
+        COMMIT_HASH="$(git rev-parse HEAD)"
+        printf 'commitHash=%s\n' "$COMMIT_HASH" >> "$GITHUB_OUTPUT"
 
     - name: Compare Commit Hash
       id: cacheHash
