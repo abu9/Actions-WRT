@@ -621,8 +621,8 @@ jobs:
         shell: su buildbot -c "sh -e {0}"
         working-directory: openwrt
         env:
-          TARGET: \${{ inputs.target }}
-          SUBTARGET: \${{ inputs.subtarget }}
+          TARGET: ${{ inputs.target }}
+          SUBTARGET: ${{ inputs.subtarget }}
         run: |
           set -e
           if [ ! -x staging_dir/host/bin/usign ]; then
@@ -631,8 +631,8 @@ jobs:
             touch .config
             echo CONFIG_DEVEL=y >> .config
             echo CONFIG_AUTOREMOVE=y >> .config
-            echo "CONFIG_TARGET_\${TARGET}=y" >> .config
-            echo "CONFIG_TARGET_\${TARGET}_\${SUBTARGET}=y" >> .config
+            echo "CONFIG_TARGET_${TARGET}=y" >> .config
+            echo "CONFIG_TARGET_${TARGET}_${SUBTARGET}=y" >> .config
             make defconfig
             make package/system/usign/host/compile -j"$(nproc)" BUILD_LOG=1 || {
               ret=$?
@@ -649,7 +649,7 @@ jobs:
         run: |
           set -euo pipefail
 
-          TARGET_PATH="$DOWNLOADSERVER/$TOOLCHAIN_PATH/targets/\${{ inputs.target }}/\${{ inputs.subtarget }}"
+          TARGET_PATH="$DOWNLOADSERVER/$TOOLCHAIN_PATH/targets/${{ inputs.target }}/${{ inputs.subtarget }}"
           curl --fail --silent --show-error --location --retry 3 "$TARGET_PATH/$TOOLCHAIN_ARCHIVE" -o "$TOOLCHAIN_ARCHIVE"
           curl --fail --silent --show-error --location --retry 3 "$TARGET_PATH/sha256sums" -o sha256sums
           curl --fail --silent --show-error --location --retry 3 "$TARGET_PATH/sha256sums.sig" -o sha256sums.sig
