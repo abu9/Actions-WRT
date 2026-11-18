@@ -707,7 +707,7 @@ jobs:
 
 
       - name: Setup configuration
-        if: inputs.build_full == true || inputs.build_kernel == true
+        if: inputs.build_full == true || inputs.build_kernel == true || inputs.build_toolchain == true
         env:
           CONFIG_NAME: ${{ inputs.config_name }}
         shell: su buildbot -c "bash --noprofile --norc -eo pipefail {0}"

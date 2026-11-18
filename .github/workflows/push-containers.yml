@@ -15,6 +15,7 @@ on:
           - immortalwrt/immortalwrt@openwrt-23.05
           - immortalwrt/immortalwrt@openwrt-24.10
           - immortalwrt/immortalwrt@openwrt-25.12
+          - immortalwrt/immortalwrt@v25.12.2
       source_commit:
         description: 'Optional exact upstream source commit; empty resolves the selected branch once'
         required: false
@@ -219,6 +220,7 @@ jobs:
       tools_fingerprint: ${{ needs.compute-tools-fingerprint.outputs.tools_fingerprint }}
       toolchain_fingerprint: ${{ needs.compute-toolchain-fingerprint.outputs.toolchain_fingerprint }}
       author: ${{ needs.determine_targets.outputs.author }}
+      config_name: ${{ inputs.config_name }}
       container_name: tools
       build_toolchain: true
       use_prebuilt_tools_artifact: true

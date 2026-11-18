@@ -19,6 +19,7 @@ on:
           - immortalwrt/immortalwrt@openwrt-23.05
           - immortalwrt/immortalwrt@openwrt-24.10
           - immortalwrt/immortalwrt@openwrt-25.12
+          - immortalwrt/immortalwrt@v25.12.2
         default: 'immortalwrt/immortalwrt@openwrt-25.12'
       source_commit:
         description: 'Optional exact upstream source commit; empty resolves the selected branch once'

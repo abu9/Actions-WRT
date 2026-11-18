@@ -55,13 +55,17 @@ jobs:
         run: |
           set -euo pipefail
 
-          case "$SOURCE_BRANCH" in
-            openwrt/openwrt@main|coolsnowwolf/lede@master|immortalwrt/immortalwrt@openwrt-23.05|immortalwrt/immortalwrt@openwrt-24.10|immortalwrt/immortalwrt@openwrt-25.12) ;;
-            *)
-              echo "Unsupported source_branch: $SOURCE_BRANCH" >&2
-              exit 1
-              ;;
-          esac
+          if [[ "$SOURCE_BRANCH" =~ ^immortalwrt/immortalwrt@v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            :
+          else
+            case "$SOURCE_BRANCH" in
+              openwrt/openwrt@main|coolsnowwolf/lede@master|immortalwrt/immortalwrt@openwrt-23.05|immortalwrt/immortalwrt@openwrt-24.10|immortalwrt/immortalwrt@openwrt-25.12) ;;
+              *)
+                echo "Unsupported source_branch: $SOURCE_BRANCH" >&2
+                exit 1
+                ;;
+            esac
+          fi
 
           if [[ -n "$SOURCE_COMMIT" && ! "$SOURCE_COMMIT" =~ ^[[:xdigit:]]{40}$ ]]; then
             echo "source_commit must be an exact 40-character Git commit SHA." >&2
