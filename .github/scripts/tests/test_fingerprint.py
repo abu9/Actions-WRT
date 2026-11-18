@@ -1027,8 +1027,15 @@ class ReleaseIndexVerifierTests(unittest.TestCase):
             if lines[index].startswith("      - name: ")
         )
         download_step = lines[download_start:download_end]
-        self.assertIn("set -euo pipefail", download_step)
-        self.assertIn('shell: su buildbot -c "bash --noprofile --norc -eo pipefail {0}"', download_step)
+        self.assertTrue(
+            any(line.strip() == "set -euo pipefail" for line in download_step)
+        )
+        self.assertTrue(
+            any(
+                line.strip() == 'shell: su buildbot -c "bash --noprofile --norc -eo pipefail {0}"'
+                for line in download_step
+            )
+        )
         self.assertNotIn('CHECKSUM="$(awk', self.workflow)
 
     def test_toolchain_install_stage_is_unconditional_like_upstream(self) -> None:
