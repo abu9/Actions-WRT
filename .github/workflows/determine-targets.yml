@@ -120,15 +120,16 @@ jobs:
           cp -f -- "$CONFIG_NAME" openwrt/.config
           cd openwrt
           make defconfig
-          eval "$(grep \
-                    -e ^CONFIG_TARGET_BOARD= \
-                    -e ^CONFIG_TARGET_SUBTARGET= \
-                    -e ^CONFIG_ARCH= \
-                    .config 2>/dev/null \
-            )"
+          CONFIG_TARGET_BOARD="$(sed -n 's/^CONFIG_TARGET_BOARD="\\([^"]*\\)"$/\\1/p' .config)"
+          CONFIG_TARGET_SUBTARGET="$(sed -n 's/^CONFIG_TARGET_SUBTARGET="\\([^"]*\\)"$/\\1/p' .config)"
+          CONFIG_ARCH="$(sed -n 's/^CONFIG_ARCH="\\([^"]*\\)"$/\\1/p' .config)"
           TARGET=${TARGET:-$CONFIG_TARGET_BOARD}
           SUBTARGET=${SUBTARGET:-$CONFIG_TARGET_SUBTARGET}
           ARCH=${ARCH:-$CONFIG_ARCH}
+          [[ -n "$TARGET" && -n "$SUBTARGET" && -n "$ARCH" ]] || {
+            echo "Unable to resolve target, subtarget, and architecture from .config." >&2
+            exit 1
+          }
           SOURCE_COMMIT="$(git rev-parse HEAD)"
           [[ -n ${SOURCE_COMMIT} ]] && echo "source_commit=$SOURCE_COMMIT" >> "${GITHUB_OUTPUT}"
           [[ -n ${TARGET} ]] && echo "target=$TARGET" >> ${GITHUB_OUTPUT}
