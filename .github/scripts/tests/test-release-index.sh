@@ -205,7 +205,7 @@ STUB
   chmod +x "$dir/staging_dir/host/bin/usign"
   USIGN_CAPTURE="$capture" run_verify "$dir" immortalwrt "$key" '' "$PATH"
   local expected
-  printf '%s\\n' -V -m "$dir/sha256sums" -p "$key" -x "$dir/sha256sums.sig" > "$TEST_ROOT/expected"
+  printf '%s\n' -V -m "$dir/sha256sums" -p "$key" -x "$dir/sha256sums.sig" > "$TEST_ROOT/expected"
   diff -u "$TEST_ROOT/expected" "$capture" || fail 'usign arguments changed'
 }
 test_fake_gpg_imports_official_keys_and_verifies_files(){
