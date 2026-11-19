@@ -240,12 +240,11 @@ jobs:
       - name: Download and check packages
         if: inputs.build_all_modules == true || inputs.build_all_kmods == true || inputs.build_full == true
         env:
-          EVENT_NAME: ${{ github.event_name }}
           CHECK_PACKAGES_LIST: ${{ inputs.check_packages_list }}
         shell: su buildbot -c "bash --noprofile --norc -eo pipefail {0}"
         working-directory: openwrt
         run: |
-          if [ "$EVENT_NAME" = "push" ] || [ "$CHECK_PACKAGES_LIST" = "all" ]; then
+          if [ "$CHECK_PACKAGES_LIST" = "all" ]; then
             make package/download package/check FIXUP=1 -j"$(nproc)" BUILD_LOG=1 || { ret=$?; bash ../.github/scripts/show_build_failures.sh; exit "$ret"; }
           elif [ -n "$CHECK_PACKAGES_LIST" ]; then
             read -r -a packages <<< "$CHECK_PACKAGES_LIST"
