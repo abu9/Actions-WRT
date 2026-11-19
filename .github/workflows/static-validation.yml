@@ -58,7 +58,7 @@ jobs:
           #!/usr/bin/env bash
           set -euo pipefail
           : "${GITHUB_WORKSPACE:?GITHUB_WORKSPACE was not resolved}"
-          printf '%s\\n' "$GITHUB_WORKSPACE" > "$GITHUB_WORKSPACE/observed-workspace"
+          printf '%s\n' "$GITHUB_WORKSPACE" > "$GITHUB_WORKSPACE/observed-workspace"
           FIXTURE
 
             run_script="$(extract_run "$step_name")"
