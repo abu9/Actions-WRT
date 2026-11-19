@@ -196,11 +196,11 @@ t13(){
   has "$f" 'CHECK_PACKAGES_LIST: ${{ inputs.check_packages_list }}'
   has "$f" 'read -r -a packages <<< "$CHECK_PACKAGES_LIST"'
   lacks "$f" 'for package in ${{ inputs.check_packages_list }}'
-  has "$f" 'COVERITY_API_TOKEN: ${{ secrets.coverity_api_token }}'
-  has "$f" 'read -r -a compiler_templates <<< "$COVERITY_COMPILER_TEMPLATE_LIST"'
-  has "$f" 'read -r -a coverity_check_packages <<< "$COVERITY_CHECK_PACKAGES"'
-  lacks "$f" 'coverity_check_packages=(${{ inputs.coverity_check_packages }})'
-  lacks "$f" 'for template in ${{ inputs.coverity_compiler_template_list }}'
+  lacks "$f" 'coverity_api_token'
+  lacks "$f" 'coverity_check_packages'
+  lacks "$f" 'coverity_compiler_template_list'
+  lacks "$f" 'scan.coverity.com'
+  lacks "$f" 'cov-build'
 }
 t15(){
   local b="$WF/build.yml" p="$WF/push-containers.yml" r="$WF/reusable_build.yml"
