@@ -100,20 +100,20 @@ t06(){
   has "$p" 'jobs.determine_container_info.outputs.source_commit'
 }
 t07(){
-  local b="$WF/build.yml" d="$WF/dummy-build-integration-test.yml" r="$WF/reusable_build.yml" dollar='$'
-  has "$b" 'TAG="$AUTHOR"_"$REPO_BRANCH-$EXPECTED_FINGERPRINT"'
-  has "$d" 'TOOLS_TAG="${AUTHOR}_${REPO_BRANCH}-${TOOLS_FINGERPRINT}-dummy-${GITHUB_RUN_ID}"'
-  has "$b" 'TAG="$TARGET-$SUBTARGET-$AUTHOR"_"$REPO_BRANCH-${FINGERPRINT:0:32}"'
-  has "$d" 'TOOLCHAIN_TAG="${TARGET}-${SUBTARGET}-${AUTHOR}_${REPO_BRANCH}-${TOOLCHAIN_FINGERPRINT:0:32}-dummy-${GITHUB_RUN_ID}"'
-  has "$b" '200) echo "tools_required=false"'; has "$b" '*) echo "tools_required=true"'
-  has "$d" '200) TOOLS_REQUIRED=false'; has "$d" '*) TOOLS_REQUIRED=true'
-  has "$b" '200) echo "use_toolchain=true"'; has "$b" '*) echo "use_toolchain=false"'
-  has "$d" '200) USE_TOOLCHAIN=true'; has "$d" '*) USE_TOOLCHAIN=false'
-  has "$d" 'container_name: ${{ needs.verify_fixture_cache_hit.outputs.selected_container }}'
-  has "$d" 'dummy_toolchain_image_consumer:'
-  has "$b" "container_name: ${dollar}{{ (inputs.build_toolchain == true && needs.check_toolchain_container.outputs.use_toolchain == 'true') && 'toolchain' || 'tools' }}"
-  has "$d" 'build_toolchain: true'
-  has "$r" 'CONTAINER_TAG="${CONTAINER_TAG}-dummy-${GITHUB_RUN_ID}"'
+  local b="$WF/build.yml" r="$WF/reusable_build.yml" rt="$WF/reusable_build_tools.yml"
+  local p="$WF/push-containers.yml" f="$WF/fingerprint.yml" v="$WF/static-validation.yml"
+  lacks "$b" 'test_fingerprints:'
+  lacks "$b" 'test-workflows.sh'
+  lacks "$b" 'validate_only'
+  for workflow in "$r" "$rt" "$p" "$f"; do
+    lacks "$workflow" 'dummy_mode'
+    lacks "$workflow" 'DUMMY_MODE'
+    lacks "$workflow" 'TEST ONLY'
+    lacks "$workflow" 'test_expected_toolchain_type'
+  done
+  has "$v" '.github/scripts/tests/test-workflows.sh'
+  has "$v" '.github/scripts/tests/test-release-index.sh'
+  [[ ! -e "$WF/dummy-build-integration-test.yml" ]] || { echo 'obsolete dummy integration workflow remains' >&2; return 1; }
 }
 t08(){
   local b="$WF/build.yml" p="$WF/push-containers.yml" s
@@ -197,7 +197,7 @@ run 'ccache restore policy' t03
 run 'upstream prebuilt-tools refresh' t04
 run 'GHCR status classification' t05
 run 'resolved build-input reuse' t06
-run 'dummy fixture cache contract' t07
+run 'production/test workflow separation' t07
 run 'Host Tools readiness ownership' t08
 run 'target config parsing' t09
 run 'rev-parse failure propagation' t10
