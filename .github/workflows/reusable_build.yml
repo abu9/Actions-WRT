@@ -90,14 +90,6 @@ on:
         description: 'Use the same-run Host Tools artifact instead of a published tools image'
         type: boolean
         default: false
-      dummy_mode:
-        description: 'Generate dummy build artifacts and skip compilation'
-        type: boolean
-        default: false
-      test_expected_toolchain_type:
-        description: 'TEST ONLY: require and select an official external_toolchain or external_sdk release archive'
-        type: string
-        default: ''
       toolchain_fingerprint:
         description: 'Full verified target Toolchain content fingerprint'
         type: string
@@ -179,8 +171,6 @@ jobs:
           REQUESTED_CONTAINER: ${{ inputs.container_name }}
           TOOLS_FINGERPRINT: ${{ inputs.tools_fingerprint }}
           TOOLCHAIN_FINGERPRINT: ${{ inputs.toolchain_fingerprint }}
-          DUMMY_MODE: ${{ inputs.dummy_mode }}
-          USE_PREBUILT_TOOLS_ARTIFACT: ${{ inputs.use_prebuilt_tools_artifact }}
         shell: bash
         run: |
           CONTAINER_NAME="$REQUESTED_CONTAINER"
@@ -209,11 +199,6 @@ jobs:
             CONTAINER_TAG="${CONTAINER_TAG}-${TOOLS_FINGERPRINT}"
           fi
 
-          # Dummy-mode consumers of published fixture images use run-isolated tags.
-          # Normal production builds and same-run prebuilt-artifact consumers are unchanged.
-          if [ "$DUMMY_MODE" = "true" ] && [ "$USE_PREBUILT_TOOLS_ARTIFACT" != "true" ]; then
-            CONTAINER_TAG="${CONTAINER_TAG}-dummy-${GITHUB_RUN_ID}"
-          fi
 
           echo "Container to use: $CONTAINER_NAME:$CONTAINER_TAG"
           echo "container_tag=$CONTAINER_TAG" >> "$GITHUB_OUTPUT"
@@ -258,7 +243,7 @@ jobs:
   check:
     name: Check packages for ${{ inputs.target }}/${{ inputs.subtarget }}
     needs: setup_build
-    if: inputs.dummy_mode != true && inputs.check == true && ( github.event_name == 'push' || inputs.check_packages_list != '' )
+    if: inputs.check == true && ( github.event_name == 'push' || inputs.check_packages_list != '' )
     runs-on: ubuntu-24.04
 
     container: ghcr.io/${{ needs.setup_build.outputs.container }}
@@ -428,8 +413,6 @@ jobs:
         env:
           TARGET: ${{ inputs.target }}
           SUBTARGET: ${{ inputs.subtarget }}
-          DUMMY_MODE: ${{ inputs.dummy_mode }}
-          EXPECTED_TOOLCHAIN_TYPE: ${{ inputs.test_expected_toolchain_type }}
         shell: bash
         run: |
           set -eo pipefail
@@ -523,35 +506,7 @@ jobs:
             exit 1
           fi
 
-          if [ -n "$EXPECTED_TOOLCHAIN_TYPE" ]; then
-            if [ "$DUMMY_MODE" != "true" ]; then
-              echo "TEST ONLY: expected external archive selection requires dummy_mode=true." >&2
-              exit 1
-            fi
-            case "$EXPECTED_TOOLCHAIN_TYPE" in
-              external_toolchain)
-                if [ -z "$TOOLCHAIN_ARCHIVE" ]; then
-                  echo "Expected a fixed-release external Toolchain archive, but none was found." >&2
-                  exit 1
-                fi
-                TOOLCHAIN_FILE="$(basename "$TOOLCHAIN_ARCHIVE" | sed -E 's/\.tar\.(zst|xz)$//')"
-                TOOLCHAIN_TYPE="external_toolchain"
-                ;;
-              external_sdk)
-                if [ -z "$SDK_ARCHIVE" ]; then
-                  echo "Expected a fixed-release SDK archive, but none was found." >&2
-                  exit 1
-                fi
-                TOOLCHAIN_ARCHIVE="$SDK_ARCHIVE"
-                TOOLCHAIN_FILE="$(basename "$SDK_ARCHIVE" | sed -E 's/\.tar\.(zst|xz)$//')"
-                TOOLCHAIN_TYPE="external_sdk"
-                ;;
-              *)
-                echo "Unsupported TEST ONLY expected toolchain type: $EXPECTED_TOOLCHAIN_TYPE" >&2
-                exit 1
-                ;;
-            esac
-          elif [ -n "$TOOLCHAIN_ARCHIVE" ]; then
+          if [ -n "$TOOLCHAIN_ARCHIVE" ]; then
             TOOLCHAIN_FILE="$(basename "$TOOLCHAIN_ARCHIVE" | sed -E 's/\.tar\.(zst|xz)$//')"
             TOOLCHAIN_TYPE="external_toolchain"
           elif [ -n "$SDK_ARCHIVE" ]; then
@@ -679,7 +634,7 @@ jobs:
         run: chown -R buildbot:buildbot .
 
       - name: Prepare prebuilt tools
-        if: inputs.dummy_mode != true || inputs.use_prebuilt_tools_artifact == true || inputs.container_name == 'toolchain'
+        if: inputs.use_prebuilt_tools_artifact == true || inputs.container_name == 'toolchain'
         shell: su buildbot -c "sh -e {0}"
         working-directory: openwrt
         run: |
@@ -692,12 +647,11 @@ jobs:
           test -d build_dir/host
 
       - name: Refresh upstream external tools
-        if: inputs.dummy_mode != true
         shell: su buildbot -c "sh -e {0}"
         working-directory: openwrt
         run: ./scripts/ext-tools.sh --refresh
       - name: Prepare custom scripts
-        if: inputs.dummy_mode != true && inputs.build_full == true
+        if: inputs.build_full == true
         shell: su buildbot -c "sh -e {0}"
         run: |
           if [ -d "files" ]; then
@@ -707,7 +661,7 @@ jobs:
 
 
       - name: Load pre-custom script
-        if: inputs.dummy_mode != true && inputs.build_full == true
+        if: inputs.build_full == true
         shell: su buildbot -c "bash --noprofile --norc -eo pipefail {0}"
         working-directory: openwrt
         env:
@@ -721,7 +675,7 @@ jobs:
 
 
       - name: Update & Install feeds
-        if: inputs.dummy_mode != true && inputs.build_full == true
+        if: inputs.build_full == true
         shell: su buildbot -c "sh -e {0}"
         working-directory: openwrt
         run: |
@@ -731,7 +685,7 @@ jobs:
 
       - name: Restore ccache cache
         id: restore-ccache-cache
-        if: inputs.dummy_mode != true && inputs.use_ccache_cache == true
+        if: inputs.use_ccache_cache == true
         uses: actions/cache/restore@v6.1.0
         with:
           path: openwrt/.ccache
@@ -742,26 +696,6 @@ jobs:
             ccache-${{ inputs.ccache_type }}-${{ inputs.target }}-${{ inputs.subtarget }}-
             ccache-${{ inputs.ccache_type }}-
 
-      - name: Install pinned CMake for dummy release verification
-        if: inputs.dummy_mode == true && inputs.build_toolchain == false && (steps.parse-toolchain.outputs.toolchain-type == 'external_toolchain' || steps.parse-toolchain.outputs.toolchain-type == 'external_sdk')
-        shell: bash
-        run: |
-          if command -v cmake >/dev/null 2>&1; then
-            exit 0
-          fi
-
-          CMAKE_VERSION='3.31.8'
-          CMAKE_ARCHIVE="cmake-$CMAKE_VERSION-linux-x86_64.tar.gz"
-          CMAKE_URL="https://github.com/Kitware/CMake/releases/download/v$CMAKE_VERSION/$CMAKE_ARCHIVE"
-          CMAKE_SHA256='630615d8e98ac33eba7fbe472626dff5c899c85af3c024585ae109166a6909d0'
-          CMAKE_DIR="$RUNNER_TEMP/cmake-$CMAKE_VERSION-linux-x86_64"
-
-          curl --fail --silent --show-error --location --retry 3 "$CMAKE_URL" -o "$RUNNER_TEMP/$CMAKE_ARCHIVE"
-          printf '%s  %s\n' "$CMAKE_SHA256" "$RUNNER_TEMP/$CMAKE_ARCHIVE" | sha256sum --check --strict
-          tar -xzf "$RUNNER_TEMP/$CMAKE_ARCHIVE" -C "$RUNNER_TEMP"
-          test -x "$CMAKE_DIR/bin/cmake"
-          printf '%s\n' "$CMAKE_DIR/bin" >> "$GITHUB_PATH"
-          rm -f "$RUNNER_TEMP/$CMAKE_ARCHIVE"
       - name: Prepare usign host verifier
         if: inputs.build_toolchain == false && (steps.parse-toolchain.outputs.toolchain-type == 'external_toolchain' || steps.parse-toolchain.outputs.toolchain-type == 'external_sdk')
         shell: su buildbot -c "sh -e {0}"
@@ -769,7 +703,7 @@ jobs:
         env:
           TARGET: ${{ inputs.target }}
           SUBTARGET: ${{ inputs.subtarget }}
-          HOST_USE_NINJA: ${{ inputs.dummy_mode == true && '0' || '1' }}
+          HOST_USE_NINJA: '1'
         run: |
           set -e
           # OpenWrt's config tools require a usable terminal type when
@@ -878,7 +812,7 @@ jobs:
 
 
       - name: Load post-custom script
-        if: inputs.dummy_mode != true && inputs.build_full == true
+        if: inputs.build_full == true
         shell: su buildbot -c "bash --noprofile --norc -eo pipefail {0}"
         working-directory: openwrt
         env:
@@ -942,7 +876,7 @@ jobs:
         # option error.
         # To fix this force compiler type to gcc.
       - name: Configure ccache and apply fixes
-        if: inputs.dummy_mode != true && inputs.use_ccache_cache == true
+        if: inputs.use_ccache_cache == true
         shell: su buildbot -c "sh -e {0}"
         working-directory: openwrt
         env:
@@ -1107,7 +1041,6 @@ jobs:
 
 
       - name: Build tools
-        if: inputs.dummy_mode != true
         shell: su buildbot -c "sh -e {0}"
         working-directory: openwrt
         run: |
@@ -1116,34 +1049,15 @@ jobs:
 
       - name: Build toolchain
         env:
-          DUMMY_MODE: ${{ inputs.dummy_mode }}
           INPUTS_BUILD_TOOLCHAIN: ${{ inputs.build_toolchain }}
           TOOLCHAIN_TYPE: ${{ steps.parse-toolchain.outputs.toolchain-type }}
         shell: su buildbot -c "sh -e {0}"
         working-directory: openwrt
         run: |
-          if [ "$DUMMY_MODE" = "true" ]; then
-            echo "Dummy mode: skipping make toolchain/install; fixture results are generated separately."
-          elif [ "$INPUTS_BUILD_TOOLCHAIN" = "true" ] || [ "$TOOLCHAIN_TYPE" = "internal" ]; then
+          if [ "$INPUTS_BUILD_TOOLCHAIN" = "true" ] || [ "$TOOLCHAIN_TYPE" = "internal" ]; then
             make toolchain/install -j"$(nproc)" BUILD_LOG=1 || { ret=$?; bash ../.github/scripts/show_build_failures.sh; exit "$ret"; }
           fi
 
-
-      - name: Create dummy external toolchain archive
-        if: inputs.dummy_mode == true && inputs.upload_external_toolchain == true
-        working-directory: openwrt
-        env:
-          TARGET: ${{ inputs.target }}
-          SUBTARGET: ${{ inputs.subtarget }}
-        shell: su buildbot -c "sh -e {0}"
-        run: |
-          set -e
-          archive_dir="bin/targets/$TARGET/$SUBTARGET"
-          fixture_dir="$(mktemp -d)"
-          trap 'rm -rf "$fixture_dir"' EXIT
-          mkdir -p "$archive_dir" "$fixture_dir/dummy-toolchain"
-          printf '%s\n' 'Actions-WRT dummy external toolchain fixture; not a compiler toolchain.' > "$fixture_dir/dummy-toolchain/README.txt"
-          tar -czf "$archive_dir/actions-wrt-dummy-toolchain.tar.gz" -C "$fixture_dir" dummy-toolchain
 
       - name: Setup Debug Session
         if: inputs.debug == true
@@ -1152,7 +1066,7 @@ jobs:
           limit-access-to-actor: true
 
       - name: Build Kernel
-        if: inputs.dummy_mode != true && inputs.build_kernel == true
+        if: inputs.build_kernel == true
         shell: su buildbot -c "sh -e {0}"
         working-directory: openwrt
         run: |
@@ -1160,14 +1074,14 @@ jobs:
 
 
       - name: Save ccache kernel cache
-        if: inputs.dummy_mode != true && inputs.use_ccache_cache == true && inputs.build_kernel == true
+        if: inputs.use_ccache_cache == true && inputs.build_kernel == true
         uses: actions/cache/save@v6.1.0
         with:
           path: openwrt/.ccache
           key: ccache-kernel-${{ needs.setup_build.outputs.ccache_tag}}-${{ hashFiles('openwrt/include/kernel-**') }}
 
       - name: Build Kernel Kmods
-        if: inputs.dummy_mode != true && inputs.build_kernel == true
+        if: inputs.build_kernel == true
         shell: su buildbot -c "sh -e {0}"
         working-directory: openwrt
         run: |
@@ -1175,7 +1089,7 @@ jobs:
 
 
       - name: Build DTBs
-        if: inputs.dummy_mode != true && inputs.build_dtb == true
+        if: inputs.build_dtb == true
         shell: su buildbot -c "bash --noprofile --norc -eo pipefail {0}"
         working-directory: openwrt
         run: |
@@ -1207,7 +1121,7 @@ jobs:
 
 
       - name: Build everything
-        if: inputs.dummy_mode != true && inputs.build_full == true
+        if: inputs.build_full == true
         shell: su buildbot -c "sh -e {0}"
         working-directory: openwrt
         run: |
@@ -1215,7 +1129,7 @@ jobs:
 
 
       - name: Build external toolchain
-        if: inputs.dummy_mode != true && inputs.build_external_toolchain == true
+        if: inputs.build_external_toolchain == true
         shell: su buildbot -c "sh -e {0}"
         working-directory: openwrt
         run: |
@@ -1223,7 +1137,7 @@ jobs:
 
 
       - name: Coverity prepare toolchain
-        if: inputs.dummy_mode != true && inputs.coverity_check_packages != ''
+        if: inputs.coverity_check_packages != ''
         env:
           COVERITY_API_TOKEN: ${{ secrets.coverity_api_token }}
           COVERITY_PROJECT_NAME: ${{ inputs.coverity_project_name }}
@@ -1251,7 +1165,7 @@ jobs:
 
 
       - name: Clean and recompile packages with Coverity toolchain
-        if: inputs.dummy_mode != true && inputs.coverity_check_packages != ''
+        if: inputs.coverity_check_packages != ''
         env:
           COVERITY_CHECK_PACKAGES: ${{ inputs.coverity_check_packages }}
           COVERITY_FORCE_COMPILE_PACKAGES: ${{ inputs.coverity_force_compile_packages }}
@@ -1291,7 +1205,7 @@ jobs:
 
 
       - name: Upload build to Coverity for analysis
-        if: inputs.dummy_mode != true && inputs.coverity_check_packages != ''
+        if: inputs.coverity_check_packages != ''
         env:
           COVERITY_API_TOKEN: ${{ secrets.coverity_api_token }}
           COVERITY_PROJECT_NAME: ${{ inputs.coverity_project_name }}
@@ -1323,7 +1237,7 @@ jobs:
         run: rm -rf dl build_dir staging_dir
 
       - name: Delete already present ccache cache
-        if: inputs.dummy_mode != true && steps.restore-ccache-cache.outputs.cache-hit == 'true' && inputs.use_ccache_cache == true
+        if: steps.restore-ccache-cache.outputs.cache-hit == 'true' && inputs.use_ccache_cache == true
         uses: octokit/request-action@b91aabaa861c777dcdb14e2387e30eddf04619ae # v3.0.0
         with:
           route: DELETE /repos/{repository}/actions/caches?key={key}
@@ -1333,14 +1247,14 @@ jobs:
           INPUT_KEY: ${{ steps.restore-ccache-cache.outputs.cache-primary-key }}
 
       - name: Save ccache cache
-        if: inputs.dummy_mode != true && inputs.use_ccache_cache == true
+        if: inputs.use_ccache_cache == true
         uses: actions/cache/save@v6.1.0
         with:
           path: openwrt/.ccache
           key: ${{ steps.restore-ccache-cache.outputs.cache-primary-key }}
 
       - name: Archive ccache
-        if: inputs.dummy_mode != true && inputs.use_ccache_cache == true && inputs.upload_ccache_cache == true
+        if: inputs.use_ccache_cache == true && inputs.upload_ccache_cache == true
         shell: su buildbot -c "sh -e {0}"
         working-directory: openwrt
         run: |
@@ -1348,7 +1262,7 @@ jobs:
 
 
       - name: Upload ccache cache
-        if: inputs.dummy_mode != true && inputs.use_ccache_cache == true && inputs.upload_ccache_cache == true
+        if: inputs.use_ccache_cache == true && inputs.upload_ccache_cache == true
         uses: actions/upload-artifact@v7.0.2
         with:
           name: ${{ inputs.target }}-${{ inputs.subtarget }}${{ inputs.testing == true && '-testing' || '' }}-ccache-cache
@@ -1382,30 +1296,6 @@ jobs:
           name: ${{ inputs.target }}-${{ inputs.subtarget }}-external-toolchain
           path: |
             openwrt/${{ steps.get-toolchain-file.outputs.toolchain-file }}
-
-      - name: Create dummy firmware fixture
-        if: inputs.dummy_mode == true && inputs.build_full == true
-        working-directory: openwrt
-        env:
-          TARGET: ${{ inputs.target }}
-          SUBTARGET: ${{ inputs.subtarget }}
-          SOURCE_COMMIT: ${{ inputs.repo_commit }}
-          DEVICE_NAME: ${{ needs.setup_build.outputs.device_name }}
-          FILE_DATE: ${{ needs.setup_build.outputs.file_date }}
-        shell: su buildbot -c "sh -e {0}"
-        run: |
-          set -e
-          test "$DEVICE_NAME" = "qihoo_360t7-ubi"
-          test -n "$FILE_DATE"
-          fixture_dir="bin/targets/$TARGET/$SUBTARGET"
-          mkdir -p "$fixture_dir"
-          fixture_file="$fixture_dir/ACTIONS-WRT-DUMMY-NOT-FLASHABLE.txt"
-          printf '%s\n' \
-            'TEST FIXTURE ONLY: this is not a firmware image and must never be flashed.' \
-            "Target: $TARGET/$SUBTARGET" \
-            "Device: $DEVICE_NAME" \
-            "Source commit: $SOURCE_COMMIT" > "$fixture_file"
-          test -s "$fixture_file"
 
       - name: Upload Firmware
         if: inputs.build_full == true
