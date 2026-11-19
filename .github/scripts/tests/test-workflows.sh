@@ -169,7 +169,7 @@ t12(){
   has "$f" "steps.parse-toolchain.outputs.toolchain-type == 'external_container'"
   has "$f" "steps.parse-toolchain.outputs.toolchain-type == 'external_toolchain'"
   has "$f" "steps.parse-toolchain.outputs.toolchain-type == 'external_sdk'"
-  block="$(sed -n '/- name: Configure external toolchain$/,/^- name: Configure internal toolchain$/p' "$f")"
+  block="$(sed -n '/^      - name: Configure external toolchain$/,/^      - name: Configure internal toolchain$/p' "$f")"
   has <(printf '%s\n' "$block") 'case "$TOOLCHAIN_TYPE" in'
   has <(printf '%s\n' "$block") 'TOOLCHAIN_PARENT="$TOOLCHAIN_FILE"'
   has <(printf '%s\n' "$block") 'TOOLCHAIN_PARENT="$TOOLCHAIN_FILE/staging_dir"'
