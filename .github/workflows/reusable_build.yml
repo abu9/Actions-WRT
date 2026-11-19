@@ -694,6 +694,7 @@ jobs:
         env:
           TARGET: ${{ inputs.target }}
           SUBTARGET: ${{ inputs.subtarget }}
+          HOST_USE_NINJA: ${{ inputs.dummy_mode == true && '0' || '1' }}
         run: |
           set -e
           # OpenWrt's config tools require a usable terminal type when
@@ -708,7 +709,7 @@ jobs:
             echo "CONFIG_TARGET_${TARGET}=y" >> .config
             echo "CONFIG_TARGET_${TARGET}_${SUBTARGET}=y" >> .config
             make defconfig
-            make package/system/usign/host/compile -j"$(nproc)" BUILD_LOG=1 || {
+            make HOST_USE_NINJA="$HOST_USE_NINJA" package/system/usign/host/compile -j"$(nproc)" BUILD_LOG=1 || {
               ret=$?
               bash ../.github/scripts/show_build_failures.sh
               exit "$ret"
