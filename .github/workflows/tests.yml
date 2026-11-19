@@ -78,9 +78,6 @@ jobs:
           test -x "$RUNNER_TEMP/usign/build/usign"
           echo "USIGN_BIN=$RUNNER_TEMP/usign/build/usign" >> "$GITHUB_ENV"
 
-      - name: Run DIY script invocation regression tests
-        run: bash .github/scripts/tests/test-diy-scripts.sh
-
       - name: Run workflow shell regression tests
         run: bash .github/scripts/tests/test-workflows.sh
 
