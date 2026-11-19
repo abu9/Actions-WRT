@@ -41,6 +41,16 @@ on:
         type: boolean
         default: false
   workflow_call:
+    outputs:
+      tools_fingerprint:
+        description: 'Resolved generic Host Tools fingerprint'
+        value: ${{ jobs.compute-tools-fingerprint.outputs.tools_fingerprint }}
+      toolchain_fingerprint:
+        description: 'Resolved target Toolchain fingerprint'
+        value: ${{ jobs.compute-toolchain-fingerprint.outputs.toolchain_fingerprint }}
+      source_commit:
+        description: 'Exact upstream source commit resolved for this test run'
+        value: ${{ jobs.determine_targets.outputs.source_commit }}
     inputs:
       source_branch:
         required: true
@@ -75,6 +85,10 @@ on:
       tools_fingerprint:
         type: string
         default: ''
+      dummy_mode:
+        description: 'Use fixture artifacts, skip compilation, and isolate published image tags'
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -151,6 +165,7 @@ jobs:
       repo_url: ${{ inputs.repo_url || needs.determine_targets.outputs.repo_url }}
       source_commit: ${{ inputs.source_commit || needs.compute-tools-fingerprint.outputs.source_commit }}
       ccache_tag: ${{ needs.determine_container_info.outputs.container_tag }}
+      dummy_mode: ${{ inputs.dummy_mode }}
 
   push-tools-container:
     name: Push generic host-tools image
@@ -189,7 +204,7 @@ jobs:
         with:
           context: .
           push: true
-          tags: ghcr.io/${{ needs.determine_container_info.outputs.owner_lc }}/tools:${{ needs.determine_container_info.outputs.container_tag }}-${{ inputs.tools_fingerprint || needs.compute-tools-fingerprint.outputs.tools_fingerprint }}
+          tags: ghcr.io/${{ needs.determine_container_info.outputs.owner_lc }}/tools:${{ needs.determine_container_info.outputs.container_tag }}-${{ inputs.tools_fingerprint || needs.compute-tools-fingerprint.outputs.tools_fingerprint }}${{ inputs.dummy_mode == true && format('-dummy-{0}', github.run_id) || '' }}
           labels: |
             io.abu9.actions-wrt.tools-fingerprint=${{ inputs.tools_fingerprint || needs.compute-tools-fingerprint.outputs.tools_fingerprint }}
             io.abu9.actions-wrt.tools-source-commit=${{ inputs.source_commit || needs.compute-tools-fingerprint.outputs.source_commit }}
@@ -200,7 +215,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           OWNER_LC: ${{ needs.determine_container_info.outputs.owner_lc }}
-          IMAGE_TAG: ${{ needs.determine_container_info.outputs.container_tag }}-${{ inputs.tools_fingerprint || needs.compute-tools-fingerprint.outputs.tools_fingerprint }}
+          IMAGE_TAG: ${{ needs.determine_container_info.outputs.container_tag }}-${{ inputs.tools_fingerprint || needs.compute-tools-fingerprint.outputs.tools_fingerprint }}${{ inputs.dummy_mode == true && format('-dummy-{0}', github.run_id) || '' }}
         shell: bash
         run: |
           set -e
@@ -229,6 +244,7 @@ jobs:
     uses: ./.github/workflows/fingerprint.yml
     with:
       mode: toolchain
+      dummy_mode: ${{ inputs.dummy_mode }}
       repo_url: ${{ inputs.repo_url || needs.determine_targets.outputs.repo_url }}
       repo_branch: ${{ inputs.repo_branch || needs.determine_targets.outputs.repo_branch }}
       source_commit: ${{ inputs.source_commit || needs.compute-tools-fingerprint.outputs.source_commit }}
@@ -237,7 +253,8 @@ jobs:
       tools_fingerprint: ${{ inputs.tools_fingerprint || needs.compute-tools-fingerprint.outputs.tools_fingerprint }}
       tools_image: ''
       use_prebuilt_tools_artifact: true
-      use_ccache_cache: true
+      use_ccache_cache: ${{ inputs.dummy_mode != true }}
+      dummy_mode: ${{ inputs.dummy_mode }}
 
   build-target-toolchain:
     name: Build target-specific toolchain
@@ -267,10 +284,11 @@ jobs:
       container_name: tools
       build_toolchain: true
       use_prebuilt_tools_artifact: true
+      dummy_mode: ${{ inputs.dummy_mode }}
       check: false
-      use_ccache_cache: true
+      use_ccache_cache: ${{ inputs.dummy_mode != true }}
       ccache_type: toolchain
-      build_external_toolchain: true
+      build_external_toolchain: ${{ inputs.dummy_mode != true }}
       upload_external_toolchain: true
 
   push-target-toolchain:
@@ -326,7 +344,7 @@ jobs:
         with:
           context: .
           push: true
-          tags: ghcr.io/${{ needs.determine_container_info.outputs.owner_lc }}/toolchain:${{ inputs.target || needs.determine_targets.outputs.target }}-${{ inputs.subtarget || needs.determine_targets.outputs.subtarget }}-${{ needs.determine_container_info.outputs.container_tag }}-${{ needs.compute-toolchain-fingerprint.outputs.toolchain_cache_key }}
+          tags: ghcr.io/${{ needs.determine_container_info.outputs.owner_lc }}/toolchain:${{ inputs.target || needs.determine_targets.outputs.target }}-${{ inputs.subtarget || needs.determine_targets.outputs.subtarget }}-${{ needs.determine_container_info.outputs.container_tag }}-${{ needs.compute-toolchain-fingerprint.outputs.toolchain_cache_key }}${{ inputs.dummy_mode == true && format('-dummy-{0}', github.run_id) || '' }}
           file: .github/dockerfiles/Dockerfile.toolchain
           build-args: |
             TOOLS_FINGERPRINT=${{ inputs.tools_fingerprint || needs.compute-tools-fingerprint.outputs.tools_fingerprint }}
@@ -338,7 +356,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           OWNER_LC: ${{ needs.determine_container_info.outputs.owner_lc }}
-          IMAGE_TAG: ${{ inputs.target || needs.determine_targets.outputs.target }}-${{ inputs.subtarget || needs.determine_targets.outputs.subtarget }}-${{ needs.determine_container_info.outputs.container_tag }}-${{ needs.compute-toolchain-fingerprint.outputs.toolchain_cache_key }}
+          IMAGE_TAG: ${{ inputs.target || needs.determine_targets.outputs.target }}-${{ inputs.subtarget || needs.determine_targets.outputs.subtarget }}-${{ needs.determine_container_info.outputs.container_tag }}-${{ needs.compute-toolchain-fingerprint.outputs.toolchain_cache_key }}${{ inputs.dummy_mode == true && format('-dummy-{0}', github.run_id) || '' }}
         shell: bash
         run: |
           set -e
