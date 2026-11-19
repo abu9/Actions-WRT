@@ -18,8 +18,6 @@ on:
         value: ${{ jobs.determine_targets.outputs.target}}
       subtarget:
         value: ${{ jobs.determine_targets.outputs.subtarget }}
-      arch: 
-        value: ${{ jobs.determine_targets.outputs.arch }}
       repo_url: 
         value: ${{ jobs.determine_targets.outputs.repo_url }}
       repo_branch:
@@ -35,7 +33,6 @@ jobs:
     outputs:
       target: ${{ steps.get_info.outputs.target }}
       subtarget: ${{ steps.get_info.outputs.subtarget }}
-      arch: ${{ steps.get_info.outputs.arch }}
       repo_url: ${{ steps.get_repo_info.outputs.repo_url }}
       repo_branch: ${{ steps.get_repo_info.outputs.repo_branch }}
       author: ${{ steps.get_repo_info.outputs.author }}
@@ -122,11 +119,9 @@ jobs:
           make defconfig
           CONFIG_TARGET_BOARD="$(sed -n 's/^CONFIG_TARGET_BOARD="\([^"]*\)"$/\1/p' .config)"
           CONFIG_TARGET_SUBTARGET="$(sed -n 's/^CONFIG_TARGET_SUBTARGET="\([^"]*\)"$/\1/p' .config)"
-          CONFIG_ARCH="$(sed -n 's/^CONFIG_ARCH="\([^"]*\)"$/\1/p' .config)"
-          TARGET=${TARGET:-$CONFIG_TARGET_BOARD}
-          SUBTARGET=${SUBTARGET:-$CONFIG_TARGET_SUBTARGET}
-          ARCH=${ARCH:-$CONFIG_ARCH}
-          [[ -n "$TARGET" && -n "$SUBTARGET" && -n "$ARCH" ]] || {
+          TARGET="$CONFIG_TARGET_BOARD"
+          SUBTARGET="$CONFIG_TARGET_SUBTARGET"
+          [[ -n "$TARGET" && -n "$SUBTARGET" ]] || {
             echo "Unable to resolve target, subtarget, and architecture from .config." >&2
             exit 1
           }
@@ -141,7 +136,6 @@ jobs:
           printf 'source_commit=%s\n' "$SOURCE_COMMIT" >> "$GITHUB_OUTPUT"
           printf 'target=%s\n' "$TARGET" >> "$GITHUB_OUTPUT"
           printf 'subtarget=%s\n' "$SUBTARGET" >> "$GITHUB_OUTPUT"
-          printf 'arch=%s\n' "$ARCH" >> "$GITHUB_OUTPUT"
 
       - name: Show configuration
         if: inputs.config_name != ''
