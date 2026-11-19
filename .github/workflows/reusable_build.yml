@@ -981,22 +981,47 @@ jobs:
           done
 
 
-      - name: Configure external toolchain with sdk
-        if: inputs.build_toolchain == false && steps.parse-toolchain.outputs.toolchain-type == 'external_sdk'
+      - name: Configure external toolchain
+        if: inputs.build_toolchain == false && (steps.parse-toolchain.outputs.toolchain-type == 'external_container' || steps.parse-toolchain.outputs.toolchain-type == 'external_toolchain' || steps.parse-toolchain.outputs.toolchain-type == 'external_sdk')
         env:
           TARGET: ${{ inputs.target }}
           SUBTARGET: ${{ inputs.subtarget }}
+          TOOLCHAIN_TYPE: ${{ steps.parse-toolchain.outputs.toolchain-type }}
         shell: su buildbot -c "bash --noprofile --norc -eo pipefail {0}"
         working-directory: openwrt
         run: |
           echo CONFIG_DEVEL=y >> .config
           echo CONFIG_AUTOREMOVE=y >> .config
 
+          case "$TOOLCHAIN_TYPE" in
+            external_container)
+              mapfile -t toolchain_roots < <(
+                find -H /external-toolchain -mindepth 1 -maxdepth 1 -type d -name '*wrt-toolchain*' -print
+              )
+              if [ "${#toolchain_roots[@]}" -ne 1 ]; then
+                echo "Expected exactly one external toolchain root, found ${#toolchain_roots[@]}." >&2
+                printf '%s\n' "${toolchain_roots[@]}" >&2
+                exit 1
+              fi
+              TOOLCHAIN_PARENT="${toolchain_roots[0]}"
+              ;;
+            external_toolchain)
+              TOOLCHAIN_PARENT="$TOOLCHAIN_FILE"
+              ;;
+            external_sdk)
+              TOOLCHAIN_PARENT="$TOOLCHAIN_FILE/staging_dir"
+              ;;
+            *)
+              echo "Unsupported external toolchain type: $TOOLCHAIN_TYPE" >&2
+              exit 1
+              ;;
+          esac
+
           mapfile -t toolchain_dirs < <(
-            find -H "$TOOLCHAIN_FILE/staging_dir" -mindepth 1 -maxdepth 1 -type d -name 'toolchain-*' -print
+            find -H "$TOOLCHAIN_PARENT" -mindepth 1 -maxdepth 1 -type d -name 'toolchain-*' -print
           )
           if [ "${#toolchain_dirs[@]}" -ne 1 ]; then
-            echo "Expected exactly one SDK toolchain directory, found ${#toolchain_dirs[@]}." >&2
+            echo "Expected exactly one $TOOLCHAIN_TYPE toolchain directory, found ${#toolchain_dirs[@]}." >&2
             printf '%s\n' "${toolchain_dirs[@]}" >&2
             exit 1
           fi
