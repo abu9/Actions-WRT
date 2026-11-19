@@ -189,6 +189,18 @@ class WorkflowIntegrationTests(unittest.TestCase):
         self.assertIn("target: ${{ needs.determine_targets.outputs.target }}", build)
         self.assertIn("tools_fingerprint: ${{ needs.tools_fingerprint.outputs.tools_fingerprint }}", build)
 
+        # The reusable publisher returns the exact commit whether it resolved
+        # the target itself or received a commit from its caller.
+        self.assertIn("source_commit: ${{ steps.info.outputs.source_commit }}", push)
+        self.assertIn(
+            "SOURCE_COMMIT: ${{ inputs.source_commit || needs.determine_targets.outputs.source_commit }}",
+            push,
+        )
+        self.assertIn(
+            "jobs.determine_container_info.outputs.source_commit",
+            push,
+        )
+
     def test_host_tools_ready_uses_publisher_verification_without_duplicate_head(self) -> None:
         workflows = Path(__file__).resolve().parents[2] / "workflows"
         build = (workflows / "build.yml").read_text(encoding="utf-8")
