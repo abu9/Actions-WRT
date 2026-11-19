@@ -4,9 +4,6 @@ on:
   pull_request:
     branches:
       - main
-  push:
-    branches:
-      - preview/fingerprint-simplification
 
 concurrency:
   group: static-validation-${{ github.event.pull_request.number || github.ref }}
