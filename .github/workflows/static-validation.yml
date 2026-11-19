@@ -116,4 +116,4 @@ jobs:
         run: |
           set -eo pipefail
           actionlint -shellcheck="$RUNNER_TEMP/shellcheck-errors-only" -color .github/workflows/*.yml
-          shellcheck --severity=error .github/scripts/*.sh
+          shellcheck --severity=error .github/scripts/*.sh .github/scripts/tests/*.sh
