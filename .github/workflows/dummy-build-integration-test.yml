@@ -110,6 +110,39 @@ jobs:
             echo "selected_image=$SELECTED_IMAGE"
           } >> "$GITHUB_OUTPUT"
 
+  dummy_toolchain_image_consumer:
+    name: Verify reusable_build starts the selected Toolchain fixture image
+    needs: [determine_target, dummy_containers, verify_fixture_cache_hit]
+    permissions:
+      contents: read
+      packages: read
+      actions: write
+    uses: ./.github/workflows/reusable_build.yml
+    with:
+      target: ${{ needs.determine_target.outputs.target }}
+      subtarget: ${{ needs.determine_target.outputs.subtarget }}
+      repo_url: ${{ needs.determine_target.outputs.repo_url }}
+      repo_branch: openwrt-25.12
+      repo_commit: ${{ needs.dummy_containers.outputs.source_commit }}
+      tools_fingerprint: ${{ needs.dummy_containers.outputs.tools_fingerprint }}
+      toolchain_fingerprint: ${{ needs.dummy_containers.outputs.toolchain_fingerprint }}
+      author: ${{ needs.determine_target.outputs.author }}
+      config_name: 360t7-immortalwrt-25.12-ubi.conf
+      container_name: ${{ needs.verify_fixture_cache_hit.outputs.selected_container }}
+      build_toolchain: true
+      build_full: false
+      build_kernel: false
+      build_all_modules: false
+      build_all_kmods: false
+      build_dtb: false
+      build_all_boards: false
+      build_external_toolchain: false
+      upload_external_toolchain: false
+      use_ccache_cache: false
+      check: false
+      use_prebuilt_tools_artifact: false
+      dummy_mode: true
+
   dummy_firmware_artifact:
     name: Create and upload non-flashable firmware fixture
     needs: [determine_target, dummy_containers]
