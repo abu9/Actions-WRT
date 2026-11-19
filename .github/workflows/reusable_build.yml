@@ -631,7 +631,6 @@ jobs:
         run: chown -R buildbot:buildbot .
 
       - name: Prepare prebuilt tools
-        if: inputs.use_prebuilt_tools_artifact == true || inputs.container_name == 'toolchain'
         shell: su buildbot -c "sh -e {0}"
         working-directory: openwrt
         run: |
