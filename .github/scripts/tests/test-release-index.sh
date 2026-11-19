@@ -205,7 +205,7 @@ STUB
   chmod +x "$dir/staging_dir/host/bin/usign"
   USIGN_CAPTURE="$capture" run_verify "$dir" immortalwrt "$key" '' "$PATH"
   local expected
-  printf '%s\n' -V -m "$dir/sha256sums" -p "$key" -x "$dir/sha256sums.sig" > "$TEST_ROOT/expected"
+  printf '%s\n' -V -m sha256sums -p "$key" -x sha256sums.sig > "$TEST_ROOT/expected"
   diff -u "$TEST_ROOT/expected" "$capture" || fail 'usign arguments changed'
 }
 test_fake_gpg_imports_official_keys_and_verifies_files(){
@@ -225,8 +225,8 @@ STUB
   for name in CD54E82DADB3684D.asc 0x1D53D1877742E911.asc 626471F1.asc; do grep -Fq "$keydir/$name" "$capture" || fail "GPG key not imported: $name"; done
   grep -Fq -- '--with-fingerprint' "$capture" || fail 'GPG fingerprint output missing'
   grep -Fq -- '--verify' "$capture" || fail 'GPG detached verification missing'
-  grep -Fq "$dir/sha256sums.asc" "$capture" || fail 'GPG signature path missing'
-  grep -Fq "$dir/sha256sums" "$capture" || fail 'GPG checksum path missing'
+  grep -Fq sha256sums.asc "$capture" || fail 'GPG signature path missing'
+  grep -Fq sha256sums "$capture" || fail 'GPG checksum path missing'
 }
 run_test 'OpenWrt official keyring resolution' test_resolve_openwrt_keyring
 run_test 'ImmortalWrt source-selected official usign key' test_resolve_immortalwrt_key
