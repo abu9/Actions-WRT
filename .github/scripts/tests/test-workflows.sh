@@ -204,6 +204,8 @@ t13(){
 }
 t15(){
   local b="$WF/build.yml" p="$WF/push-containers.yml" r="$WF/reusable_build.yml"
+  lacks "$b" "github.event_name == 'push'"
+  lacks "$b" "github.event_name != 'push'"
   has "$b" 'TAG="$AUTHOR"_"$REPO_BRANCH-$EXPECTED_FINGERPRINT"'
   has "$b" 'TAG="$TARGET-$SUBTARGET-$AUTHOR"_"$REPO_BRANCH-${FINGERPRINT:0:32}"'
   has "$b" 'image=ghcr.io/$OWNER_LC/toolchain:$TAG'
