@@ -4,6 +4,9 @@ on:
   pull_request:
     branches:
       - main
+  push:
+    branches:
+      - preview/fingerprint-simplification
 
 concurrency:
   group: static-validation-${{ github.event.pull_request.number || github.ref }}
@@ -72,3 +75,18 @@ jobs:
           set -eo pipefail
           actionlint -shellcheck="$RUNNER_TEMP/shellcheck-errors-only" -color .github/workflows/*.yml
           shellcheck --severity=error .github/scripts/*.sh
+
+  python-regression:
+    name: Run build-free Python regression tests
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7.0.1
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.x'
+
+      - name: Run regression tests
+        run: python -m unittest discover -s .github/scripts/tests -p 'test_*.py' -v
