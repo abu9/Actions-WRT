@@ -91,8 +91,6 @@ case "$command" in
 
     if [[ -n "$github_env" ]]; then
       {
-        printf 'KEYRING_DIR=%s\n' "$keyring_dir"
-        printf 'KEYRING_COMMIT=%s\n' "$keyring_commit"
         printf 'KEYRING_USIGN_KEY=%s\n' "$usign_public_key"
         printf 'KEYRING_GPG_DIR=%s\n' "$gpg_keyring_dir"
       } >> "$github_env"
