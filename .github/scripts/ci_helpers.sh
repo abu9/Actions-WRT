@@ -1,7 +1,7 @@
 #!/bin/sh
 
 color_out() {
-	printf "\e[0;$1m$PKG_NAME: %s\e[0;0m\n" "$2"
+	printf '\e[0;%sm%s: %s\e[0;0m\n' "$1" "${PKG_NAME:-CI}" "$2"
 }
 
 success() {
