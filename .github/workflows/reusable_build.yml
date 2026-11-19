@@ -12,9 +12,10 @@ on:
         value: ${{ jobs.build.outputs.push}}
     
     inputs:
-      container_name:
+      container_image:
+        description: 'Exact verified container image reference selected by the calling workflow'
+        required: true
         type: string
-        default: tools
       target:
         required: true
         type: string
@@ -35,9 +36,6 @@ on:
         type: boolean
       build_all_boards:
         type: boolean
-      use_openwrt_container:
-        type: boolean
-        # default: true
       coverity_project_name:
         type: string
         default: OpenWrt
@@ -81,17 +79,10 @@ on:
       repo_commit:
         type: string
         default: ''
-      tools_fingerprint:
-        type: string
-        default: ''
       use_prebuilt_tools_artifact:
         description: 'Use the same-run Host Tools artifact instead of a published tools image'
         type: boolean
         default: false
-      toolchain_fingerprint:
-        description: 'Full verified target Toolchain content fingerprint'
-        type: string
-        default: ''
       author:
         required: true
         type: string
@@ -112,9 +103,9 @@ jobs:
     name: Set up build ${{ inputs.target }}/${{ inputs.subtarget }}
     runs-on: ubuntu-24.04
     outputs:
-      container: ${{ steps.determine_container.outputs.container }}
-      ccache_tag: ${{ steps.determine_container_name.outputs.ccache_tag }}
-      ccache_name: ${{ steps.determine_container_name.outputs.ccache_name }}      
+      container: ${{ inputs.container_image }}
+      ccache_tag: ${{ steps.determine_ccache_info.outputs.ccache_tag }}
+      ccache_name: ${{ steps.determine_ccache_info.outputs.ccache_name }}      
       device_name: ${{ steps.get_info.outputs.device_name }}
       file_date: ${{ steps.get_info.outputs.file_date }}
 
@@ -141,74 +132,19 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v7.0.1
 
-      - name: Determine container name
-        id: determine_container_name
+      - name: Determine ccache info
+        id: determine_ccache_info
         env:
           TARGET: ${{ inputs.target }}
           SUBTARGET: ${{ inputs.subtarget }}
           AUTHOR: ${{ inputs.author }}
           REPO_BRANCH: ${{ inputs.repo_branch }}
-          REQUESTED_CONTAINER: ${{ inputs.container_name }}
-          TOOLS_FINGERPRINT: ${{ inputs.tools_fingerprint }}
-          TOOLCHAIN_FINGERPRINT: ${{ inputs.toolchain_fingerprint }}
           CCACHE_TYPE: ${{ inputs.ccache_type }}
         shell: bash
         run: |
-          CONTAINER_NAME="$REQUESTED_CONTAINER"
-          CONTAINER_TAG="${AUTHOR}_${REPO_BRANCH}"
-
-          # Include target/subtarget so same-branch caches from other devices
-          # cannot outrank same-target fallback caches.
-          CCACHE_TAG="$TARGET-$SUBTARGET-$CONTAINER_TAG"
-
-          if [ "$CONTAINER_NAME" = "toolchain" ]; then
-            if [ -z "$TOOLCHAIN_FINGERPRINT" ]; then
-              echo "No target Toolchain fingerprint supplied; refusing to select a target toolchain image."
-              exit 1
-            fi
-            TOOLCHAIN_BASE_TAG="$TARGET-$SUBTARGET-$CONTAINER_TAG"
-            CCACHE_TAG="$TOOLCHAIN_BASE_TAG"
-            CONTAINER_TAG="$TOOLCHAIN_BASE_TAG-${TOOLCHAIN_FINGERPRINT:0:32}"
-          fi
-
-          # The generic Host Tools image is selected with its content fingerprint.
-          if [ "$CONTAINER_NAME" = "tools" ]; then
-            if [ -z "$TOOLS_FINGERPRINT" ]; then
-              echo "No Host Tools fingerprint supplied." >&2
-              exit 1
-            fi
-            CONTAINER_TAG="${CONTAINER_TAG}-${TOOLS_FINGERPRINT}"
-          fi
-
-
-          echo "Container to use: $CONTAINER_NAME:$CONTAINER_TAG"
-          echo "container_tag=$CONTAINER_TAG" >> "$GITHUB_OUTPUT"
+          CCACHE_TAG="${TARGET}-${SUBTARGET}-${AUTHOR}_${REPO_BRANCH}"
           echo "ccache_tag=$CCACHE_TAG" >> "$GITHUB_OUTPUT"
-          echo "container_name=$CONTAINER_NAME:$CONTAINER_TAG" >> "$GITHUB_OUTPUT"
           echo "ccache_name=ccache-$CCACHE_TYPE-$CCACHE_TAG" >> "$GITHUB_OUTPUT"
-
-      - name: Determine container
-        id: determine_container
-        env:
-          OWNER: ${{ github.repository_owner }}
-          USE_OPENWRT_CONTAINER: ${{ inputs.use_openwrt_container }}
-          USE_PREBUILT_TOOLS_ARTIFACT: ${{ inputs.use_prebuilt_tools_artifact }}
-          CONTAINER_NAME: ${{ steps.determine_container_name.outputs.container_name }}
-        shell: bash
-        run: |
-          set -e
-          OWNER_LC="$(printf '%s' "$OWNER" | tr '[:upper:]' '[:lower:]')"
-          if [ "$USE_OPENWRT_CONTAINER" = "true" ]; then
-            OWNER_LC=openwrt
-          fi
-
-          if [ "$USE_PREBUILT_TOOLS_ARTIFACT" = "true" ]; then
-            CONTAINER=openwrt/buildbot/buildworker-v3.11.8:v23
-          else
-            CONTAINER="$OWNER_LC/$CONTAINER_NAME"
-          fi
-
-          echo "container=$CONTAINER" >> "$GITHUB_OUTPUT"
 
       - name: Get info
         id: get_info
@@ -233,10 +169,10 @@ jobs:
   check:
     name: Check packages for ${{ inputs.target }}/${{ inputs.subtarget }}
     needs: setup_build
-    if: inputs.check == true && ( github.event_name == 'push' || inputs.check_packages_list != '' )
+    if: inputs.check == true && inputs.check_packages_list != ''
     runs-on: ubuntu-24.04
 
-    container: ghcr.io/${{ needs.setup_build.outputs.container }}
+    container: ${{ needs.setup_build.outputs.container }}
 
     permissions:
       contents: read
@@ -363,7 +299,7 @@ jobs:
     outputs:
       push: ${{ steps.setoutput.outputs.push }}
 
-    container: ghcr.io/${{ needs.setup_build.outputs.container }}
+    container: ${{ needs.setup_build.outputs.container }}
 
     permissions:
       contents: read
@@ -1176,11 +1112,6 @@ jobs:
         with:
           name: ${{ inputs.target }}-${{ inputs.subtarget }}-logs
           path: "openwrt/logs"
-
-      - name: Cleanup dl/build_dir/staging_dir to make some space
-        working-directory: openwrt
-        if: github.event_name == 'push'
-        run: rm -rf dl build_dir staging_dir
 
       - name: Delete already present ccache cache
         if: steps.restore-ccache-cache.outputs.cache-hit == 'true' && inputs.use_ccache_cache == true
