@@ -254,7 +254,6 @@ jobs:
       tools_image: ''
       use_prebuilt_tools_artifact: true
       use_ccache_cache: ${{ inputs.dummy_mode != true }}
-      dummy_mode: ${{ inputs.dummy_mode }}
 
   build-target-toolchain:
     name: Build target-specific toolchain
