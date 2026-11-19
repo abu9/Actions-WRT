@@ -241,7 +241,6 @@ jobs:
           SOURCE_DIR="$(cd openwrt && pwd -P)"
           LOCAL_REPO_DIR="$(cd actions-wrt && pwd -P)"
           BUILDWORKER_IMAGE='ghcr.io/openwrt/buildbot/buildworker-v3.11.8:v23'
-          BUILDWORKER_REF="$(printf '%s' "$BUILDWORKER_IMAGE" | sed 's#^ghcr.io/##')"
           TRACKED_LIST="$(mktemp)"
           MANIFEST="$(mktemp)"
           TEMP_HOME="$(mktemp -d)"
@@ -269,10 +268,15 @@ jobs:
           fi
           
           WORKFLOW="$LOCAL_REPO_DIR/.github/workflows/reusable_build.yml"
+          PUSH_WORKFLOW="$LOCAL_REPO_DIR/.github/workflows/push-containers.yml"
           DOCKERFILE='.github/dockerfiles/Dockerfile.toolchain'
-          if ! grep -Fq "$BUILDWORKER_IMAGE" "$WORKFLOW" &&
-             ! grep -Fq "$BUILDWORKER_REF" "$WORKFLOW"; then
-            echo "Builder workflow does not reference $BUILDWORKER_IMAGE." >&2
+          if ! grep -Fq 'container: $' "$WORKFLOW" ||
+             ! grep -Fq 'inputs.container_image' "$WORKFLOW"; then
+            echo "Reusable build workflow must consume the caller-selected container image." >&2
+            exit 1
+          fi
+          if ! grep -Fq "$BUILDWORKER_IMAGE" "$PUSH_WORKFLOW"; then
+            echo "Toolchain builder workflow does not select $BUILDWORKER_IMAGE." >&2
             exit 1
           fi
           if [[ "$(head -n 1 "$LOCAL_REPO_DIR/$DOCKERFILE")" != "FROM $BUILDWORKER_IMAGE" ]]; then
@@ -295,7 +299,7 @@ jobs:
           FILE_COUNT=0
           while IFS= read -r -d '' path; do
             case "$path" in
-              include/version.mk|include/cmake.mk|.github/workflows/push-containers.yml|tools/*|toolchain/*) ;;
+              include/version.mk|include/cmake.mk|.github/workflows/push-containers.yml|tools/*|toolchain/*|target/toolchain/*|scripts/ext-tools.sh) ;;
               *) continue ;;
             esac
             [[ -f "$SOURCE_DIR/$path" ]] || continue
