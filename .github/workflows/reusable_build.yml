@@ -94,6 +94,10 @@ on:
         description: 'Generate dummy build artifacts and skip compilation'
         type: boolean
         default: false
+      test_expected_toolchain_type:
+        description: 'TEST ONLY: require and select an official external_toolchain or external_sdk release archive'
+        type: string
+        default: ''
       toolchain_fingerprint:
         description: 'Full verified target Toolchain content fingerprint'
         type: string
@@ -416,6 +420,8 @@ jobs:
         env:
           TARGET: ${{ inputs.target }}
           SUBTARGET: ${{ inputs.subtarget }}
+          DUMMY_MODE: ${{ inputs.dummy_mode }}
+          EXPECTED_TOOLCHAIN_TYPE: ${{ inputs.test_expected_toolchain_type }}
         shell: bash
         run: |
           set -eo pipefail
@@ -509,7 +515,35 @@ jobs:
             exit 1
           fi
 
-          if [ -n "$TOOLCHAIN_ARCHIVE" ]; then
+          if [ -n "$EXPECTED_TOOLCHAIN_TYPE" ]; then
+            if [ "$DUMMY_MODE" != "true" ]; then
+              echo "TEST ONLY: expected external archive selection requires dummy_mode=true." >&2
+              exit 1
+            fi
+            case "$EXPECTED_TOOLCHAIN_TYPE" in
+              external_toolchain)
+                if [ -z "$TOOLCHAIN_ARCHIVE" ]; then
+                  echo "Expected a fixed-release external Toolchain archive, but none was found." >&2
+                  exit 1
+                fi
+                TOOLCHAIN_FILE="$(basename "$TOOLCHAIN_ARCHIVE" | sed -E 's/\.tar\.(zst|xz)$//')"
+                TOOLCHAIN_TYPE="external_toolchain"
+                ;;
+              external_sdk)
+                if [ -z "$SDK_ARCHIVE" ]; then
+                  echo "Expected a fixed-release SDK archive, but none was found." >&2
+                  exit 1
+                fi
+                TOOLCHAIN_ARCHIVE="$SDK_ARCHIVE"
+                TOOLCHAIN_FILE="$(basename "$SDK_ARCHIVE" | sed -E 's/\.tar\.(zst|xz)$//')"
+                TOOLCHAIN_TYPE="external_sdk"
+                ;;
+              *)
+                echo "Unsupported TEST ONLY expected toolchain type: $EXPECTED_TOOLCHAIN_TYPE" >&2
+                exit 1
+                ;;
+            esac
+          elif [ -n "$TOOLCHAIN_ARCHIVE" ]; then
             TOOLCHAIN_FILE="$(basename "$TOOLCHAIN_ARCHIVE" | sed -E 's/\.tar\.(zst|xz)$//')"
             TOOLCHAIN_TYPE="external_toolchain"
           elif [ -n "$SDK_ARCHIVE" ]; then
@@ -634,7 +668,7 @@ jobs:
             ccache-${{ inputs.ccache_type }}-
 
       - name: Prepare usign host verifier
-        if: inputs.dummy_mode != true && inputs.build_toolchain == false && (steps.parse-toolchain.outputs.toolchain-type == 'external_toolchain' || steps.parse-toolchain.outputs.toolchain-type == 'external_sdk')
+        if: inputs.build_toolchain == false && (steps.parse-toolchain.outputs.toolchain-type == 'external_toolchain' || steps.parse-toolchain.outputs.toolchain-type == 'external_sdk')
         shell: su buildbot -c "sh -e {0}"
         working-directory: openwrt
         env:
@@ -663,7 +697,7 @@ jobs:
           test -x staging_dir/host/bin/usign
 
       - name: Download external toolchain/sdk
-        if: inputs.dummy_mode != true && inputs.build_toolchain == false && steps.parse-toolchain.outputs.toolchain-type != 'internal' && steps.parse-toolchain.outputs.toolchain-type != 'external_container'
+        if: inputs.build_toolchain == false && steps.parse-toolchain.outputs.toolchain-type != 'internal' && steps.parse-toolchain.outputs.toolchain-type != 'external_container'
         env:
           AUTHOR: ${{ inputs.author }}
           TARGET: ${{ inputs.target }}
