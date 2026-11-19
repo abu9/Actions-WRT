@@ -50,7 +50,7 @@ on:
         value: ${{ jobs.compute-toolchain-fingerprint.outputs.toolchain_fingerprint }}
       source_commit:
         description: 'Exact upstream source commit resolved for this test run'
-        value: ${{ jobs.compute-tools-fingerprint.outputs.source_commit || jobs.determine_targets.outputs.source_commit }}
+        value: ${{ jobs.compute-tools-fingerprint.outputs.source_commit || jobs.determine_container_info.outputs.source_commit || jobs.determine_targets.outputs.source_commit }}
     inputs:
       source_branch:
         required: true
@@ -115,12 +115,14 @@ jobs:
     outputs:
       owner_lc: ${{ steps.info.outputs.owner_lc }}
       container_tag: ${{ steps.info.outputs.container_tag }}
+      source_commit: ${{ steps.info.outputs.source_commit }}
     steps:
       - name: Determine owner and tag
         id: info
         env:
           AUTHOR: ${{ inputs.author || needs.determine_targets.outputs.author }}
           REPO_BRANCH: ${{ inputs.repo_branch || needs.determine_targets.outputs.repo_branch }}
+          SOURCE_COMMIT: ${{ inputs.source_commit || needs.determine_targets.outputs.source_commit }}
           OWNER: ${{ github.repository_owner }}
         shell: bash
         run: |
@@ -131,6 +133,7 @@ jobs:
           CONTAINER_TAG="${AUTHOR}_${REPO_BRANCH}"
           echo "owner_lc=$OWNER_LC" >> "$GITHUB_OUTPUT"
           echo "container_tag=$CONTAINER_TAG" >> "$GITHUB_OUTPUT"
+          printf 'source_commit=%s\n' "$SOURCE_COMMIT" >> "$GITHUB_OUTPUT"
           echo "Will publish ghcr.io/$OWNER_LC/tools:$CONTAINER_TAG"
 
   compute-tools-fingerprint:
