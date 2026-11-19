@@ -165,9 +165,15 @@ jobs:
           OWNER_LC: ${{ needs.determine_container_info.outputs.owner_lc }}
           IMAGE_TAG: ${{ needs.determine_container_info.outputs.container_tag }}-${{ inputs.tools_fingerprint || needs.compute-tools-fingerprint.outputs.tools_fingerprint }}
           BUILD_TOOLS: ${{ inputs.build_tools }}
+          INPUT_TOOLS_FINGERPRINT: ${{ inputs.tools_fingerprint }}
+          COMPUTED_TOOLS_FINGERPRINT: ${{ needs.compute-tools-fingerprint.outputs.tools_fingerprint }}
         shell: bash
         run: |
           set -eo pipefail
+          if [ -n "$INPUT_TOOLS_FINGERPRINT" ] && [ -n "$COMPUTED_TOOLS_FINGERPRINT" ] && [ "$INPUT_TOOLS_FINGERPRINT" != "$COMPUTED_TOOLS_FINGERPRINT" ]; then
+            echo "Supplied Host Tools fingerprint does not match the resolved source commit." >&2
+            exit 1
+          fi
           GHCR_TOKEN="$(printf '%s' "$GITHUB_TOKEN" | base64 -w0)"
           GHCR_HEADER="Authorization: Bearer $GHCR_TOKEN"
           GHCR_MANIFEST_LINK="https://ghcr.io/v2/$OWNER_LC/tools/manifests/$IMAGE_TAG"
