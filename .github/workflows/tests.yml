@@ -1,0 +1,88 @@
+name: Development tests and lint
+
+on:
+  pull_request:
+    branches:
+      - main
+
+concurrency:
+  group: development-tests-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  workflow-lint:
+    name: Lint workflows and Shell scripts
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7.0.1
+
+      - name: Install pinned actionlint binary
+        env:
+          ACTIONLINT_VERSION: '1.7.12'
+          ACTIONLINT_SHA256: '8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8'
+        run: |
+          set -eo pipefail
+
+          archive="actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz"
+          url="https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/${archive}"
+          install_dir="${RUNNER_TEMP}/actionlint"
+          bin_dir="${RUNNER_TEMP}/bin"
+
+          mkdir -p "$install_dir" "$bin_dir"
+          curl --fail --location --silent --show-error "$url" --output "$install_dir/$archive"
+
+          echo "${ACTIONLINT_SHA256}  $install_dir/$archive" | sha256sum --check --strict
+          tar -xzf "$install_dir/$archive" -C "$install_dir" actionlint
+          install -m 0755 "$install_dir/actionlint" "$bin_dir/actionlint"
+          echo "$bin_dir" >> "$GITHUB_PATH"
+
+      - name: Install ShellCheck
+        run: |
+          set -eo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends shellcheck
+
+      - name: Create ShellCheck error-only wrapper
+        run: |
+          set -eo pipefail
+          cat > "$RUNNER_TEMP/shellcheck-errors-only" <<'WRAPPER'
+          #!/usr/bin/env bash
+          set -eo pipefail
+          exec shellcheck --severity=error "$@"
+          WRAPPER
+          chmod 0755 "$RUNNER_TEMP/shellcheck-errors-only"
+
+      - name: Lint all workflow files and embedded shell
+        run: |
+          set -eo pipefail
+          actionlint -shellcheck="$RUNNER_TEMP/shellcheck-errors-only" -color .github/workflows/*.yml
+          shellcheck --severity=error .github/scripts/*.sh .github/scripts/tests/*.sh
+
+  regression-tests:
+    name: Run project-specific regression tests
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7.0.1
+
+      - name: Build upstream usign for release-index cryptographic regression tests
+        run: |
+          set -euo pipefail
+          git clone --depth 1 https://git.openwrt.org/project/usign.git "$RUNNER_TEMP/usign"
+          cmake -S "$RUNNER_TEMP/usign" -B "$RUNNER_TEMP/usign/build"
+          cmake --build "$RUNNER_TEMP/usign/build" --parallel 2
+          test -x "$RUNNER_TEMP/usign/build/usign"
+          echo "USIGN_BIN=$RUNNER_TEMP/usign/build/usign" >> "$GITHUB_ENV"
+
+      - name: Run DIY script invocation regression tests
+        run: bash .github/scripts/tests/test-diy-scripts.sh
+
+      - name: Run workflow shell regression tests
+        run: bash .github/scripts/tests/test-workflows.sh
+
+      - name: Run release-index shell regression tests
+        run: bash .github/scripts/tests/test-release-index.sh
