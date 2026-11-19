@@ -65,8 +65,9 @@ test_resolve_openwrt_keyring(){
   for name in CD54E82DADB3684D.asc 0x1D53D1877742E911.asc 626471F1.asc; do printf 'key fixture\n' > "$k/gpg/$name"; done
   make_keyring "$k" https://github.com/openwrt/keyring
   GITHUB_WORKSPACE="$TEST_ROOT" GITHUB_ENV="$envfile" AUTHOR=openwrt bash -euo pipefail -c "$RESOLVE_CODE"
-  grep -Fq "KEYRING_GPG_DIR=$k/gpg" "$envfile" || fail 'OpenWrt GPG output incorrect'
-  grep -Fq 'KEYRING_USIGN_KEY=' "$envfile" || fail 'OpenWrt usign output should be empty'
+  grep -Fxq "KEYRING_GPG_DIR=$k/gpg" "$envfile" || fail 'OpenWrt GPG output incorrect'
+  grep -Fxq 'KEYRING_USIGN_KEY=' "$envfile" || fail 'OpenWrt usign output should be empty'
+  [[ "$(wc -l < "$envfile")" -eq 2 ]] || fail 'OpenWrt GITHUB_ENV output must contain exactly two lines'
   ! grep -Fq KEYRING_COMMIT "$envfile" || fail 'unexpected keyring commit environment output'
 }
 test_resolve_immortalwrt_key(){
@@ -76,8 +77,9 @@ test_resolve_immortalwrt_key(){
   mkdir -p "$k/usign"; printf 'official key fixture\n' > "$k/usign/467a35c14d7fbc5c"
   make_keyring "$k" https://github.com/immortalwrt/keyring.git
   GITHUB_WORKSPACE="$TEST_ROOT" GITHUB_ENV="$envfile" AUTHOR=immortalwrt bash -euo pipefail -c "$RESOLVE_CODE"
-  grep -Fq "KEYRING_USIGN_KEY=$k/usign/467a35c14d7fbc5c" "$envfile" || fail 'selected usign key output incorrect'
+  grep -Fxq "KEYRING_USIGN_KEY=$k/usign/467a35c14d7fbc5c" "$envfile" || fail 'selected usign key output incorrect'
   grep -Fq 'KEYRING_GPG_DIR=' "$envfile" || fail 'ImmortalWrt GPG output should be empty'
+  [[ "$(wc -l < "$envfile")" -eq 2 ]] || fail 'ImmortalWrt GITHUB_ENV output must contain exactly two lines'
 }
 test_resolve_rejects_missing_key(){
   prepare_workspace
