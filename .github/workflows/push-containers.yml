@@ -160,7 +160,6 @@ jobs:
       actions: write
     uses: ./.github/workflows/reusable_build_tools.yml
     with:
-      generate_prebuilt_artifacts: true
       repo_url: ${{ inputs.repo_url || needs.determine_targets.outputs.repo_url }}
       source_commit: ${{ inputs.source_commit || needs.compute-tools-fingerprint.outputs.source_commit }}
       ccache_tag: ${{ needs.determine_container_info.outputs.container_tag }}
