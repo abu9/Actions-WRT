@@ -119,7 +119,7 @@ class ReleaseIndexVerifierTests(unittest.TestCase):
                 "gpg/0x1D53D1877742E911.asc",
                 "gpg/626471F1.asc",
             )
-            keyring, commit = self._create_keyring_checkout(
+            keyring, _ = self._create_keyring_checkout(
                 root,
                 "https://github.com/openwrt/keyring",
                 {name: "test public key\n" for name in names},
@@ -132,7 +132,8 @@ class ReleaseIndexVerifierTests(unittest.TestCase):
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
             self.assertEqual(result.stdout.strip(), str(keyring / "gpg"))
             values = dict(line.split("=", 1) for line in github_env.read_text(encoding="utf-8").splitlines())
-            self.assertEqual(values["KEYRING_COMMIT"], commit)
+            self.assertNotIn("KEYRING_DIR", values)
+            self.assertNotIn("KEYRING_COMMIT", values)
             self.assertEqual(values["KEYRING_GPG_DIR"], str(keyring / "gpg"))
             self.assertEqual(values["KEYRING_USIGN_KEY"], "")
 
@@ -161,7 +162,6 @@ class ReleaseIndexVerifierTests(unittest.TestCase):
             self.assertEqual(result.stdout.strip(), str(keyring / "usign/467a35c14d7fbc5c"))
             values = dict(line.split("=", 1) for line in github_env.read_text(encoding="utf-8").splitlines())
             self.assertEqual(values["KEYRING_COMMIT"], commit)
-            self.assertNotEqual(values["KEYRING_COMMIT"], "1" * 40)
             self.assertEqual(values["KEYRING_USIGN_KEY"], str(keyring / "usign/467a35c14d7fbc5c"))
             self.assertEqual(values["KEYRING_GPG_DIR"], "")
 
