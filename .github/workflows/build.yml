@@ -204,7 +204,7 @@ jobs:
   build_firmware:
     name: Build firmware
     needs: [determine_targets, tools_fingerprint, tools_ready, toolchain_fingerprint, check_toolchain_container]
-    if: ${{ !cancelled() && github.event_name != 'pull_request' && github.event_name != 'push' && inputs.validate_only != true && needs.determine_targets.result == 'success' && needs.tools_ready.result == 'success' && (needs.toolchain_fingerprint.result == 'success' || needs.toolchain_fingerprint.result == 'skipped') && (needs.check_toolchain_container.result == 'success' || needs.check_toolchain_container.result == 'skipped') }}
+    if: ${{ !cancelled() && github.event_name != 'pull_request' && github.event_name != 'push' && needs.determine_targets.result == 'success' && needs.tools_ready.result == 'success' && (needs.toolchain_fingerprint.result == 'success' || needs.toolchain_fingerprint.result == 'skipped') && (needs.check_toolchain_container.result == 'success' || needs.check_toolchain_container.result == 'skipped') }}
     permissions: {contents: read, packages: read, actions: write}
     uses: ./.github/workflows/reusable_build.yml
     with:
