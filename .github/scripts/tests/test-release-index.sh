@@ -127,11 +127,17 @@ test_usign_real_crypto(){
 }
 test_missing_signature(){
   prepare_workspace
-  local dir="$TEST_ROOT/work" fake="$TEST_ROOT/usign"
-  mkdir -p "$dir"; printf 'index\n' > "$dir/sha256sums"
-  printf '#!/bin/sh\nexit 99\n' > "$fake"; chmod +x "$fake"
-  if (cd "$dir" && AUTHOR=immortalwrt SIGNATURE_FILE=sha256sums.sig KEYRING_USIGN_KEY="$fake" KEYRING_GPG_DIR='' TOOLCHAIN_ARCHIVE=toolchain.tar.xz bash -euo pipefail -c "$VERIFY_CODE") 2>"$TEST_ROOT/error"; then fail 'missing signature accepted'; fi
+  local dir="$TEST_ROOT/work" fake="$TEST_ROOT/work/staging_dir/host/bin/usign" marker="$TEST_ROOT/usign-called"
+  mkdir -p "$(dirname "$fake")"; printf 'index\n' > "$dir/sha256sums"
+  cat > "$fake" <<'STUB'
+#!/bin/sh
+touch "$USIGN_MARKER"
+exit 99
+STUB
+  chmod +x "$fake"
+  if (cd "$dir" && AUTHOR=immortalwrt SIGNATURE_FILE=sha256sums.sig USIGN_MARKER="$marker" KEYRING_USIGN_KEY="$TEST_ROOT/key" KEYRING_GPG_DIR='' TOOLCHAIN_ARCHIVE=toolchain.tar.xz bash -euo pipefail -c "$VERIFY_CODE") 2>"$TEST_ROOT/error"; then fail 'missing signature accepted'; fi
   grep -Fq 'signature is missing or empty' "$TEST_ROOT/error" || fail 'missing signature error absent'
+  [[ ! -e "$marker" ]] || fail 'usign was invoked before the signature check'
 }
 test_bad_usign_status(){
   prepare_workspace
