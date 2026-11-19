@@ -147,6 +147,8 @@ test_real_gpg_and_tamper(){
   for name in CD54E82DADB3684D.asc 0x1D53D1877742E911.asc 626471F1.asc; do printf '%s\n' "$pub" > "$keydir/$name"; done
   gpg --homedir "$home" --batch --yes --detach-sign --output "$dir/sha256sums.asc" "$dir/sha256sums"
   run_verify "$dir" openwrt '' "$keydir" "$PATH"
+  mkdir -p "$keydir"
+  for name in CD54E82DADB3684D.asc 0x1D53D1877742E911.asc 626471F1.asc; do printf '%s\n' "$pub" > "$keydir/$name"; done
   make_archive "$dir"
   printf '# tampered\n' >> "$dir/sha256sums"
   gpg --homedir "$home" --batch --yes --detach-sign --output "$dir/sha256sums.asc" "$dir/sha256sums"
