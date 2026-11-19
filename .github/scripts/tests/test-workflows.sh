@@ -101,18 +101,26 @@ t06(){
 }
 t07(){
   local b="$WF/build.yml" r="$WF/reusable_build.yml" rt="$WF/reusable_build_tools.yml"
-  local p="$WF/push-containers.yml" f="$WF/fingerprint.yml" v="$WF/static-validation.yml"
+  local p="$WF/push-containers.yml" f="$WF/fingerprint.yml" v="$WF/tests.yml"
   lacks "$b" 'test_fingerprints:'
   lacks "$b" 'test-workflows.sh'
   lacks "$b" 'validate_only'
-  for workflow in "$r" "$rt" "$p" "$f"; do
+  for workflow in "$b" "$r" "$rt" "$p" "$f"; do
+    lacks "$workflow" '.github/scripts/tests/'
+    lacks "$workflow" 'test-workflows.sh'
+    lacks "$workflow" 'test-release-index.sh'
+    lacks "$workflow" 'test-diy-scripts.sh'
     lacks "$workflow" 'dummy_mode'
     lacks "$workflow" 'DUMMY_MODE'
     lacks "$workflow" 'TEST ONLY'
     lacks "$workflow" 'test_expected_toolchain_type'
   done
+  has "$v" '.github/scripts/tests/test-diy-scripts.sh'
   has "$v" '.github/scripts/tests/test-workflows.sh'
   has "$v" '.github/scripts/tests/test-release-index.sh'
+  lacks "$v" 'uses: ./.github/workflows/build.yml'
+  lacks "$v" 'uses: ./.github/workflows/reusable_build.yml'
+  [[ ! -e "$WF/static-validation.yml" ]] || { echo 'obsolete static-validation workflow remains' >&2; return 1; }
   [[ ! -e "$WF/dummy-build-integration-test.yml" ]] || { echo 'obsolete dummy integration workflow remains' >&2; return 1; }
 }
 t08(){
