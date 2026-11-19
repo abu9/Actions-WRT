@@ -110,7 +110,7 @@ test_usign_real_crypto(){
   [[ -n "${USIGN_BIN:-}" && -x "$USIGN_BIN" ]] || fail 'USIGN_BIN must point to upstream usign'
   prepare_workspace
   local dir="$TEST_ROOT/work" key="$TEST_ROOT/release.pub" secret="$TEST_ROOT/release.sec" wrong="$TEST_ROOT/wrong.pub" wrongsec="$TEST_ROOT/wrong.sec"
-  mkdir -p "$dir"; make_archive "$dir"
+  mkdir -p "$dir/staging_dir/host/bin"; ln -s "$USIGN_BIN" "$dir/staging_dir/host/bin/usign"; make_archive "$dir"
   "$USIGN_BIN" -G -c 'CI release test key' -s "$secret" -p "$key"
   "$USIGN_BIN" -S -m "$dir/sha256sums" -s "$secret" -x "$dir/sha256sums.sig"
   run_verify "$dir" immortalwrt "$key" '' "$PATH"
@@ -132,8 +132,8 @@ test_missing_signature(){
 test_bad_usign_status(){
   prepare_workspace
   local dir="$TEST_ROOT/work" fake="$TEST_ROOT/usign"
-  mkdir -p "$dir"; printf 'index\n' > "$dir/sha256sums"; printf 'sig\n' > "$dir/sha256sums.sig"; printf 'key\n' > "$TEST_ROOT/key"
-  printf '#!/bin/sh\nexit 17\n' > "$fake"; chmod +x "$fake"
+  mkdir -p "$dir/staging_dir/host/bin"; printf 'index\n' > "$dir/sha256sums"; printf 'sig\n' > "$dir/sha256sums.sig"; printf 'key\n' > "$TEST_ROOT/key"
+  printf '#!/bin/sh\nexit 17\n' > "$fake"; chmod +x "$fake"; cp "$fake" "$dir/staging_dir/host/bin/usign"
   if (cd "$dir" && AUTHOR=immortalwrt KEYRING_USIGN_KEY="$TEST_ROOT/key" KEYRING_GPG_DIR='' TOOLCHAIN_ARCHIVE=toolchain.tar.xz bash -euo pipefail -c "$VERIFY_CODE") 2>/dev/null; then fail 'bad signature accepted'; else [[ "$?" -eq 17 ]] || fail 'usign exit status not propagated'; fi
 }
 test_real_gpg_and_tamper(){
@@ -170,7 +170,7 @@ test_no_extract_on_failed_usign(){
   [[ -n "${USIGN_BIN:-}" && -x "$USIGN_BIN" ]] || fail 'USIGN_BIN must point to upstream usign'
   prepare_workspace
   local dir="$TEST_ROOT/work" secret="$TEST_ROOT/key.sec" pub="$TEST_ROOT/key.pub" marker="$TEST_ROOT/tar-called" fakebin="$TEST_ROOT/bin"
-  mkdir -p "$dir" "$fakebin"; printf 'archive\n' > "$dir/payload"; tar -cJf "$dir/toolchain.tar.xz" -C "$dir" payload
+  mkdir -p "$dir" "$fakebin" "$dir/staging_dir/host/bin"; ln -s "$USIGN_BIN" "$dir/staging_dir/host/bin/usign"; printf 'archive\n' > "$dir/payload"; tar -cJf "$dir/toolchain.tar.xz" -C "$dir" payload
   (cd "$dir" && sha256sum toolchain.tar.xz > sha256sums)
   "$USIGN_BIN" -G -c 'fail closed test' -s "$secret" -p "$pub"
   "$USIGN_BIN" -S -m "$dir/sha256sums" -s "$secret" -x "$dir/sha256sums.sig"
@@ -196,7 +196,7 @@ test_fake_usign_receives_exact_files(){
   printf 'signature\n' > "$dir/sha256sums.sig"
   cat > "$dir/staging_dir/host/bin/usign" <<'STUB'
 #!/bin/bash
-printf '%s\\n' "$@" > "$USIGN_CAPTURE"
+printf '%s\n' "$@" > "$USIGN_CAPTURE"
 STUB
   chmod +x "$dir/staging_dir/host/bin/usign"
   USIGN_CAPTURE="$capture" run_verify "$dir" immortalwrt "$key" '' "$PATH"
@@ -213,7 +213,7 @@ test_fake_gpg_imports_official_keys_and_verifies_files(){
   for name in CD54E82DADB3684D.asc 0x1D53D1877742E911.asc 626471F1.asc; do printf 'public key\n' > "$keydir/$name"; done
   cat > "$fakebin/gpg" <<'STUB'
 #!/bin/bash
-printf '%s\\n' "$@" >> "$GPG_CAPTURE"
+printf '%s\n' "$@" >> "$GPG_CAPTURE"
 STUB
   chmod +x "$fakebin/gpg"
   GPG_CAPTURE="$capture" run_verify "$dir" openwrt '' "$keydir" "$fakebin:$PATH"
