@@ -192,11 +192,17 @@ t13(){
   lacks "$f" 'for template in ${{ inputs.coverity_compiler_template_list }}'
 }
 t15(){
-  local b="$WF/build.yml" p="$WF/push-containers.yml"
+  local b="$WF/build.yml" p="$WF/push-containers.yml" r="$WF/reusable_build.yml"
   has "$b" 'TAG="$AUTHOR"_"$REPO_BRANCH-$EXPECTED_FINGERPRINT"'
   has "$b" 'TAG="$TARGET-$SUBTARGET-$AUTHOR"_"$REPO_BRANCH-${FINGERPRINT:0:32}"'
   has "$p" 'tools:${{ needs.determine_container_info.outputs.container_tag }}-${{ inputs.tools_fingerprint || needs.compute-tools-fingerprint.outputs.tools_fingerprint }}'
   has "$p" 'toolchain:${{ inputs.target || needs.determine_targets.outputs.target }}-${{ inputs.subtarget || needs.determine_targets.outputs.subtarget }}-${{ needs.determine_container_info.outputs.container_tag }}-${{ needs.compute-toolchain-fingerprint.outputs.toolchain_cache_key }}'
+  has "$r" 'ccache_name: ${{ steps.determine_container_name.outputs.ccache_name }}'
+  has "$r" 'echo "ccache_name=ccache-$CCACHE_TYPE-$CCACHE_TAG"'
+  lacks "$r" 'steps.determine_ccache_info'
+  lacks "$r" '- name: Set lower case owner name'
+  lacks "$r" '- name: Determine ccache info'
+  has "$r" 'CONTAINER="$OWNER_LC/$CONTAINER_NAME"'
 }
 t16(){
   local p="$WF/push-containers.yml" f="$WF/fingerprint.yml" r="$WF/reusable_build.yml" d="$ROOT/.github/dockerfiles/Dockerfile.toolchain" block
@@ -211,7 +217,8 @@ t16(){
   has "$p" 'name: linux-buildbot-prebuilt-tools'
   has "$f" use_prebuilt_tools_artifact; has "$f" 'actions/download-artifact@v8.0.2'
   has "$r" use_prebuilt_tools_artifact; has "$r" 'actions/download-artifact@v8.0.2'
-  has "$r" 'container=openwrt/buildbot/buildworker-v3.11.8:v23'
+  has "$r" 'CONTAINER=openwrt/buildbot/buildworker-v3.11.8:v23'
+  has "$r" 'echo "container=$CONTAINER" >> "$GITHUB_OUTPUT"'
   [[ "$(head -n 1 "$d")" == 'FROM ghcr.io/openwrt/buildbot/buildworker-v3.11.8:v23' ]]
   has "$d" 'COPY --chown=buildbot staging_dir/host /prebuilt_tools/staging_dir/host'
   has "$d" 'COPY --chown=buildbot build_dir/host /prebuilt_tools/build_dir/host'
