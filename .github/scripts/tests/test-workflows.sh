@@ -26,7 +26,19 @@ t02(){
     has "$r" "$command"
   done
 }
-t09(){ lacks "$WF/determine-targets.yml" 'eval "$(grep'; has "$WF/determine-targets.yml" 'CONFIG_TARGET_BOARD="$(sed -n'; has "$WF/determine-targets.yml" 'CONFIG_TARGET_SUBTARGET="$(sed -n'; has "$WF/determine-targets.yml" 'CONFIG_ARCH="$(sed -n'; }
+t09(){
+  local f="$WF/determine-targets.yml"
+  lacks "$f" 'eval "$(grep'
+  has "$f" 'CONFIG_TARGET_BOARD="$(sed -n'
+  has "$f" 'CONFIG_TARGET_SUBTARGET="$(sed -n'
+  has "$f" 'TARGET="$CONFIG_TARGET_BOARD"'
+  has "$f" 'SUBTARGET="$CONFIG_TARGET_SUBTARGET"'
+  lacks "$f" 'TARGET=${TARGET:-'
+  lacks "$f" 'SUBTARGET=${SUBTARGET:-'
+  lacks "$f" 'CONFIG_ARCH='
+  lacks "$f" 'outputs.arch'
+  lacks "$f" 'printf '\''arch=%s'
+}
 t14(){ local f="$WF/reusable_build.yml"; has "$f" 'git diff --name-only -z'; has "$f" "while IFS= read -r -d '' file;"; has "$f" 'cp --parents -- "$file" packages-fixed/'; lacks "$f" 'for f in $(git diff --name-only)'; }
 
 
