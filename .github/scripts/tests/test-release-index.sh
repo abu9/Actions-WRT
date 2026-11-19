@@ -47,15 +47,20 @@ test_workflow_shell_options(){
 test_signature_format_and_order(){
   assert_has "$WORKFLOW" 'repository: openwrt/keyring'
   assert_has "$WORKFLOW" 'repository: immortalwrt/keyring'
+  assert_has "$WORKFLOW" 'AUTHOR: ${{ inputs.author }}'
+  assert_lacks "$WORKFLOW" 'source-pinned release signing keyring'
+  assert_lacks "$WORKFLOW" 'CHECKSUM="$(awk'
   assert_has "$WORKFLOW" 'immortalwrt) SIGNATURE_FILE=sha256sums.sig'
   assert_has "$WORKFLOW" 'openwrt) SIGNATURE_FILE=sha256sums.asc'
   assert_has "$WORKFLOW" 'CHECKSUM_OUTPUT="$(sha256sum --check --ignore-missing sha256sums)"'
   assert_has "$WORKFLOW" 'grep -Fq "$TOOLCHAIN_ARCHIVE: OK" <<<"$CHECKSUM_OUTPUT"'
   local v c x
+  local g
   v="$(grep -n 'staging_dir/host/bin/usign -V' "$WORKFLOW" | head -n1 | cut -d: -f1)"
+  g="$(grep -n -- '--verify "$SIGNATURE_FILE" sha256sums' "$WORKFLOW" | head -n1 | cut -d: -f1)"
   c="$(grep -n 'CHECKSUM_OUTPUT="$(sha256sum' "$WORKFLOW" | head -n1 | cut -d: -f1)"
   x="$(grep -n 'tar --zstd -xf "$TOOLCHAIN_ARCHIVE"' "$WORKFLOW" | head -n1 | cut -d: -f1)"
-  [[ "$v" -lt "$c" && "$c" -lt "$x" ]] || fail 'signature/checksum/extraction order changed'
+  [[ "$v" -lt "$c" && "$g" -lt "$c" && "$c" -lt "$x" ]] || fail 'signature/checksum/extraction order changed'
 }
 test_toolchain_stage_is_unconditional(){
   local stage
@@ -65,26 +70,33 @@ test_toolchain_stage_is_unconditional(){
 }
 test_resolve_openwrt_keyring(){
   prepare_workspace
-  local k="$TEST_ROOT/.ci-keyring" envfile="$TEST_ROOT/github-env"
+  local k="$TEST_ROOT/.ci-keyring" envfile="$TEST_ROOT/github-env" expected_commit resolve_output
   mkdir -p "$k/gpg"
   for name in CD54E82DADB3684D.asc 0x1D53D1877742E911.asc 626471F1.asc; do printf 'key fixture\n' > "$k/gpg/$name"; done
   make_keyring "$k" https://github.com/openwrt/keyring
-  GITHUB_WORKSPACE="$TEST_ROOT" GITHUB_ENV="$envfile" AUTHOR=openwrt bash -euo pipefail -c "$RESOLVE_CODE"
+  expected_commit="$(git -C "$k" rev-parse HEAD)"
+  resolve_output="$(GITHUB_WORKSPACE="$TEST_ROOT" GITHUB_ENV="$envfile" AUTHOR=openwrt bash -euo pipefail -c "$RESOLVE_CODE")"
+  grep -Fq "$k/gpg" <<<"$resolve_output" || fail 'OpenWrt release verification material path missing from output'
+  grep -Fxq "KEYRING_DIR=$k" "$envfile" || fail 'OpenWrt keyring directory output incorrect'
+  grep -Fxq "KEYRING_COMMIT=$expected_commit" "$envfile" || fail 'OpenWrt keyring commit output incorrect'
   grep -Fxq "KEYRING_GPG_DIR=$k/gpg" "$envfile" || fail 'OpenWrt GPG output incorrect'
   grep -Fxq 'KEYRING_USIGN_KEY=' "$envfile" || fail 'OpenWrt usign output should be empty'
-  [[ "$(wc -l < "$envfile")" -eq 2 ]] || fail 'OpenWrt GITHUB_ENV output must contain exactly two lines'
-  ! grep -Fq KEYRING_COMMIT "$envfile" || fail 'unexpected keyring commit environment output'
+  [[ "$(wc -l < "$envfile")" -eq 4 ]] || fail 'OpenWrt GITHUB_ENV output must contain exactly four lines'
 }
 test_resolve_immortalwrt_key(){
   prepare_workspace
-  local k="$TEST_ROOT/.ci-keyring" envfile="$TEST_ROOT/github-env"
+  local k="$TEST_ROOT/.ci-keyring" envfile="$TEST_ROOT/github-env" expected_commit resolve_output
   printf '%s\n' '$(INSTALL_DATA) $(PKG_BUILD_DIR)/usign/467a35c14d7fbc5c $(1)/etc/opkg/keys/' > "$TEST_ROOT/openwrt/package/system/openwrt-keyring/Makefile"
   mkdir -p "$k/usign"; printf 'official key fixture\n' > "$k/usign/467a35c14d7fbc5c"
   make_keyring "$k" https://github.com/immortalwrt/keyring.git
-  GITHUB_WORKSPACE="$TEST_ROOT" GITHUB_ENV="$envfile" AUTHOR=immortalwrt bash -euo pipefail -c "$RESOLVE_CODE"
+  expected_commit="$(git -C "$k" rev-parse HEAD)"
+  resolve_output="$(GITHUB_WORKSPACE="$TEST_ROOT" GITHUB_ENV="$envfile" AUTHOR=immortalwrt bash -euo pipefail -c "$RESOLVE_CODE")"
+  grep -Fq "$k/usign/467a35c14d7fbc5c" <<<"$resolve_output" || fail 'ImmortalWrt release verification material path missing from output'
+  grep -Fxq "KEYRING_DIR=$k" "$envfile" || fail 'ImmortalWrt keyring directory output incorrect'
+  grep -Fxq "KEYRING_COMMIT=$expected_commit" "$envfile" || fail 'ImmortalWrt keyring commit output incorrect'
   grep -Fxq "KEYRING_USIGN_KEY=$k/usign/467a35c14d7fbc5c" "$envfile" || fail 'selected usign key output incorrect'
-  grep -Fq 'KEYRING_GPG_DIR=' "$envfile" || fail 'ImmortalWrt GPG output should be empty'
-  [[ "$(wc -l < "$envfile")" -eq 2 ]] || fail 'ImmortalWrt GITHUB_ENV output must contain exactly two lines'
+  grep -Fxq 'KEYRING_GPG_DIR=' "$envfile" || fail 'ImmortalWrt GPG output should be empty'
+  [[ "$(wc -l < "$envfile")" -eq 4 ]] || fail 'ImmortalWrt GITHUB_ENV output must contain exactly four lines'
 }
 test_resolve_rejects_missing_key(){
   prepare_workspace
