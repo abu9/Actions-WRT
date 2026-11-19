@@ -114,7 +114,7 @@ jobs:
     outputs:
       container: ${{ steps.determine_container.outputs.container }}
       ccache_tag: ${{ steps.determine_container_name.outputs.ccache_tag }}
-      ccache_name: ${{ steps.determine_ccache_info.outputs.ccache_name }}      
+      ccache_name: ${{ steps.determine_container_name.outputs.ccache_name }}      
       device_name: ${{ steps.get_info.outputs.device_name }}
       file_date: ${{ steps.get_info.outputs.file_date }}
 
@@ -141,22 +141,6 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v7.0.1
 
-      - name: Set lower case owner name
-        id: lower_owner
-        run: |
-          OWNER_LC=$(echo "${{ github.repository_owner }}" \
-            | tr '[:upper:]' '[:lower:]')
-
-          if [ "${{ inputs.use_openwrt_container }}" = "true" ]; then
-            OWNER_LC=openwrt
-          fi
-
-          echo "owner_lc=$OWNER_LC" >> $GITHUB_OUTPUT
-
-      # Per branch tools container tag
-      # By default stick to latest
-      # Get the branch or parse the tag and push dedicated tools containers
-      # you need to use for the branch name a prefix of openwrt-[0-9][0-9].[0-9][0-9]-
       - name: Determine container name
         id: determine_container_name
         env:
@@ -167,6 +151,7 @@ jobs:
           REQUESTED_CONTAINER: ${{ inputs.container_name }}
           TOOLS_FINGERPRINT: ${{ inputs.tools_fingerprint }}
           TOOLCHAIN_FINGERPRINT: ${{ inputs.toolchain_fingerprint }}
+          CCACHE_TYPE: ${{ inputs.ccache_type }}
         shell: bash
         run: |
           CONTAINER_NAME="$REQUESTED_CONTAINER"
@@ -200,21 +185,30 @@ jobs:
           echo "container_tag=$CONTAINER_TAG" >> "$GITHUB_OUTPUT"
           echo "ccache_tag=$CCACHE_TAG" >> "$GITHUB_OUTPUT"
           echo "container_name=$CONTAINER_NAME:$CONTAINER_TAG" >> "$GITHUB_OUTPUT"
+          echo "ccache_name=ccache-$CCACHE_TYPE-$CCACHE_TAG" >> "$GITHUB_OUTPUT"
 
       - name: Determine container
         id: determine_container
+        env:
+          OWNER: ${{ github.repository_owner }}
+          USE_OPENWRT_CONTAINER: ${{ inputs.use_openwrt_container }}
+          USE_PREBUILT_TOOLS_ARTIFACT: ${{ inputs.use_prebuilt_tools_artifact }}
+          CONTAINER_NAME: ${{ steps.determine_container_name.outputs.container_name }}
         shell: bash
         run: |
-          if [ "${{ inputs.use_prebuilt_tools_artifact }}" = "true" ]; then
-            echo "container=openwrt/buildbot/buildworker-v3.11.8:v23" >> "$GITHUB_OUTPUT"
-          else
-            echo "container=${{ steps.lower_owner.outputs.owner_lc }}/${{ steps.determine_container_name.outputs.container_name }}" >> "$GITHUB_OUTPUT"
+          set -e
+          OWNER_LC="$(printf '%s' "$OWNER" | tr '[:upper:]' '[:lower:]')"
+          if [ "$USE_OPENWRT_CONTAINER" = "true" ]; then
+            OWNER_LC=openwrt
           fi
 
-      - name: Determine ccache info
-        id: determine_ccache_info
-        run: |
-          echo "ccache_name=ccache-${{ inputs.ccache_type }}-${{ steps.determine_container_name.outputs.ccache_tag }}" >> $GITHUB_OUTPUT
+          if [ "$USE_PREBUILT_TOOLS_ARTIFACT" = "true" ]; then
+            CONTAINER=openwrt/buildbot/buildworker-v3.11.8:v23
+          else
+            CONTAINER="$OWNER_LC/$CONTAINER_NAME"
+          fi
+
+          echo "container=$CONTAINER" >> "$GITHUB_OUTPUT"
 
       - name: Get info
         id: get_info
