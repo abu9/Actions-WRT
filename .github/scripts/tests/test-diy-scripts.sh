@@ -29,7 +29,7 @@ test_clean_shell_invocation(){
   cat > "$fixture" <<'FIXTURE'
 #!/usr/bin/env bash
 set -euo pipefail
-: "\${GITHUB_WORKSPACE:?GITHUB_WORKSPACE was not resolved}"
+: "${GITHUB_WORKSPACE:?GITHUB_WORKSPACE was not resolved}"
 printf '%s\n' "$GITHUB_WORKSPACE" > "$GITHUB_WORKSPACE/observed-workspace"
 FIXTURE
 
@@ -50,7 +50,7 @@ test_part1_workspace_resolution(){
   assert_has "$script" 'GITHUB_WORKSPACE="$(cd .. && pwd)"'
   assert_has "$script" 'export GITHUB_WORKSPACE'
   assert_has "$script" 'bash "$GITHUB_WORKSPACE/diy-part1.sh"'
-  assert_lacks "$script" 'bash "\${GITHUB_WORKSPACE}/diy-part1.sh"'
+  assert_lacks "$script" 'bash "${GITHUB_WORKSPACE}/diy-part1.sh"'
 }
 
 test_part1_clean_shell(){
