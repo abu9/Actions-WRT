@@ -25,6 +25,13 @@ t02(){
   for command in 'make defconfig' 'make tools/install' 'make toolchain/install' 'make target/toolchain/compile' './scripts/ext-tools.sh --refresh'; do
     has "$r" "$command"
   done
+  ! grep -Fq 'target/toolchain/*|scripts/ext-tools.sh' <<<"$tools" || { echo 'Toolchain-only paths leaked into Host Tools fingerprint' >&2; return 1; }
+  grep -Fq 'target/toolchain/*|scripts/ext-tools.sh' <<<"$toolchain" || { echo 'Toolchain fingerprint omits target/toolchain or scripts/ext-tools.sh' >&2; return 1; }
+  grep -Fq 'container: $' <<<"$toolchain" || { echo 'Toolchain fingerprint no longer validates container input handoff' >&2; return 1; }
+  grep -Fq 'inputs.container_image' <<<"$toolchain" || { echo 'Toolchain fingerprint no longer validates container_image input' >&2; return 1; }
+  grep -Fq 'PUSH_WORKFLOW="$LOCAL_REPO_DIR/.github/workflows/push-containers.yml"' <<<"$toolchain" || { echo 'Toolchain fingerprint no longer checks the caller workflow' >&2; return 1; }
+  grep -Fq 'grep -Fq "$BUILDWORKER_IMAGE" "$PUSH_WORKFLOW"' <<<"$toolchain" || { echo 'Toolchain fingerprint no longer validates the pinned builder image' >&2; return 1; }
+  ! grep -Fq 'grep -Fq "$BUILDWORKER_IMAGE" "$WORKFLOW"' <<<"$toolchain" || { echo 'Toolchain fingerprint still checks the wrong workflow for the builder image' >&2; return 1; }
 }
 t09(){
   local f="$WF/determine-targets.yml"
@@ -132,6 +139,7 @@ t07(){
   has "$v" '.github/scripts/tests/test-diy-scripts.sh'
   has "$v" '.github/scripts/tests/test-workflows.sh'
   has "$v" '.github/scripts/tests/test-release-index.sh'
+  has "$v" 'shellcheck --severity=error .github/scripts/*.sh .github/scripts/tests/*.sh diy-part1.sh diy-part2.sh'
   lacks "$v" 'uses: ./.github/workflows/build.yml'
   lacks "$v" 'uses: ./.github/workflows/reusable_build.yml'
   [[ ! -e "$WF/static-validation.yml" ]] || { echo 'obsolete static-validation workflow remains' >&2; return 1; }
@@ -210,6 +218,8 @@ t15(){
   lacks "$r" 'inputs.container_name'
   lacks "$r" 'CONTAINER_TAG='
   lacks "$r" "github.event_name == 'push'"
+  lacks "$r" 'EVENT_NAME: ${{ github.event_name }}'
+  lacks "$r" 'EVENT_NAME" = "push"'
   lacks "$r" 'Cleanup dl/build_dir/staging_dir to make some space'
 }
 t16(){
