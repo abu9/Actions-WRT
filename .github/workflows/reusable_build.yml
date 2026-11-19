@@ -778,7 +778,11 @@ jobs:
         env:
           REPO_URL: ${{ inputs.repo_url }}
         run: |
-          ${GITHUB_WORKSPACE}/diy-part2.sh
+          # Resolve the workspace inside the buildbot shell; su does not preserve
+          # runner-only environment variables such as GITHUB_WORKSPACE.
+          GITHUB_WORKSPACE="$(cd .. && pwd)"
+          export GITHUB_WORKSPACE
+          bash "$GITHUB_WORKSPACE/diy-part2.sh"
 
 
       - name: Setup configuration
