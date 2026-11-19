@@ -274,7 +274,6 @@ jobs:
             source_repository "$SOURCE_REPO" \
             target "$TARGET" \
             subtarget "$SUBTARGET" \
-            host_tools_fingerprint "$TOOLS_FINGERPRINT" \
             toolchain_build_recipe 'toolchain-v3; config:CCACHE,DEVEL,AUTOREMOVE,TARGET,SUBTARGET; commands:make-defconfig,make-tools-install,make-toolchain-install,make-target-toolchain-compile; host-tools:image-inheritance; command:./scripts/ext-tools.sh --refresh' \
             host_tools_image "$TOOLS_IMAGE" \
             host_tools_fingerprint "$TOOLS_FINGERPRINT" \
