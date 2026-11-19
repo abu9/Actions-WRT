@@ -4,7 +4,6 @@ name: Build sub target
 on:
   workflow_call:
     secrets:
-      coverity_api_token:
     outputs:
       ccache_tag:
         value: ${{ jobs.setup_build.outputs.ccache_tag }}
@@ -36,23 +35,6 @@ on:
         type: boolean
       build_all_boards:
         type: boolean
-      coverity_project_name:
-        type: string
-        default: OpenWrt
-      coverity_check_packages:
-        type: string
-      coverity_compiler_template_list:
-        type: string
-        default: >-
-          arm-openwrt-linux-gcc
-      coverity_force_compile_packages:
-        type: string
-        default: >-
-          curl
-          libnl
-          mbedtls
-          wolfssl
-          openssl
       build_external_toolchain:
         type: boolean
       upload_external_toolchain:
@@ -1016,93 +998,6 @@ jobs:
         run: |
           make target/toolchain/compile -j$(nproc) BUILD_LOG=1 || { ret=$?; bash ../.github/scripts/show_build_failures.sh; exit "$ret"; }
 
-
-      - name: Coverity prepare toolchain
-        if: inputs.coverity_check_packages != ''
-        env:
-          COVERITY_API_TOKEN: ${{ secrets.coverity_api_token }}
-          COVERITY_PROJECT_NAME: ${{ inputs.coverity_project_name }}
-          COVERITY_COMPILER_TEMPLATE_LIST: ${{ inputs.coverity_compiler_template_list }}
-        shell: su buildbot -c "bash --noprofile --norc -eo pipefail {0}"
-        working-directory: openwrt
-        run: |
-          wget -q https://scan.coverity.com/download/linux64 --post-data "token=$COVERITY_API_TOKEN&project=$COVERITY_PROJECT_NAME" -O coverity.tar.gz
-          wget -q https://scan.coverity.com/download/linux64 --post-data "token=$COVERITY_API_TOKEN&project=$COVERITY_PROJECT_NAME&md5=1" -O coverity.tar.gz.md5
-          echo ' coverity.tar.gz' >> coverity.tar.gz.md5
-          md5sum -c coverity.tar.gz.md5
-
-          mkdir cov-analysis-linux64
-          tar xzf coverity.tar.gz --strip 1 -C cov-analysis-linux64
-          export PATH="$(pwd)/cov-analysis-linux64/bin:$PATH"
-
-          read -r -a compiler_templates <<< "$COVERITY_COMPILER_TEMPLATE_LIST"
-          for template in "${compiler_templates[@]}"; do
-            if [[ ! "$template" =~ ^[[:alnum:]_.+-]+$ ]]; then
-              echo "Invalid Coverity compiler template: $template" >&2
-              exit 1
-            fi
-            cov-configure --template --comptype gcc --compiler "$template"
-          done
-
-
-      - name: Clean and recompile packages with Coverity toolchain
-        if: inputs.coverity_check_packages != ''
-        env:
-          COVERITY_CHECK_PACKAGES: ${{ inputs.coverity_check_packages }}
-          COVERITY_FORCE_COMPILE_PACKAGES: ${{ inputs.coverity_force_compile_packages }}
-        shell: su buildbot -c "bash --noprofile --norc -eo pipefail {0}"
-        working-directory: openwrt
-        run: |
-          read -r -a coverity_check_packages <<< "$COVERITY_CHECK_PACKAGES"
-          read -r -a coverity_force_compile_packages <<< "$COVERITY_FORCE_COMPILE_PACKAGES"
-          if [ "${#coverity_check_packages[@]}" -eq 0 ]; then
-            echo "coverity_check_packages did not contain any package names." >&2
-            exit 1
-          fi
-          clean_targets=()
-          compile_targets=()
-          force_compile_targets=()
-          for package in "${coverity_check_packages[@]}" "${coverity_force_compile_packages[@]}"; do
-            if [[ ! "$package" =~ ^[[:alnum:]][[:alnum:]_.+-]*$ ]]; then
-              echo "Invalid Coverity package name: $package" >&2
-              exit 1
-            fi
-          done
-          for package in "${coverity_check_packages[@]}"; do
-            clean_targets+=("package/$package/clean")
-            compile_targets+=("package/$package/compile")
-          done
-          for package in "${coverity_force_compile_packages[@]}"; do
-            force_compile_targets+=("package/$package/compile")
-          done
-
-          make -j"$(nproc)" BUILD_LOG=1 "${clean_targets[@]}" || { ret=$?; bash ../.github/scripts/show_build_failures.sh; exit "$ret"; }
-          if [ "${#force_compile_targets[@]}" -gt 0 ]; then
-            make -j"$(nproc)" BUILD_LOG=1 "${force_compile_targets[@]}" || { ret=$?; bash ../.github/scripts/show_build_failures.sh; exit "$ret"; }
-          fi
-
-          export PATH="$(pwd)/cov-analysis-linux64/bin:$PATH"
-          cov-build --dir cov-int make -j"$(nproc)" BUILD_LOG=1 "${compile_targets[@]}" || { ret=$?; bash ../.github/scripts/show_build_failures.sh; exit "$ret"; }
-
-
-      - name: Upload build to Coverity for analysis
-        if: inputs.coverity_check_packages != ''
-        env:
-          COVERITY_API_TOKEN: ${{ secrets.coverity_api_token }}
-          COVERITY_PROJECT_NAME: ${{ inputs.coverity_project_name }}
-          REPO_BRANCH: ${{ inputs.repo_branch }}
-          SOURCE_COMMIT: ${{ github.sha }}
-        shell: su buildbot -c "sh -e {0}"
-        working-directory: openwrt
-        run: |
-          tar czf cov-int.tar.gz ./cov-int
-          curl \
-            --form token="$COVERITY_API_TOKEN" \
-            --form email="contact@openwrt.org" \
-            --form file=@cov-int.tar.gz \
-            --form version="$REPO_BRANCH-$SOURCE_COMMIT" \
-            --form description="OpenWrt $REPO_BRANCH-$SOURCE_COMMIT" \
-            "https://scan.coverity.com/builds?project=$COVERITY_PROJECT_NAME"
 
 
       - name: Upload logs
