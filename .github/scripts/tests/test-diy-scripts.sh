@@ -75,8 +75,16 @@ run_test(){
   printf 'ok %02d - %s\n' "$PASS" "$1"
 }
 
+test_diy_scripts_fail_fast(){
+  grep -Fq 'set -e -o pipefail' "$ROOT/diy-part1.sh" || fail 'diy-part1.sh must propagate command failures'
+  grep -Fq 'set -e -o pipefail' "$ROOT/diy-part2.sh" || fail 'diy-part2.sh must propagate command failures'
+  grep -Fq 'SKIP_CURRENT=1' "$ROOT/diy-part1.sh" || fail 'diy-part1.sh must track an intentional conflict skip'
+  grep -Fq 'if [[ "$SKIP_CURRENT" -eq 1 ]]; then return 0; fi' "$ROOT/diy-part1.sh" || fail 'diy-part1.sh must continue after an intentional skip'
+}
+
 run_test 'pre-custom script resolves workspace inside buildbot shell' test_part1_workspace_resolution
 run_test 'pre-custom script works without inherited runner environment' test_part1_clean_shell
 run_test 'post-custom script resolves workspace inside buildbot shell' test_part2_workspace_resolution
 run_test 'post-custom script works without inherited runner environment' test_part2_clean_shell
+run_test 'both DIY scripts fail fast and preserve conflict skip semantics' test_diy_scripts_fail_fast
 printf '\n%d DIY script invocation regression tests passed.\n' "$PASS"
