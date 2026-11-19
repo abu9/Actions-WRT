@@ -8,6 +8,11 @@
 # https://github.com/P3TERX/Actions-OpenWrt
 # File name: diy-part1.sh
 # Description: OpenWrt DIY script part 1 (Before Update feeds)
+
+set -e -o pipefail
+OVERWRITE_ALL="${OVERWRITE_ALL:-0}"
+SKIP_ALL="${SKIP_ALL:-0}"
+SKIP_CURRENT=0
 #
 
 # Uncomment a feed source
@@ -19,20 +24,21 @@
 # Function to handle file conflicts
 function handle_conflict() {
     local localdir="$1"
+    SKIP_CURRENT=0
     if [ -d "$localdir" ]; then
         if [ "$OVERWRITE_ALL" == "1" ]; then
             rm -rf "$localdir"
         elif [ "$SKIP_ALL" == "1" ]; then
             echo "Skipping $localdir"
-            return 1
+            SKIP_CURRENT=1
         else
             echo -n "Directory $localdir already exists. Overwrite? [Y] Yes  [A] Yes to All  [N] No  [L] No to All  [S] Suspend  [?] Help (default is \"Y\"): "
             read -r choice
             case "$choice" in
                 Y|y ) rm -rf "$localdir" ;;
-                N|n ) echo "Skipping $localdir"; return 1 ;;
-                A|a ) rm -rf "$localdir"; export OVERWRITE_ALL=1 ;;
-                L|l ) echo "Skipping $localdir"; export SKIP_ALL=1; return 1 ;;
+                N|n ) echo "Skipping $localdir"; SKIP_CURRENT=1 ;;
+                A|a ) rm -rf "$localdir"; OVERWRITE_ALL=1 ;;
+                L|l ) echo "Skipping $localdir"; SKIP_ALL=1; SKIP_CURRENT=1 ;;
                 S|s ) echo "Suspending script"; exit 1 ;;
                 * ) echo "Invalid choice"; return 1 ;;
             esac
@@ -47,7 +53,8 @@ function git_sparse_clone() {
     local localdir="$3"
     local tempdir="${localdir}_temp"
     shift 3
-    handle_conflict "$localdir" || return 1
+    handle_conflict "$localdir"
+    if [[ "$SKIP_CURRENT" -eq 1 ]]; then return 0; fi
     echo "Cloning into temporary directory $tempdir"
     git clone -b "$branch" --depth 1 --filter=blob:none --sparse "$rurl" "$tempdir" || { echo "Clone failed"; rm -rf "$tempdir"; return 1; }
     (
