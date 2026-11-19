@@ -90,6 +90,10 @@ on:
         description: 'Use the same-run Host Tools artifact instead of a published tools image'
         type: boolean
         default: false
+      dummy_mode:
+        description: 'Generate dummy build artifacts and skip compilation'
+        type: boolean
+        default: false
       toolchain_fingerprint:
         description: 'Full verified target Toolchain content fingerprint'
         type: string
@@ -242,7 +246,7 @@ jobs:
   check:
     name: Check packages for ${{ inputs.target }}/${{ inputs.subtarget }}
     needs: setup_build
-    if: inputs.check == true && ( github.event_name == 'push' || inputs.check_packages_list != '' )
+    if: inputs.dummy_mode != true && inputs.check == true && ( github.event_name == 'push' || inputs.check_packages_list != '' )
     runs-on: ubuntu-24.04
 
     container: ghcr.io/${{ needs.setup_build.outputs.container }}
@@ -566,15 +570,25 @@ jobs:
         run: chown -R buildbot:buildbot .
 
       - name: Prepare prebuilt tools
+        if: inputs.dummy_mode != true || inputs.use_prebuilt_tools_artifact == true
         shell: su buildbot -c "sh -e {0}"
         working-directory: openwrt
         run: |
           mkdir -p staging_dir build_dir
+          test -d /prebuilt_tools/staging_dir/host
+          test -d /prebuilt_tools/build_dir/host
           ln -s /prebuilt_tools/staging_dir/host staging_dir/host
           ln -s /prebuilt_tools/build_dir/host build_dir/host
-          ./scripts/ext-tools.sh --refresh
+          test -d staging_dir/host
+          test -d build_dir/host
+
+      - name: Refresh upstream external tools
+        if: inputs.dummy_mode != true
+        shell: su buildbot -c "sh -e {0}"
+        working-directory: openwrt
+        run: ./scripts/ext-tools.sh --refresh
       - name: Prepare custom scripts
-        if: inputs.build_full == true
+        if: inputs.dummy_mode != true && inputs.build_full == true
         shell: su buildbot -c "sh -e {0}"
         run: |
           if [ -d "files" ]; then
@@ -584,7 +598,7 @@ jobs:
 
 
       - name: Load pre-custom script
-        if: inputs.build_full == true
+        if: inputs.dummy_mode != true && inputs.build_full == true
         shell: su buildbot -c "bash --noprofile --norc -eo pipefail {0}"
         working-directory: openwrt
         env:
@@ -598,7 +612,7 @@ jobs:
 
 
       - name: Update & Install feeds
-        if: inputs.build_full == true
+        if: inputs.dummy_mode != true && inputs.build_full == true
         shell: su buildbot -c "sh -e {0}"
         working-directory: openwrt
         run: |
@@ -608,7 +622,7 @@ jobs:
 
       - name: Restore ccache cache
         id: restore-ccache-cache
-        if: inputs.use_ccache_cache == true
+        if: inputs.dummy_mode != true && inputs.use_ccache_cache == true
         uses: actions/cache/restore@v6.1.0
         with:
           path: openwrt/.ccache
@@ -620,7 +634,7 @@ jobs:
             ccache-${{ inputs.ccache_type }}-
 
       - name: Prepare usign host verifier
-        if: inputs.build_toolchain == false && (steps.parse-toolchain.outputs.toolchain-type == 'external_toolchain' || steps.parse-toolchain.outputs.toolchain-type == 'external_sdk')
+        if: inputs.dummy_mode != true && inputs.build_toolchain == false && (steps.parse-toolchain.outputs.toolchain-type == 'external_toolchain' || steps.parse-toolchain.outputs.toolchain-type == 'external_sdk')
         shell: su buildbot -c "sh -e {0}"
         working-directory: openwrt
         env:
@@ -649,7 +663,7 @@ jobs:
           test -x staging_dir/host/bin/usign
 
       - name: Download external toolchain/sdk
-        if: inputs.build_toolchain == false && steps.parse-toolchain.outputs.toolchain-type != 'internal' && steps.parse-toolchain.outputs.toolchain-type != 'external_container'
+        if: inputs.dummy_mode != true && inputs.build_toolchain == false && steps.parse-toolchain.outputs.toolchain-type != 'internal' && steps.parse-toolchain.outputs.toolchain-type != 'external_container'
         env:
           AUTHOR: ${{ inputs.author }}
           TARGET: ${{ inputs.target }}
@@ -695,7 +709,7 @@ jobs:
 
 
       - name: Load post-custom script
-        if: inputs.build_full == true
+        if: inputs.dummy_mode != true && inputs.build_full == true
         shell: su buildbot -c "bash --noprofile --norc -eo pipefail {0}"
         working-directory: openwrt
         env:
@@ -755,7 +769,7 @@ jobs:
         # option error.
         # To fix this force compiler type to gcc.
       - name: Configure ccache and apply fixes
-        if: inputs.use_ccache_cache == true
+        if: inputs.dummy_mode != true && inputs.use_ccache_cache == true
         shell: su buildbot -c "sh -e {0}"
         working-directory: openwrt
         env:
@@ -920,6 +934,7 @@ jobs:
 
 
       - name: Build tools
+        if: inputs.dummy_mode != true
         shell: su buildbot -c "sh -e {0}"
         working-directory: openwrt
         run: |
@@ -927,11 +942,28 @@ jobs:
 
 
       - name: Build toolchain
+        if: inputs.dummy_mode != true && (inputs.build_toolchain == true || steps.parse-toolchain.outputs.toolchain-type == 'internal')
         shell: su buildbot -c "sh -e {0}"
         working-directory: openwrt
         run: |
           make toolchain/install -j$(nproc) BUILD_LOG=1 || { ret=$?; bash ../.github/scripts/show_build_failures.sh; exit "$ret"; }
 
+
+      - name: Create dummy external toolchain archive
+        if: inputs.dummy_mode == true && inputs.upload_external_toolchain == true
+        working-directory: openwrt
+        env:
+          TARGET: ${{ inputs.target }}
+          SUBTARGET: ${{ inputs.subtarget }}
+        shell: su buildbot -c "sh -e {0}"
+        run: |
+          set -e
+          archive_dir="bin/targets/$TARGET/$SUBTARGET"
+          fixture_dir="$(mktemp -d)"
+          trap 'rm -rf "$fixture_dir"' EXIT
+          mkdir -p "$archive_dir" "$fixture_dir/dummy-toolchain"
+          printf '%s\\n' 'Actions-WRT dummy external toolchain fixture; not a compiler toolchain.' > "$fixture_dir/dummy-toolchain/README.txt"
+          tar -czf "$archive_dir/actions-wrt-dummy-toolchain.tar.gz" -C "$fixture_dir" dummy-toolchain
 
       - name: Setup Debug Session
         if: inputs.debug == true
@@ -940,7 +972,7 @@ jobs:
           limit-access-to-actor: true
 
       - name: Build Kernel
-        if: inputs.build_kernel == true
+        if: inputs.dummy_mode != true && inputs.build_kernel == true
         shell: su buildbot -c "sh -e {0}"
         working-directory: openwrt
         run: |
@@ -948,14 +980,14 @@ jobs:
 
 
       - name: Save ccache kernel cache
-        if: inputs.use_ccache_cache == true && inputs.build_kernel == true
+        if: inputs.dummy_mode != true && inputs.use_ccache_cache == true && inputs.build_kernel == true
         uses: actions/cache/save@v6.1.0
         with:
           path: openwrt/.ccache
           key: ccache-kernel-${{ needs.setup_build.outputs.ccache_tag}}-${{ hashFiles('openwrt/include/kernel-**') }}
 
       - name: Build Kernel Kmods
-        if: inputs.build_kernel == true
+        if: inputs.dummy_mode != true && inputs.build_kernel == true
         shell: su buildbot -c "sh -e {0}"
         working-directory: openwrt
         run: |
@@ -963,7 +995,7 @@ jobs:
 
 
       - name: Build DTBs
-        if: inputs.build_dtb == true
+        if: inputs.dummy_mode != true && inputs.build_dtb == true
         shell: su buildbot -c "bash --noprofile --norc -eo pipefail {0}"
         working-directory: openwrt
         run: |
@@ -995,7 +1027,7 @@ jobs:
 
 
       - name: Build everything
-        if: inputs.build_full == true
+        if: inputs.dummy_mode != true && inputs.build_full == true
         shell: su buildbot -c "sh -e {0}"
         working-directory: openwrt
         run: |
@@ -1003,7 +1035,7 @@ jobs:
 
 
       - name: Build external toolchain
-        if: inputs.build_external_toolchain == true
+        if: inputs.dummy_mode != true && inputs.build_external_toolchain == true
         shell: su buildbot -c "sh -e {0}"
         working-directory: openwrt
         run: |
@@ -1011,7 +1043,7 @@ jobs:
 
 
       - name: Coverity prepare toolchain
-        if: inputs.coverity_check_packages != ''
+        if: inputs.dummy_mode != true && inputs.coverity_check_packages != ''
         env:
           COVERITY_API_TOKEN: ${{ secrets.coverity_api_token }}
           COVERITY_PROJECT_NAME: ${{ inputs.coverity_project_name }}
@@ -1039,7 +1071,7 @@ jobs:
 
 
       - name: Clean and recompile packages with Coverity toolchain
-        if: inputs.coverity_check_packages != ''
+        if: inputs.dummy_mode != true && inputs.coverity_check_packages != ''
         env:
           COVERITY_CHECK_PACKAGES: ${{ inputs.coverity_check_packages }}
           COVERITY_FORCE_COMPILE_PACKAGES: ${{ inputs.coverity_force_compile_packages }}
@@ -1079,7 +1111,7 @@ jobs:
 
 
       - name: Upload build to Coverity for analysis
-        if: inputs.coverity_check_packages != ''
+        if: inputs.dummy_mode != true && inputs.coverity_check_packages != ''
         env:
           COVERITY_API_TOKEN: ${{ secrets.coverity_api_token }}
           COVERITY_PROJECT_NAME: ${{ inputs.coverity_project_name }}
@@ -1111,7 +1143,7 @@ jobs:
         run: rm -rf dl build_dir staging_dir
 
       - name: Delete already present ccache cache
-        if: steps.restore-ccache-cache.outputs.cache-hit == 'true' && inputs.use_ccache_cache == true
+        if: inputs.dummy_mode != true && steps.restore-ccache-cache.outputs.cache-hit == 'true' && inputs.use_ccache_cache == true
         uses: octokit/request-action@b91aabaa861c777dcdb14e2387e30eddf04619ae # v3.0.0
         with:
           route: DELETE /repos/{repository}/actions/caches?key={key}
@@ -1121,14 +1153,14 @@ jobs:
           INPUT_KEY: ${{ steps.restore-ccache-cache.outputs.cache-primary-key }}
 
       - name: Save ccache cache
-        if: inputs.use_ccache_cache == true
+        if: inputs.dummy_mode != true && inputs.use_ccache_cache == true
         uses: actions/cache/save@v6.1.0
         with:
           path: openwrt/.ccache
           key: ${{ steps.restore-ccache-cache.outputs.cache-primary-key }}
 
       - name: Archive ccache
-        if: inputs.use_ccache_cache == true  && inputs.upload_ccache_cache == true
+        if: inputs.dummy_mode != true && inputs.use_ccache_cache == true && inputs.upload_ccache_cache == true
         shell: su buildbot -c "sh -e {0}"
         working-directory: openwrt
         run: |
@@ -1136,7 +1168,7 @@ jobs:
 
 
       - name: Upload ccache cache
-        if: inputs.use_ccache_cache == true && inputs.upload_ccache_cache == true
+        if: inputs.dummy_mode != true && inputs.use_ccache_cache == true && inputs.upload_ccache_cache == true
         uses: actions/upload-artifact@v7.0.2
         with:
           name: ${{ inputs.target }}-${{ inputs.subtarget }}${{ inputs.testing == true && '-testing' || '' }}-ccache-cache
@@ -1170,6 +1202,30 @@ jobs:
           name: ${{ inputs.target }}-${{ inputs.subtarget }}-external-toolchain
           path: |
             openwrt/${{ steps.get-toolchain-file.outputs.toolchain-file }}
+
+      - name: Create dummy firmware fixture
+        if: inputs.dummy_mode == true && inputs.build_full == true
+        working-directory: openwrt
+        env:
+          TARGET: ${{ inputs.target }}
+          SUBTARGET: ${{ inputs.subtarget }}
+          SOURCE_COMMIT: ${{ inputs.repo_commit }}
+          DEVICE_NAME: ${{ needs.setup_build.outputs.device_name }}
+          FILE_DATE: ${{ needs.setup_build.outputs.file_date }}
+        shell: su buildbot -c "sh -e {0}"
+        run: |
+          set -e
+          test "$DEVICE_NAME" = "qihoo_360t7-ubi"
+          test -n "$FILE_DATE"
+          fixture_dir="bin/targets/$TARGET/$SUBTARGET"
+          mkdir -p "$fixture_dir"
+          fixture_file="$fixture_dir/ACTIONS-WRT-DUMMY-NOT-FLASHABLE.txt"
+          printf '%s\\n' \\
+            'TEST FIXTURE ONLY: this is not a firmware image and must never be flashed.' \\
+            "Target: $TARGET/$SUBTARGET" \\
+            "Device: $DEVICE_NAME" \\
+            "Source commit: $SOURCE_COMMIT" > "$fixture_file"
+          test -s "$fixture_file"
 
       - name: Upload Firmware
         if: inputs.build_full == true
