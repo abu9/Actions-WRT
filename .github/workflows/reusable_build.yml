@@ -778,7 +778,7 @@ jobs:
         env:
           REPO_URL: ${{ inputs.repo_url }}
         run: |
-          # Resolve the workspace inside the buildbot shell; su does not preserve
+          # Resolve the workspace inside this shell rather than relying on inherited
           # runner-only environment variables such as GITHUB_WORKSPACE.
           GITHUB_WORKSPACE="$(cd .. && pwd)"
           export GITHUB_WORKSPACE
