@@ -667,15 +667,26 @@ jobs:
             ccache-${{ inputs.ccache_type }}-${{ inputs.target }}-${{ inputs.subtarget }}-
             ccache-${{ inputs.ccache_type }}-
 
-      - name: Install CMake for dummy release verification
+      - name: Install pinned CMake for dummy release verification
         if: inputs.dummy_mode == true && inputs.build_toolchain == false && (steps.parse-toolchain.outputs.toolchain-type == 'external_toolchain' || steps.parse-toolchain.outputs.toolchain-type == 'external_sdk')
         shell: bash
         run: |
           if command -v cmake >/dev/null 2>&1; then
             exit 0
           fi
-          apt-get update
-          apt-get install -y --no-install-recommends cmake
+
+          CMAKE_VERSION='3.31.8'
+          CMAKE_ARCHIVE="cmake-$CMAKE_VERSION-linux-x86_64.tar.gz"
+          CMAKE_URL="https://github.com/Kitware/CMake/releases/download/v$CMAKE_VERSION/$CMAKE_ARCHIVE"
+          CMAKE_SHA256='630615d8e98ac33eba7fbe472626dff5c899c85af3c024585ae109166a6909d0'
+          CMAKE_DIR="$RUNNER_TEMP/cmake-$CMAKE_VERSION-linux-x86_64"
+
+          curl --fail --silent --show-error --location --retry 3 "$CMAKE_URL" -o "$RUNNER_TEMP/$CMAKE_ARCHIVE"
+          printf '%s  %s\n' "$CMAKE_SHA256" "$RUNNER_TEMP/$CMAKE_ARCHIVE" | sha256sum --check --strict
+          tar -xzf "$RUNNER_TEMP/$CMAKE_ARCHIVE" -C "$RUNNER_TEMP"
+          test -x "$CMAKE_DIR/bin/cmake"
+          printf '%s\n' "$CMAKE_DIR/bin" >> "$GITHUB_PATH"
+          rm -f "$RUNNER_TEMP/$CMAKE_ARCHIVE"
       - name: Prepare usign host verifier
         if: inputs.build_toolchain == false && (steps.parse-toolchain.outputs.toolchain-type == 'external_toolchain' || steps.parse-toolchain.outputs.toolchain-type == 'external_sdk')
         shell: su buildbot -c "sh -e {0}"
