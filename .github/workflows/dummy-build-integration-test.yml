@@ -1,0 +1,77 @@
+name: Dummy build integration test
+
+on:
+  push:
+    branches:
+      - preview/fingerprint-simplification
+
+permissions:
+  contents: read
+  packages: write
+  actions: write
+
+concurrency:
+  group: dummy-build-integration-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  determine_target:
+    name: Resolve pinned 360T7 build inputs
+    uses: ./.github/workflows/determine-targets.yml
+    with:
+      source_branch: immortalwrt/immortalwrt@openwrt-25.12
+      config_name: 360t7-immortalwrt-25.12-ubi.conf
+
+  dummy_containers:
+    name: Build and publish fixture Host Tools / Toolchain images
+    needs: determine_target
+    permissions:
+      contents: read
+      packages: write
+      actions: write
+    uses: ./.github/workflows/push-containers.yml
+    with:
+      source_branch: immortalwrt/immortalwrt@openwrt-25.12
+      config_name: 360t7-immortalwrt-25.12-ubi.conf
+      source_commit: ${{ needs.determine_target.outputs.source_commit }}
+      target: ${{ needs.determine_target.outputs.target }}
+      subtarget: ${{ needs.determine_target.outputs.subtarget }}
+      repo_url: ${{ needs.determine_target.outputs.repo_url }}
+      repo_branch: ${{ needs.determine_target.outputs.repo_branch }}
+      author: ${{ needs.determine_target.outputs.author }}
+      build_tools: true
+      build_toolchain: true
+      dummy_mode: true
+
+  dummy_firmware_artifact:
+    name: Create and upload non-flashable firmware fixture
+    needs: [determine_target, dummy_containers]
+    permissions:
+      contents: read
+      packages: read
+      actions: write
+    uses: ./.github/workflows/reusable_build.yml
+    with:
+      target: ${{ needs.determine_target.outputs.target }}
+      subtarget: ${{ needs.determine_target.outputs.subtarget }}
+      repo_url: ${{ needs.determine_target.outputs.repo_url }}
+      repo_branch: ${{ needs.determine_target.outputs.repo_branch }}
+      repo_commit: ${{ needs.dummy_containers.outputs.source_commit }}
+      tools_fingerprint: ${{ needs.dummy_containers.outputs.tools_fingerprint }}
+      toolchain_fingerprint: ${{ needs.dummy_containers.outputs.toolchain_fingerprint }}
+      author: ${{ needs.determine_target.outputs.author }}
+      config_name: 360t7-immortalwrt-25.12-ubi.conf
+      container_name: tools
+      build_toolchain: true
+      build_full: true
+      build_kernel: false
+      build_all_modules: false
+      build_all_kmods: false
+      build_dtb: false
+      build_all_boards: false
+      build_external_toolchain: false
+      upload_external_toolchain: false
+      use_ccache_cache: false
+      check: false
+      use_prebuilt_tools_artifact: true
+      dummy_mode: true
