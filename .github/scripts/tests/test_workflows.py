@@ -243,6 +243,11 @@ class WorkflowIntegrationTests(unittest.TestCase):
             dummy,
         )
         self.assertIn("dummy_toolchain_image_consumer:", dummy)
+        self.assertIn(
+            "container_name: ${{ (inputs.build_toolchain == true && needs.check_toolchain_container.outputs.use_toolchain == 'true') && 'toolchain' || 'tools' }}",
+            build,
+        )
+        self.assertIn("build_toolchain: true", dummy)
         self.assertIn("CONTAINER_TAG=\"${CONTAINER_TAG}-dummy-${GITHUB_RUN_ID}\"", reusable)
 
     def test_host_tools_ready_uses_publisher_verification_without_duplicate_head(self) -> None:
