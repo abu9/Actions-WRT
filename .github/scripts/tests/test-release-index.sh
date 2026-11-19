@@ -128,7 +128,7 @@ test_missing_signature(){
   local dir="$TEST_ROOT/work" fake="$TEST_ROOT/usign"
   mkdir -p "$dir"; printf 'index\n' > "$dir/sha256sums"
   printf '#!/bin/sh\nexit 99\n' > "$fake"; chmod +x "$fake"
-  if (cd "$dir" && AUTHOR=immortalwrt KEYRING_USIGN_KEY="$fake" KEYRING_GPG_DIR='' TOOLCHAIN_ARCHIVE=toolchain.tar.xz bash -euo pipefail -c "$VERIFY_CODE") 2>"$TEST_ROOT/error"; then fail 'missing signature accepted'; fi
+  if (cd "$dir" && AUTHOR=immortalwrt SIGNATURE_FILE=sha256sums.sig KEYRING_USIGN_KEY="$fake" KEYRING_GPG_DIR='' TOOLCHAIN_ARCHIVE=toolchain.tar.xz bash -euo pipefail -c "$VERIFY_CODE") 2>"$TEST_ROOT/error"; then fail 'missing signature accepted'; fi
   grep -Fq 'signature is missing or empty' "$TEST_ROOT/error" || fail 'missing signature error absent'
 }
 test_bad_usign_status(){
@@ -136,7 +136,7 @@ test_bad_usign_status(){
   local dir="$TEST_ROOT/work" fake="$TEST_ROOT/usign"
   mkdir -p "$dir/staging_dir/host/bin"; printf 'index\n' > "$dir/sha256sums"; printf 'sig\n' > "$dir/sha256sums.sig"; printf 'key\n' > "$TEST_ROOT/key"
   printf '#!/bin/sh\nexit 17\n' > "$fake"; chmod +x "$fake"; cp "$fake" "$dir/staging_dir/host/bin/usign"
-  if (cd "$dir" && AUTHOR=immortalwrt KEYRING_USIGN_KEY="$TEST_ROOT/key" KEYRING_GPG_DIR='' TOOLCHAIN_ARCHIVE=toolchain.tar.xz bash -euo pipefail -c "$VERIFY_CODE") 2>/dev/null; then fail 'bad signature accepted'; else [[ "$?" -eq 17 ]] || fail 'usign exit status not propagated'; fi
+  if (cd "$dir" && AUTHOR=immortalwrt SIGNATURE_FILE=sha256sums.sig KEYRING_USIGN_KEY="$TEST_ROOT/key" KEYRING_GPG_DIR='' TOOLCHAIN_ARCHIVE=toolchain.tar.xz bash -euo pipefail -c "$VERIFY_CODE") 2>/dev/null; then fail 'bad signature accepted'; else [[ "$?" -eq 17 ]] || fail 'usign exit status not propagated'; fi
 }
 test_real_gpg_and_tamper(){
   command -v gpg >/dev/null || fail 'gpg is required'
@@ -185,7 +185,7 @@ touch "$TAR_MARKER"
 exit 99
 STUB
   chmod +x "$fakebin/tar"
-  if (cd "$dir" && AUTHOR=immortalwrt KEYRING_USIGN_KEY="$pub" KEYRING_GPG_DIR='' TOOLCHAIN_ARCHIVE=toolchain.tar.xz TAR_MARKER="$marker" PATH="$fakebin:$PATH" bash -euo pipefail -c "$VERIFY_CODE") 2>/dev/null; then fail 'tampered index passed'; fi
+  if (cd "$dir" && AUTHOR=immortalwrt SIGNATURE_FILE=sha256sums.sig KEYRING_USIGN_KEY="$pub" KEYRING_GPG_DIR='' TOOLCHAIN_ARCHIVE=toolchain.tar.xz TAR_MARKER="$marker" PATH="$fakebin:$PATH" bash -euo pipefail -c "$VERIFY_CODE") 2>/dev/null; then fail 'tampered index passed'; fi
   [[ ! -e "$marker" ]] || fail 'tar ran after signature verification failed'
 }
 run_test 'strict shell mode and helper removal' test_workflow_shell_options
