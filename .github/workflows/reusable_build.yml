@@ -3,7 +3,6 @@ name: Build sub target
 
 on:
   workflow_call:
-    secrets:
     outputs:
       ccache_tag:
         value: ${{ jobs.setup_build.outputs.ccache_tag }}
