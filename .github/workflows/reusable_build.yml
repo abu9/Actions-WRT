@@ -21,8 +21,6 @@ on:
       subtarget:
         required: true
         type: string
-      testing:
-        type: boolean
       build_toolchain:
         type: boolean
       build_full:
@@ -159,7 +157,6 @@ jobs:
       # By default stick to latest
       # For official test targetting openwrt stable branch
       # Get the branch or parse the tag and push dedicated tools containers
-      # For local test to use the correct container for stable release testing
       # you need to use for the branch name a prefix of openwrt-[0-9][0-9].[0-9][0-9]-
       - name: Determine container name
         id: determine_container_name
@@ -363,7 +360,7 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@v7.0.2
         with:
-          name: ${{ inputs.target }}-${{ inputs.subtarget }}${{ inputs.testing == true && '-testing' || '' }}-packages-fixed
+          name: ${{ inputs.target }}-${{ inputs.subtarget }}-packages-fixed
           path: openwrt/packages-fixed
 
   build:
@@ -836,14 +833,6 @@ jobs:
           cp -f -- "$CONFIG_NAME" openwrt/.config
 
 
-      - name: Configure testing kernel
-        if: inputs.testing == true
-        shell: su buildbot -c "sh -e {0}"
-        working-directory: openwrt
-        run: |
-          echo CONFIG_TESTING_KERNEL=y >> .config
-
-
       - name: Configure all kernel modules
         if: inputs.build_all_kmods == true
         shell: su buildbot -c "sh -e {0}"
@@ -1228,7 +1217,7 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@v7.0.2
         with:
-          name: ${{ inputs.target }}-${{ inputs.subtarget }}${{ inputs.testing == true && '-testing' || '' }}-logs
+          name: ${{ inputs.target }}-${{ inputs.subtarget }}-logs
           path: "openwrt/logs"
 
       - name: Cleanup dl/build_dir/staging_dir to make some space
@@ -1265,7 +1254,7 @@ jobs:
         if: inputs.use_ccache_cache == true && inputs.upload_ccache_cache == true
         uses: actions/upload-artifact@v7.0.2
         with:
-          name: ${{ inputs.target }}-${{ inputs.subtarget }}${{ inputs.testing == true && '-testing' || '' }}-ccache-cache
+          name: ${{ inputs.target }}-${{ inputs.subtarget }}-ccache-cache
           path: openwrt/${{ needs.setup_build.outputs.ccache_name }}.tar
           retention-days: 1
 
