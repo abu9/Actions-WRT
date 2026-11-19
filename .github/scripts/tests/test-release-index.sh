@@ -35,20 +35,24 @@ prepare_workspace(){
   TEST_ROOT="$(mktemp -d)"
   mkdir -p "$TEST_ROOT/openwrt/package/system/openwrt-keyring" "$TEST_ROOT/.ci-keyring"
 }
-test_workflow_contract(){
+test_workflow_shell_options(){
+  assert_has "$WORKFLOW" 'set -euo pipefail'
+  assert_lacks "$WORKFLOW" 'verify-release-index.sh'
+}
+test_signature_format_and_order(){
   assert_has "$WORKFLOW" 'repository: openwrt/keyring'
   assert_has "$WORKFLOW" 'repository: immortalwrt/keyring'
   assert_has "$WORKFLOW" 'immortalwrt) SIGNATURE_FILE=sha256sums.sig'
   assert_has "$WORKFLOW" 'openwrt) SIGNATURE_FILE=sha256sums.asc'
   assert_has "$WORKFLOW" 'CHECKSUM_OUTPUT="$(sha256sum --check --ignore-missing sha256sums)"'
   assert_has "$WORKFLOW" 'grep -Fq "$TOOLCHAIN_ARCHIVE: OK" <<<"$CHECKSUM_OUTPUT"'
-  assert_has "$WORKFLOW" 'set -euo pipefail'
-  assert_lacks "$WORKFLOW" 'verify-release-index.sh'
   local v c x
   v="$(grep -n 'staging_dir/host/bin/usign -V' "$WORKFLOW" | head -n1 | cut -d: -f1)"
   c="$(grep -n 'CHECKSUM_OUTPUT="$(sha256sum' "$WORKFLOW" | head -n1 | cut -d: -f1)"
   x="$(grep -n 'tar --zstd -xf "$TOOLCHAIN_ARCHIVE"' "$WORKFLOW" | head -n1 | cut -d: -f1)"
   [[ "$v" -lt "$c" && "$c" -lt "$x" ]] || fail 'signature/checksum/extraction order changed'
+}
+test_toolchain_stage_is_unconditional(){
   local stage
   stage="$(sed -n '/- name: Build toolchain/,/- name: Create dummy external toolchain archive/p' "$WORKFLOW")"
   ! grep -Fq 'if:' <<<"$stage" || fail 'Build toolchain step is no longer unconditional'
@@ -180,11 +184,52 @@ STUB
   if (cd "$dir" && AUTHOR=immortalwrt KEYRING_USIGN_KEY="$pub" KEYRING_GPG_DIR='' TOOLCHAIN_ARCHIVE=toolchain.tar.xz TAR_MARKER="$marker" PATH="$fakebin:$PATH" bash -euo pipefail -c "$VERIFY_CODE") 2>/dev/null; then fail 'tampered index passed'; fi
   [[ ! -e "$marker" ]] || fail 'tar ran after signature verification failed'
 }
-run_test 'workflow trust format and verify-before-extract order' test_workflow_contract
+run_test 'strict shell mode and helper removal' test_workflow_shell_options
+run_test 'distribution-specific signature format and verify-before-extract order' test_signature_format_and_order
+run_test 'upstream Toolchain install stage remains unconditional' test_toolchain_stage_is_unconditional
+test_fake_usign_receives_exact_files(){
+  prepare_workspace
+  local dir="$TEST_ROOT/work" capture="$TEST_ROOT/usign-args" key="$TEST_ROOT/release.pub"
+  mkdir -p "$dir/staging_dir/host/bin"
+  make_archive "$dir"
+  printf 'public key\n' > "$key"
+  printf 'signature\n' > "$dir/sha256sums.sig"
+  cat > "$dir/staging_dir/host/bin/usign" <<'STUB'
+#!/bin/bash
+printf '%s\\n' "$@" > "$USIGN_CAPTURE"
+STUB
+  chmod +x "$dir/staging_dir/host/bin/usign"
+  USIGN_CAPTURE="$capture" run_verify "$dir" immortalwrt "$key" '' "$PATH"
+  local expected
+  printf '%s\\n' -V -m "$dir/sha256sums" -p "$key" -x "$dir/sha256sums.sig" > "$TEST_ROOT/expected"
+  diff -u "$TEST_ROOT/expected" "$capture" || fail 'usign arguments changed'
+}
+test_fake_gpg_imports_official_keys_and_verifies_files(){
+  prepare_workspace
+  local dir="$TEST_ROOT/work" keydir="$TEST_ROOT/keyring" fakebin="$TEST_ROOT/bin" capture="$TEST_ROOT/gpg-args" name
+  mkdir -p "$dir" "$keydir" "$fakebin"
+  make_archive "$dir"
+  printf 'signature\n' > "$dir/sha256sums.asc"
+  for name in CD54E82DADB3684D.asc 0x1D53D1877742E911.asc 626471F1.asc; do printf 'public key\n' > "$keydir/$name"; done
+  cat > "$fakebin/gpg" <<'STUB'
+#!/bin/bash
+printf '%s\\n' "$@" >> "$GPG_CAPTURE"
+STUB
+  chmod +x "$fakebin/gpg"
+  GPG_CAPTURE="$capture" run_verify "$dir" openwrt '' "$keydir" "$fakebin:$PATH"
+  grep -Fq -- '--import' "$capture" || fail 'GPG import missing'
+  for name in CD54E82DADB3684D.asc 0x1D53D1877742E911.asc 626471F1.asc; do grep -Fq "$keydir/$name" "$capture" || fail "GPG key not imported: $name"; done
+  grep -Fq -- '--with-fingerprint' "$capture" || fail 'GPG fingerprint output missing'
+  grep -Fq -- '--verify' "$capture" || fail 'GPG detached verification missing'
+  grep -Fq "$dir/sha256sums.asc" "$capture" || fail 'GPG signature path missing'
+  grep -Fq "$dir/sha256sums" "$capture" || fail 'GPG checksum path missing'
+}
 run_test 'OpenWrt official keyring resolution' test_resolve_openwrt_keyring
 run_test 'ImmortalWrt source-selected official usign key' test_resolve_immortalwrt_key
 run_test 'reject key absent from official keyring' test_resolve_rejects_missing_key
 run_test 'reject unexpected keyring origin' test_resolve_rejects_wrong_origin
+run_test 'usign receives exact checksum and signature paths' test_fake_usign_receives_exact_files
+run_test 'GPG imports official keys and verifies exact detached files' test_fake_gpg_imports_official_keys_and_verifies_files
 run_test 'real usign positive, tamper and wrong-key checks' test_usign_real_crypto
 run_test 'missing signature rejected before verifier' test_missing_signature
 run_test 'usign failure status propagates' test_bad_usign_status
