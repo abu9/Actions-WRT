@@ -250,13 +250,13 @@ jobs:
           BUILDWORKER_REF="$(printf '%s' "$BUILDWORKER_IMAGE" | sed 's#^ghcr.io/##')"
           TRACKED_LIST="$(mktemp)"
           MANIFEST="$(mktemp)"
-          trap 'rm -f "$TRACKED_LIST" "$MANIFEST"' EXIT
-          
-          # The checkout is owned by buildbot. safe.directory is only honored from
-          # protected Git config scopes, so isolate the exception in a temporary file.
-          # Scope the trust exception to individual Git commands; Git 2.30 in buildworker does not support GIT_CONFIG_GLOBAL.
-          
-          SOURCE_COMMIT="$(git -c safe.directory="$SOURCE_DIR" -C "$SOURCE_DIR" rev-parse HEAD)"
+          TEMP_HOME="$(mktemp -d)"
+          trap 'rm -rf "$TEMP_HOME"; rm -f "$TRACKED_LIST" "$MANIFEST"' EXIT
+
+          # Git 2.30 in buildworker requires safe.directory in protected global config.
+          HOME="$TEMP_HOME" git config --global --add safe.directory "$SOURCE_DIR"
+
+          SOURCE_COMMIT="$(HOME="$TEMP_HOME" git -C "$SOURCE_DIR" rev-parse HEAD)"
           if [[ ! "$SOURCE_COMMIT" =~ ^[0-9a-f]{40}$ ]]; then
             echo "Invalid OpenWrt source commit: $SOURCE_COMMIT" >&2
             exit 1
@@ -286,7 +286,7 @@ jobs:
             exit 1
           fi
           
-          git -c safe.directory="$SOURCE_DIR" -C "$SOURCE_DIR" ls-files -z > "$TRACKED_LIST"
+          HOME="$TEMP_HOME" git -C "$SOURCE_DIR" ls-files -z > "$TRACKED_LIST"
           printf '%s\0' \
             schema 3 \
             source_repository "$SOURCE_REPO" \
