@@ -36,7 +36,12 @@ prepare_workspace(){
   mkdir -p "$TEST_ROOT/openwrt/package/system/openwrt-keyring" "$TEST_ROOT/.ci-keyring"
 }
 test_workflow_shell_options(){
-  assert_has "$WORKFLOW" 'set -euo pipefail'
+  local download_step
+  download_step="$(extract_step 'Download external toolchain/sdk')"
+  grep -Fxq 'set -euo pipefail' <<<"$download_step" || fail 'download verifier must enable errexit, nounset, and pipefail'
+  assert_has "$WORKFLOW" 'shell: su buildbot -c "bash --noprofile --norc -eo pipefail {0}"'
+  assert_lacks "$WORKFLOW" 'shell: su buildbot -c "bash --noprofile --norc -euo pipefail {0}"'
+  assert_lacks "$WORKFLOW" 'set -Eeuo pipefail'
   assert_lacks "$WORKFLOW" 'verify-release-index.sh'
 }
 test_signature_format_and_order(){
