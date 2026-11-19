@@ -3,8 +3,6 @@ name: Build host tools
 on:
   workflow_call:
     inputs:
-      generate_prebuilt_artifacts:
-        type: boolean
       repo_url:
         required: true
         type: string
@@ -164,7 +162,6 @@ jobs:
           path: openwrt/.config
 
       - name: Archive prebuilt tools
-        if: inputs.generate_prebuilt_artifacts == true
         working-directory: openwrt
         shell: su buildbot -c "sh -e {0}"
         run: |
@@ -172,7 +169,6 @@ jobs:
           tar -cf tools.tar staging_dir/host build_dir/host
 
       - name: Upload prebuilt tools
-        if: inputs.generate_prebuilt_artifacts == true
         uses: actions/upload-artifact@v7.0.2
         with:
           name: linux-buildbot-prebuilt-tools
