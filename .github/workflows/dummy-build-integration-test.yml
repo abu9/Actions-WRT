@@ -41,6 +41,7 @@ jobs:
       build_toolchain: true
       dummy_mode: true
 
+  # Mirrors Build WRT's tag and HTTP-200 decision logic using run-isolated fixture tags.
   verify_fixture_cache_hit:
     name: Verify isolated GHCR cache hit and Toolchain selection
     needs: [determine_target, dummy_containers]
