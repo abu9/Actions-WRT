@@ -40,11 +40,6 @@ on:
         required: false
         type: boolean
         default: false
-      dummy_mode:
-        description: 'Use fixture artifacts and skip compile-dependent preparation'
-        required: false
-        type: boolean
-        default: false
     outputs:
       tools_fingerprint:
         value: ${{ jobs.tools.outputs.tools_fingerprint }}
@@ -210,7 +205,6 @@ jobs:
           test -d build_dir/host
 
       - name: Refresh upstream external tools
-        if: inputs.dummy_mode != true
         working-directory: openwrt
         shell: su buildbot -c "sh -e {0}"
         run: ./scripts/ext-tools.sh --refresh
