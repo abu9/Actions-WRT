@@ -21,7 +21,7 @@ t11(){ has "$WF/determine-targets.yml" 'value" =~ ^[[:alnum:]][[:alnum:]_-]*$'; 
 t12(){ local f="$WF/reusable_build.yml"; lacks "$f" '$(ls /external-toolchain/ | grep wrt-toolchain)'; lacks "$f" '$(ls $TOOLCHAIN_FILE/staging_dir | grep toolchain)'; has "$f" toolchain_roots; has "$f" 'find -H "$TOOLCHAIN_FILE/staging_dir"'; }
 t13(){ local f="$WF/reusable_build.yml"; has "$f" CHECK_PACKAGES_LIST; has "$f" 'read -r -a packages'; lacks "$f" 'for package in inputs.check_packages_list'; has "$f" COVERITY_API_TOKEN; has "$f" 'read -r -a compiler_templates'; has "$f" 'read -r -a coverity_check_packages'; }
 t14(){ local f="$WF/reusable_build.yml"; has "$f" 'git diff --name-only -z'; has "$f" "while IFS= read -r -d '' file;"; has "$f" 'cp --parents -- "$file" packages-fixed/'; lacks "$f" 'for f in $(git diff --name-only)'; }
-t15(){ local b="$WF/build.yml" p="$WF/push-containers.yml"; has "$b" EXPECTED_FINGERPRINT; has "$b" FINGERPRINT:0:32; has "$p" tools-fingerprint; has "$p" toolchain_cache_key; }
+t15(){ local b="$WF/build.yml" p="$WF/push-containers.yml"; has "$b" EXPECTED_FINGERPRINT; has "$b" FINGERPRINT:0:32; has "$p" tools_fingerprint; has "$p" toolchain_cache_key; }
 t16(){ local p="$WF/push-containers.yml" f="$WF/fingerprint.yml" r="$WF/reusable_build.yml" d="$ROOT/.github/dockerfiles/Dockerfile.toolchain"; has "$p" build-linux-buildbot; has "$p" use_prebuilt_tools_artifact; has "$d" /prebuilt_tools/staging_dir/host; has "$d" /prebuilt_tools/build_dir/host; has "$r" use_prebuilt_tools_artifact; has "$f" use_prebuilt_tools_artifact; }
 run 'legacy source rejection' t01
 run 'fingerprint/build recipe alignment' t02
