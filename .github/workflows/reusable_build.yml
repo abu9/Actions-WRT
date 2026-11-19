@@ -667,6 +667,15 @@ jobs:
             ccache-${{ inputs.ccache_type }}-${{ inputs.target }}-${{ inputs.subtarget }}-
             ccache-${{ inputs.ccache_type }}-
 
+      - name: Install CMake for dummy release verification
+        if: inputs.dummy_mode == true && inputs.build_toolchain == false && (steps.parse-toolchain.outputs.toolchain-type == 'external_toolchain' || steps.parse-toolchain.outputs.toolchain-type == 'external_sdk')
+        shell: bash
+        run: |
+          if command -v cmake >/dev/null 2>&1; then
+            exit 0
+          fi
+          apt-get update
+          apt-get install -y --no-install-recommends cmake
       - name: Prepare usign host verifier
         if: inputs.build_toolchain == false && (steps.parse-toolchain.outputs.toolchain-type == 'external_toolchain' || steps.parse-toolchain.outputs.toolchain-type == 'external_sdk')
         shell: su buildbot -c "sh -e {0}"
