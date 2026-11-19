@@ -31,6 +31,52 @@ jobs:
             fi
           done
 
+      - name: Test custom script invocation in a clean shell
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          workflow=".github/workflows/reusable_build.yml"
+          workspace="$(mktemp -d)"
+          trap 'rm -rf "$workspace"' EXIT
+          mkdir -p "$workspace/openwrt"
+
+          extract_run() {
+            awk -v wanted="$1" '
+              $0 == "      - name: " wanted { found = 1; next }
+              found && /^      - name: / { exit }
+              found && /^        run: \\|$/ { in_run = 1; next }
+              in_run && /^          / { sub(/^          /, ""); print; next }
+              in_run && /^[[:space:]]*$/ { print ""; next }
+              in_run { exit }
+            ' "$workflow"
+          }
+
+          while IFS=: read -r step_name script_name; do
+            script_path="$workspace/$script_name"
+            marker="$workspace/$script_name.workspace"
+            cat > "$script_path" <<'FIXTURE'
+          #!/usr/bin/env bash
+          set -euo pipefail
+          : "${GITHUB_WORKSPACE:?GITHUB_WORKSPACE was not resolved}"
+          printf '%s\\n' "$GITHUB_WORKSPACE" > "$GITHUB_WORKSPACE/observed-workspace"
+          FIXTURE
+
+            run_script="$(extract_run "$step_name")"
+            test -n "$run_script"
+
+            (
+              cd "$workspace/openwrt"
+              env -i PATH="$PATH" bash --noprofile --norc -eo pipefail -c "$run_script"
+            )
+
+            test "$(cat "$workspace/observed-workspace")" = "$workspace"
+            mv "$workspace/observed-workspace" "$marker"
+          done <<'CASES'
+          Load pre-custom script:diy-part1.sh
+          Load post-custom script:diy-part2.sh
+          CASES
+
       - name: Install pinned actionlint binary
         env:
           ACTIONLINT_VERSION: '1.7.12'
