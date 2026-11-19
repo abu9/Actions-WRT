@@ -692,7 +692,7 @@ jobs:
             ccache-${{ inputs.ccache_type }}-
 
       - name: Prepare usign host verifier
-        if: inputs.build_toolchain == false && (steps.parse-toolchain.outputs.toolchain-type == 'external_toolchain' || steps.parse-toolchain.outputs.toolchain-type == 'external_sdk')
+        if: inputs.author == 'immortalwrt' && inputs.build_toolchain == false && (steps.parse-toolchain.outputs.toolchain-type == 'external_toolchain' || steps.parse-toolchain.outputs.toolchain-type == 'external_sdk')
         shell: su buildbot -c "sh -e {0}"
         working-directory: openwrt
         env:
