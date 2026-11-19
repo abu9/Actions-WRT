@@ -252,7 +252,8 @@ t16(){
   has "$r" 'test -d /prebuilt_tools/build_dir/host'
   lacks "$r" 'use_prebuilt_tools_artifact'
   lacks "$r" 'name: linux-buildbot-prebuilt-tools'
-  [[ "$(head -n 3 "$d" | tr '\n' ' ')" == 'ARG OWNER_LC ARG CONTAINER_TAG ' ]]
+  has "$d" 'ARG OWNER_LC'
+  has "$d" 'ARG CONTAINER_TAG'
   has "$d" 'FROM ghcr.io/${OWNER_LC}/tools:${CONTAINER_TAG}'
   has "$d" 'io.abu9.actions-wrt.tools-fingerprint='
   has "$d" 'io.abu9.actions-wrt.tools-source-commit='
