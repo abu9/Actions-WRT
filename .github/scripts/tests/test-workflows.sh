@@ -18,7 +18,7 @@ t02(){
   done
   ! grep -Fq CONFIG_BUILD_ALL_HOST_TOOLS <<<"$tools" || { echo 'CONFIG_BUILD_ALL_HOST_TOOLS must remain excluded' >&2; return 1; }
   grep -Fq 'make-defconfig,make-tools-install' <<<"$tools" || { echo 'Host Tools recipe sequence changed' >&2; return 1; }
-  grep -Fq toolchain-v2 <<<"$toolchain" || { echo 'Toolchain recipe version changed' >&2; return 1; }
+  grep -Fq toolchain-v3 <<<"$toolchain" || { echo 'Toolchain recipe version changed' >&2; return 1; }
   for command in make-defconfig make-tools-install make-toolchain-install make-target-toolchain-compile './scripts/ext-tools.sh --refresh'; do
     grep -Fq "$command" <<<"$toolchain" || { echo "missing Toolchain recipe command: $command" >&2; return 1; }
   done
@@ -29,9 +29,9 @@ t02(){
   grep -Fq 'target/toolchain/*|scripts/ext-tools.sh' <<<"$toolchain" || { echo 'Toolchain fingerprint omits target/toolchain or scripts/ext-tools.sh' >&2; return 1; }
   grep -Fq 'container: $' <<<"$toolchain" || { echo 'Toolchain fingerprint no longer validates container input handoff' >&2; return 1; }
   grep -Fq 'inputs.container_image' <<<"$toolchain" || { echo 'Toolchain fingerprint no longer validates container_image input' >&2; return 1; }
+  grep -Fq 'ARG OWNER_LC' <<<"$toolchain" || { echo 'Toolchain fingerprint no longer validates Host Tools image inheritance' >&2; return 1; }
+  grep -Fq 'host_tools_image "$TOOLS_IMAGE"' <<<"$toolchain" || { echo 'Toolchain fingerprint manifest omits its parent image' >&2; return 1; }
   grep -Fq 'PUSH_WORKFLOW="$LOCAL_REPO_DIR/.github/workflows/push-containers.yml"' <<<"$toolchain" || { echo 'Toolchain fingerprint no longer checks the caller workflow' >&2; return 1; }
-  grep -Fq 'grep -Fq "$BUILDWORKER_IMAGE" "$PUSH_WORKFLOW"' <<<"$toolchain" || { echo 'Toolchain fingerprint no longer validates the pinned builder image' >&2; return 1; }
-  ! grep -Fq 'grep -Fq "$BUILDWORKER_IMAGE" "$WORKFLOW"' <<<"$toolchain" || { echo 'Toolchain fingerprint still checks the wrong workflow for the builder image' >&2; return 1; }
 }
 t09(){
   local f="$WF/determine-targets.yml"
@@ -99,7 +99,7 @@ t05(){
   lacks "$b" '404) echo "tools_required=true"'
   has "$b" '200) echo "use_toolchain=true"'; has "$b" '*) echo "use_toolchain=false"'
   lacks "$b" '404) echo "use_toolchain=false"'; lacks "$b" 'Verify selected image'
-  count "$p" "curl -sS -o /dev/null -w '%{http_code}'" 2
+  count "$p" "curl -sS -o /dev/null -w '%{http_code}'" 3
   count "$p" 'if [ "$HTTP_STATUS" = "200" ]; then' 2
   has "$p" 'Verify published Host Tools image'; has "$p" 'Verify published target Toolchain image'
   lacks "$r" ghcr-check; lacks "$r" GHCR_TOKEN; lacks "$r" 'GITHUB_ACTOR:'
