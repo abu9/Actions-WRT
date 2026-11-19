@@ -942,11 +942,18 @@ jobs:
 
 
       - name: Build toolchain
-        if: inputs.dummy_mode != true && (inputs.build_toolchain == true || steps.parse-toolchain.outputs.toolchain-type == 'internal')
+        env:
+          DUMMY_MODE: ${{ inputs.dummy_mode }}
+          INPUTS_BUILD_TOOLCHAIN: ${{ inputs.build_toolchain }}
+          TOOLCHAIN_TYPE: ${{ steps.parse-toolchain.outputs.toolchain-type }}
         shell: su buildbot -c "sh -e {0}"
         working-directory: openwrt
         run: |
-          make toolchain/install -j$(nproc) BUILD_LOG=1 || { ret=$?; bash ../.github/scripts/show_build_failures.sh; exit "$ret"; }
+          if [ "$DUMMY_MODE" = "true" ]; then
+            echo "Dummy mode: skipping make toolchain/install; fixture results are generated separately."
+          elif [ "$INPUTS_BUILD_TOOLCHAIN" = "true" ] || [ "$TOOLCHAIN_TYPE" = "internal" ]; then
+            make toolchain/install -j"$(nproc)" BUILD_LOG=1 || { ret=$?; bash ../.github/scripts/show_build_failures.sh; exit "$ret"; }
+          fi
 
 
       - name: Create dummy external toolchain archive
