@@ -176,7 +176,7 @@ t12(){
   has <(printf '%s\n' "$block") 'TOOLCHAIN_PARENT="${toolchain_roots[0]}"'
   count <(printf '%s\n' "$block") 'find -H "$TOOLCHAIN_PARENT"' 1
   count <(printf '%s\n' "$block") '--overwrite-config' 1
-  has "$f" 'find -H "$TOOLCHAIN_FILE/staging_dir"'
+  has "$f" 'find -H "$TOOLCHAIN_FILE/staging_dir" -mindepth 1 -maxdepth 1 -type d -name'
 }
 t13(){
   local f="$WF/reusable_build.yml"
