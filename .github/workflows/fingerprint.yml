@@ -40,6 +40,11 @@ on:
         required: false
         type: boolean
         default: false
+      dummy_mode:
+        description: 'Use fixture artifacts and skip compile-dependent preparation'
+        required: false
+        type: boolean
+        default: false
     outputs:
       tools_fingerprint:
         value: ${{ jobs.tools.outputs.tools_fingerprint }}
@@ -203,7 +208,14 @@ jobs:
           mkdir -p staging_dir build_dir
           ln -s /prebuilt_tools/staging_dir/host staging_dir/host
           ln -s /prebuilt_tools/build_dir/host build_dir/host
-          ./scripts/ext-tools.sh --refresh
+          test -d staging_dir/host
+          test -d build_dir/host
+
+      - name: Refresh upstream external tools
+        if: inputs.dummy_mode != true
+        working-directory: openwrt
+        shell: su buildbot -c "sh -e {0}"
+        run: ./scripts/ext-tools.sh --refresh
 
       - name: Resolve the same internal Toolchain configuration as the build
         working-directory: openwrt
