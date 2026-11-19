@@ -8,9 +8,6 @@ on:
   repository_dispatch:
     types:
       - Source Code Update
-  push:
-    branches:
-      - preview/fingerprint-simplification
   workflow_dispatch:
     inputs:
       source_branch:
