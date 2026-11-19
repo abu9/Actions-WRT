@@ -114,7 +114,7 @@ jobs:
   build_tools_container:
     name: Build and Push tools container (only when missing)
     needs: [determine_targets, tools_fingerprint, check_tools_container]
-    if: ${{ github.event_name != 'pull_request' && github.event_name != 'push' && needs.check_tools_container.outputs.tools_required == 'true' }}
+    if: ${{ github.event_name != 'pull_request' && needs.check_tools_container.outputs.tools_required == 'true' }}
     permissions: {contents: read, packages: write, actions: write}
     uses: ./.github/workflows/push-containers.yml
     with:
@@ -151,7 +151,7 @@ jobs:
           echo "tools_image=ghcr.io/$OWNER_LC/tools:$IMAGE_TAG" >> "$GITHUB_OUTPUT"
   toolchain_fingerprint:
     name: Calculate target Toolchain fingerprint
-    if: ${{ !cancelled() && needs.tools_ready.result == 'success' && (inputs.build_toolchain == true || github.event_name == 'push') }}
+    if: ${{ !cancelled() && needs.tools_ready.result == 'success' && inputs.build_toolchain == true }}
     needs: [determine_targets, tools_fingerprint, tools_ready]
     permissions:
       contents: read
@@ -166,7 +166,7 @@ jobs:
       subtarget: ${{ needs.determine_targets.outputs.subtarget }}
       tools_fingerprint: ${{ needs.tools_fingerprint.outputs.tools_fingerprint }}
       tools_image: ${{ needs.tools_ready.outputs.tools_image }}
-      use_ccache_cache: ${{ github.event_name == 'repository_dispatch' || github.event_name == 'push' || inputs.use_ccache_cache == true }}
+      use_ccache_cache: ${{ github.event_name == 'repository_dispatch' || inputs.use_ccache_cache == true }}
 
   check_toolchain_container:
     name: Check target Toolchain image
@@ -204,7 +204,7 @@ jobs:
   build_firmware:
     name: Build firmware
     needs: [determine_targets, tools_fingerprint, tools_ready, toolchain_fingerprint, check_toolchain_container]
-    if: ${{ !cancelled() && github.event_name != 'pull_request' && github.event_name != 'push' && needs.determine_targets.result == 'success' && needs.tools_ready.result == 'success' && (needs.toolchain_fingerprint.result == 'success' || needs.toolchain_fingerprint.result == 'skipped') && (needs.check_toolchain_container.result == 'success' || needs.check_toolchain_container.result == 'skipped') }}
+    if: ${{ !cancelled() && github.event_name != 'pull_request' && needs.determine_targets.result == 'success' && needs.tools_ready.result == 'success' && (needs.toolchain_fingerprint.result == 'success' || needs.toolchain_fingerprint.result == 'skipped') && (needs.check_toolchain_container.result == 'success' || needs.check_toolchain_container.result == 'skipped') }}
     permissions: {contents: read, packages: read, actions: write}
     uses: ./.github/workflows/reusable_build.yml
     with:
