@@ -272,11 +272,9 @@ jobs:
       repo_url: ${{ inputs.repo_url || needs.determine_targets.outputs.repo_url }}
       repo_branch: ${{ inputs.repo_branch || needs.determine_targets.outputs.repo_branch }}
       repo_commit: ${{ inputs.source_commit || needs.compute-tools-fingerprint.outputs.source_commit }}
-      tools_fingerprint: ${{ inputs.tools_fingerprint || needs.compute-tools-fingerprint.outputs.tools_fingerprint }}
-      toolchain_fingerprint: ${{ needs.compute-toolchain-fingerprint.outputs.toolchain_fingerprint }}
       author: ${{ inputs.author || needs.determine_targets.outputs.author }}
       config_name: ${{ inputs.config_name }}
-      container_name: tools
+      container_image: ghcr.io/openwrt/buildbot/buildworker-v3.11.8:v23
       build_toolchain: true
       use_prebuilt_tools_artifact: true
       check: false
