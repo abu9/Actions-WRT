@@ -205,7 +205,7 @@ t15(){
   has "$r" 'CONTAINER="$OWNER_LC/$CONTAINER_NAME"'
 }
 t16(){
-  local p="$WF/push-containers.yml" f="$WF/fingerprint.yml" r="$WF/reusable_build.yml" d="$ROOT/.github/dockerfiles/Dockerfile.toolchain" block
+  local p="$WF/push-containers.yml" f="$WF/fingerprint.yml" r="$WF/reusable_build.yml" rb="$WF/reusable_build_tools.yml" d="$ROOT/.github/dockerfiles/Dockerfile.toolchain" block
   block="$(job_section "$p" compute-toolchain-fingerprint build-target-toolchain)"
   has <(printf '%s\n' "$block") "needs.build-linux-buildbot.result == 'success'"
   lacks <(printf '%s\n' "$block") needs.push-tools-container
@@ -215,6 +215,10 @@ t16(){
   lacks <(printf '%s\n' "$block") push-tools-container
   has <(printf '%s\n' "$block") 'use_prebuilt_tools_artifact: true'
   has "$p" 'name: linux-buildbot-prebuilt-tools'
+  lacks "$p" 'generate_prebuilt_artifacts:'
+  lacks "$rb" 'generate_prebuilt_artifacts'
+  has "$rb" 'tar -cf tools.tar staging_dir/host build_dir/host'
+  has "$rb" 'name: linux-buildbot-prebuilt-tools'
   has "$f" use_prebuilt_tools_artifact; has "$f" 'actions/download-artifact@v8.0.2'
   has "$r" use_prebuilt_tools_artifact; has "$r" 'actions/download-artifact@v8.0.2'
   has "$r" 'CONTAINER=openwrt/buildbot/buildworker-v3.11.8:v23'
