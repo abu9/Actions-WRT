@@ -9,7 +9,23 @@ count(){ local n; n="$(grep -Fc -- "$2" "$1" || true)"; [[ "$n" == "$3" ]]; }
 run(){ "$2"; PASS=$((PASS+1)); printf 'ok %02d - %s\n' "$PASS" "$1"; }
 t01(){ for f in build.yml push-containers.yml determine-targets.yml; do lacks "$WF/$f" openwrt-21.02; lacks "$WF/$f" hanwckf/immortalwrt-mt798x; done; }
 t02(){ local f="$WF/fingerprint.yml" r="$WF/reusable_build.yml"; for x in CONFIG_DEVEL=y CONFIG_AUTOREMOVE=y CONFIG_CCACHE=y make-defconfig make-tools-install make-toolchain-install make-target-toolchain-compile; do has "$f" "$x"; done; lacks "$f" CONFIG_BUILD_ALL_HOST_TOOLS; has "$f" toolchain-v2; for x in 'make defconfig' 'make tools/install' 'make toolchain/install' 'make target/toolchain/compile' './scripts/ext-tools.sh --refresh'; do has "$r" "$x"; done; }
-t03(){ local r="$WF/reusable_build.yml" t="$WF/reusable_build_tools.yml"; has "$r" 'CCACHE_TAG="$TARGET-$SUBTARGET-$CONTAINER_TAG"'; lacks "$r" 'CCACHE_TAG="$CONTAINER_TAG"'; has "$r" ccache-kernel; has "$t" ccache-host-tools-buildworker-v23; }
+t03(){
+  local r="$WF/reusable_build.yml" t="$WF/reusable_build_tools.yml" keys first second third
+  has "$r" 'CCACHE_TAG="$TARGET-$SUBTARGET-$CONTAINER_TAG"'
+  lacks "$r" 'CCACHE_TAG="$CONTAINER_TAG"'
+  keys="$(awk '/name: Restore ccache cache/{found=1} found && /restore-keys: [|]/{inside=1;next} inside && /^[[:space:]]*$/{exit} inside{sub(/^[[:space:]]+/,"");print}' "$r")"
+  first="$(sed -n '1p' <<<"$keys")"; second="$(sed -n '2p' <<<"$keys")"; third="$(sed -n '3p' <<<"$keys")"
+  [[ "$first" == *needs.setup_build.outputs.ccache_name* ]]
+  [[ "$second" == *inputs.ccache_type* && "$second" == *inputs.target* && "$second" == *inputs.subtarget* ]]
+  [[ "$third" == *inputs.ccache_type* ]]
+  ! grep -Fq ccache-kernel- <<<"$keys"
+  has "$r" 'key: ccache-kernel-'
+  keys="$(awk '/name: Restore Host Tools ccache/{found=1} found && /restore-keys: [|]/{inside=1;next} inside && /^[[:space:]]*$/{exit} inside{sub(/^[[:space:]]+/,"");print}' "$t")"
+  first="$(sed -n '1p' <<<"$keys")"; second="$(sed -n '2p' <<<"$keys")"
+  [[ "$first" == *ccache-host-tools-buildworker-v23* && "$first" == *runner.os* && "$first" == *runner.arch* ]]
+  [[ "$second" == *inputs.ccache_tag* && "$second" == *buildworker-v23* && "$second" == *runner.os* && "$second" == *runner.arch* ]]
+  has "$t" 'key: ccache-host-tools-buildworker-v23-'
+}
 t04(){ local r="$WF/reusable_build.yml" f="$WF/fingerprint.yml"; count "$r" 'name: Prepare prebuilt tools' 2; has "$r" './scripts/ext-tools.sh --refresh'; lacks "$r" ext-tools-refresh.sh; lacks "$r" --preserve-environment; count "$f" 'name: Prepare prebuilt tools' 1; has "$f" './scripts/ext-tools.sh --refresh'; }
 t05(){ local b="$WF/build.yml" p="$WF/push-containers.yml" r="$WF/reusable_build.yml"; count "$b" "curl -sS -o /dev/null -w '%{http_code}'" 2; has "$b" '200) echo "tools_required=false"'; has "$b" '*) echo "tools_required=true"'; has "$b" '200) echo "use_toolchain=true"'; has "$b" '*) echo "use_toolchain=false"'; count "$p" "curl -sS -o /dev/null -w '%{http_code}'" 2; has "$p" 'Verify published Host Tools image'; has "$p" 'Verify published target Toolchain image'; lacks "$r" GHCR_TOKEN; }
 t06(){ local b="$WF/build.yml" p="$WF/push-containers.yml"; has "$p" 'needs.determine_targets.outputs.target'; has "$p" 'needs.determine_targets.outputs.repo_url'; has "$p" 'needs.compute-tools-fingerprint.outputs.tools_fingerprint'; has "$b" 'needs.determine_targets.outputs.target'; has "$b" 'needs.tools_fingerprint.outputs.tools_fingerprint'; has "$p" 'steps.info.outputs.source_commit'; }
