@@ -110,6 +110,8 @@ t06(){
   has "$p" 'source_commit: ${{ steps.info.outputs.source_commit }}'
   has "$p" 'SOURCE_COMMIT: ${{ inputs.source_commit || needs.determine_targets.outputs.source_commit }}'
   has "$p" 'jobs.determine_container_info.outputs.source_commit'
+  lacks "$b" "github.event_name == 'push'"
+  lacks "$b" "github.event_name != 'push'"
 }
 t07(){
   local b="$WF/build.yml" r="$WF/reusable_build.yml" rt="$WF/reusable_build_tools.yml"
