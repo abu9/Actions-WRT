@@ -155,7 +155,6 @@ jobs:
 
       # Per branch tools container tag
       # By default stick to latest
-      # For official test targetting openwrt stable branch
       # Get the branch or parse the tag and push dedicated tools containers
       # you need to use for the branch name a prefix of openwrt-[0-9][0-9].[0-9][0-9]-
       - name: Determine container name
