@@ -1,9 +1,7 @@
 name: Dummy build integration test
 
 on:
-  push:
-    branches:
-      - preview/fingerprint-simplification
+  workflow_dispatch:
 
 permissions:
   contents: read
