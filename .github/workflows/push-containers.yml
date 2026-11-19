@@ -137,7 +137,7 @@ jobs:
       contents: read
       packages: read
     name: Compute generic host-tools fingerprint
-    if: ${{ !cancelled() && (needs.determine_targets.result == 'success' || inputs.target != '') && inputs.build_tools == true && inputs.tools_fingerprint == '' }}
+    if: ${{ !cancelled() && (needs.determine_targets.result == 'success' || inputs.target != '') && (inputs.build_tools == true || inputs.build_toolchain == true) && inputs.tools_fingerprint == '' }}
     needs: determine_targets
     uses: ./.github/workflows/fingerprint.yml
     with:
@@ -146,14 +146,46 @@ jobs:
       repo_branch: ${{ inputs.repo_branch || needs.determine_targets.outputs.repo_branch }}
       source_commit: ${{ inputs.source_commit || needs.determine_targets.outputs.source_commit }}
 
+  check-tools-container:
+    name: Check fingerprinted Host Tools image
+    if: ${{ !cancelled() && needs.determine_container_info.result == 'success' && (needs.compute-tools-fingerprint.result == 'success' || inputs.tools_fingerprint != '') }}
+    needs: [determine_container_info, compute-tools-fingerprint]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      packages: read
+    outputs:
+      tools_image: ${{ steps.check.outputs.tools_image }}
+      tools_exists: ${{ steps.check.outputs.tools_exists }}
+    steps:
+      - name: Check fingerprinted Host Tools image
+        id: check
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          OWNER_LC: ${{ needs.determine_container_info.outputs.owner_lc }}
+          IMAGE_TAG: ${{ needs.determine_container_info.outputs.container_tag }}-${{ inputs.tools_fingerprint || needs.compute-tools-fingerprint.outputs.tools_fingerprint }}
+        shell: bash
+        run: |
+          set -eo pipefail
+          GHCR_TOKEN="$(printf '%s' "$GITHUB_TOKEN" | base64 -w0)"
+          GHCR_HEADER="Authorization: Bearer $GHCR_TOKEN"
+          GHCR_MANIFEST_LINK="https://ghcr.io/v2/$OWNER_LC/tools/manifests/$IMAGE_TAG"
+          HTTP_STATUS="$(curl -sS -o /dev/null -w '%{http_code}' -H "$GHCR_HEADER" -I "$GHCR_MANIFEST_LINK")"
+          if [ "$HTTP_STATUS" = "200" ]; then
+            echo "tools_exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "tools_exists=false" >> "$GITHUB_OUTPUT"
+          fi
+          echo "tools_image=ghcr.io/$OWNER_LC/tools:$IMAGE_TAG" >> "$GITHUB_OUTPUT"
   build-linux-buildbot:
     name: Build host tools with upstream buildbot
     if: ${{ !cancelled() &&
         (needs.determine_targets.result == 'success' || inputs.target != '') &&
         needs.determine_container_info.result == 'success' &&
+        needs.check-tools-container.result == 'success' && needs.check-tools-container.outputs.tools_exists == 'false' &&
         (needs.compute-tools-fingerprint.result == 'success' || inputs.tools_fingerprint != '') &&
         inputs.build_tools == true }}
-    needs: [determine_targets, determine_container_info, compute-tools-fingerprint]
+    needs: [determine_targets, determine_container_info, compute-tools-fingerprint, check-tools-container]
     permissions:
       contents: read
       packages: read
@@ -231,13 +263,25 @@ jobs:
           echo "Published Host Tools image verification failed: HTTP $HTTP_STATUS" >&2
           exit 1
 
+  tools-ready:
+    name: Confirm Host Tools image is ready
+    if: ${{ !cancelled() && needs.check-tools-container.result == 'success' && (needs.check-tools-container.outputs.tools_exists == 'true' || (needs.build-linux-buildbot.result == 'success' && needs.push-tools-container.result == 'success')) }}
+    needs: [check-tools-container, build-linux-buildbot, push-tools-container]
+    runs-on: ubuntu-24.04
+    outputs:
+      tools_image: ${{ steps.ready.outputs.tools_image }}
+    steps:
+      - id: ready
+        env:
+          TOOLS_IMAGE: ${{ needs.check-tools-container.outputs.tools_image }}
+        run: echo "tools_image=$TOOLS_IMAGE" >> "$GITHUB_OUTPUT"
   compute-toolchain-fingerprint:
     permissions:
       contents: read
       packages: read
     name: Compute target Toolchain fingerprint
-    if: ${{ !cancelled() && (needs.determine_targets.result == 'success' || inputs.target != '') && needs.build-linux-buildbot.result == 'success' && inputs.build_toolchain == true && inputs.build_tools == true }}
-    needs: [determine_targets, determine_container_info, compute-tools-fingerprint, build-linux-buildbot]
+    if: ${{ !cancelled() && needs.tools-ready.result == 'success' && inputs.build_toolchain == true }}
+    needs: [determine_targets, determine_container_info, compute-tools-fingerprint, tools-ready]
     uses: ./.github/workflows/fingerprint.yml
     with:
       mode: toolchain
@@ -247,8 +291,7 @@ jobs:
       target: ${{ inputs.target || needs.determine_targets.outputs.target }}
       subtarget: ${{ inputs.subtarget || needs.determine_targets.outputs.subtarget }}
       tools_fingerprint: ${{ inputs.tools_fingerprint || needs.compute-tools-fingerprint.outputs.tools_fingerprint }}
-      tools_image: ''
-      use_prebuilt_tools_artifact: true
+      tools_image: ${{ needs.tools-ready.outputs.tools_image }}
       use_ccache_cache: true
 
   build-target-toolchain:
@@ -256,11 +299,10 @@ jobs:
     if: ${{ !cancelled() &&
         (needs.determine_targets.result == 'success' || inputs.target != '') &&
         (needs.compute-tools-fingerprint.result == 'success' || inputs.tools_fingerprint != '') &&
-        needs.build-linux-buildbot.result == 'success' &&
+        needs.tools-ready.result == 'success' &&
         needs.compute-toolchain-fingerprint.result == 'success' &&
-        inputs.build_toolchain == true &&
-        inputs.build_tools == true }}
-    needs: [determine_targets, compute-tools-fingerprint, build-linux-buildbot, compute-toolchain-fingerprint]
+        inputs.build_toolchain == true }}
+    needs: [determine_targets, compute-tools-fingerprint, tools-ready, compute-toolchain-fingerprint]
     permissions:
       contents: read
       packages: read
@@ -274,9 +316,8 @@ jobs:
       repo_commit: ${{ inputs.source_commit || needs.compute-tools-fingerprint.outputs.source_commit }}
       author: ${{ inputs.author || needs.determine_targets.outputs.author }}
       config_name: ${{ inputs.config_name }}
-      container_image: ghcr.io/openwrt/buildbot/buildworker-v3.11.8:v23
+      container_image: ${{ needs.tools-ready.outputs.tools_image }}
       build_toolchain: true
-      use_prebuilt_tools_artifact: true
       check: false
       use_ccache_cache: true
       ccache_type: toolchain
@@ -293,7 +334,7 @@ jobs:
           needs.compute-toolchain-fingerprint.result == 'success' &&
           needs.build-target-toolchain.result == 'success' &&
           needs.build-target-toolchain.outputs.push == 'true' }}
-    needs: [determine_targets, determine_container_info, compute-tools-fingerprint, compute-toolchain-fingerprint, build-linux-buildbot, build-target-toolchain]
+    needs: [determine_targets, determine_container_info, compute-tools-fingerprint, tools-ready, compute-toolchain-fingerprint, build-target-toolchain]
     runs-on: ubuntu-24.04
     permissions:
       contents: read
@@ -301,14 +342,6 @@ jobs:
     steps:
       - name: Checkout Actions-WRT repository
         uses: actions/checkout@v7.0.1
-
-      - name: Download prebuilt Host Tools artifact
-        uses: actions/download-artifact@v8.0.2
-        with:
-          name: linux-buildbot-prebuilt-tools
-
-      - name: Extract prebuilt Host Tools
-        run: tar -xf tools.tar
 
       - name: Download external toolchain artifact
         uses: actions/download-artifact@v8.0.2
@@ -339,6 +372,8 @@ jobs:
           tags: ghcr.io/${{ needs.determine_container_info.outputs.owner_lc }}/toolchain:${{ inputs.target || needs.determine_targets.outputs.target }}-${{ inputs.subtarget || needs.determine_targets.outputs.subtarget }}-${{ needs.determine_container_info.outputs.container_tag }}-${{ needs.compute-toolchain-fingerprint.outputs.toolchain_cache_key }}
           file: .github/dockerfiles/Dockerfile.toolchain
           build-args: |
+            OWNER_LC=${{ needs.determine_container_info.outputs.owner_lc }}
+            CONTAINER_TAG=${{ needs.determine_container_info.outputs.container_tag }}-${{ inputs.tools_fingerprint || needs.compute-tools-fingerprint.outputs.tools_fingerprint }}
             TOOLS_FINGERPRINT=${{ inputs.tools_fingerprint || needs.compute-tools-fingerprint.outputs.tools_fingerprint }}
             SOURCE_COMMIT=${{ inputs.source_commit || needs.compute-tools-fingerprint.outputs.source_commit }}
             TOOLCHAIN_NAME=${{ steps.get-toolchain-name.outputs.toolchain_name }}
