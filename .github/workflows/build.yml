@@ -139,7 +139,7 @@ jobs:
   build_tools_container:
     name: Build and Push tools container (only when missing)
     needs: [determine_targets, tools_fingerprint, check_tools_container]
-    if: ${{ github.event_name != 'pull_request' && github.event_name != 'push' && inputs.validate_only != true && needs.check_tools_container.outputs.tools_required == 'true' }}
+    if: ${{ github.event_name != 'pull_request' && inputs.validate_only != true && needs.check_tools_container.outputs.tools_required == 'true' }}
     permissions: {contents: read, packages: write, actions: write}
     uses: ./.github/workflows/push-containers.yml
     with:
