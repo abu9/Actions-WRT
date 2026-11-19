@@ -163,12 +163,19 @@ t11(){
   has "$WF/reusable_build.yml" '--config "$TARGET/$SUBTARGET"'
 }
 t12(){
-  local f="$WF/reusable_build.yml" n
+  local f="$WF/reusable_build.yml" block
   lacks "$f" '$(ls /external-toolchain/ | grep wrt-toolchain)'
   lacks "$f" '$(ls $TOOLCHAIN_FILE/staging_dir | grep toolchain)'
-  n="$(grep -Fc 'if [ "${#toolchain_dirs[@]}" -ne 1 ]; then' "$f")"
-  [[ "$n" -ge 3 ]]
-  has "$f" 'if [ "${#toolchain_roots[@]}" -ne 1 ]; then'
+  has "$f" "steps.parse-toolchain.outputs.toolchain-type == 'external_container'"
+  has "$f" "steps.parse-toolchain.outputs.toolchain-type == 'external_toolchain'"
+  has "$f" "steps.parse-toolchain.outputs.toolchain-type == 'external_sdk'"
+  block="$(sed -n '/- name: Configure external toolchain$/,/^- name: Configure internal toolchain$/p' "$f")"
+  has <(printf '%s\n' "$block") 'case "$TOOLCHAIN_TYPE" in'
+  has <(printf '%s\n' "$block") 'TOOLCHAIN_PARENT="$TOOLCHAIN_FILE"'
+  has <(printf '%s\n' "$block") 'TOOLCHAIN_PARENT="$TOOLCHAIN_FILE/staging_dir"'
+  has <(printf '%s\n' "$block") 'TOOLCHAIN_PARENT="${toolchain_roots[0]}"'
+  count <(printf '%s\n' "$block") 'find -H "$TOOLCHAIN_PARENT"' 1
+  count <(printf '%s\n' "$block") '--overwrite-config' 1
   has "$f" 'find -H "$TOOLCHAIN_FILE/staging_dir"'
 }
 t13(){
