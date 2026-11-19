@@ -103,8 +103,10 @@ make_archive(){
   (cd "$dir" && sha256sum toolchain.tar.xz > sha256sums)
 }
 run_verify(){
-  local dir="$1" author="$2" key="$3" gpgdir="$4" path="$5"
-  (cd "$dir" && AUTHOR="$author" KEYRING_USIGN_KEY="$key" KEYRING_GPG_DIR="$gpgdir" TOOLCHAIN_ARCHIVE=toolchain.tar.xz PATH="$path" bash -euo pipefail -c "$VERIFY_CODE")
+  local dir="$1" author="$2" key="$3" gpgdir="$4" path="$5" signature
+  signature=sha256sums.sig
+  [[ "$author" == openwrt ]] && signature=sha256sums.asc
+  (cd "$dir" && AUTHOR="$author" SIGNATURE_FILE="$signature" KEYRING_USIGN_KEY="$key" KEYRING_GPG_DIR="$gpgdir" TOOLCHAIN_ARCHIVE=toolchain.tar.xz PATH="$path" bash -euo pipefail -c "$VERIFY_CODE")
 }
 test_usign_real_crypto(){
   [[ -n "${USIGN_BIN:-}" && -x "$USIGN_BIN" ]] || fail 'USIGN_BIN must point to upstream usign'
