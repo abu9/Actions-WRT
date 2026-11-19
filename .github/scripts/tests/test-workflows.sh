@@ -9,6 +9,24 @@ count(){ local n; n="$(grep -Fc -- "$2" "$1" || true)"; [[ "$n" == "$3" ]]; }
 run(){ "$2"; PASS=$((PASS+1)); printf 'ok %02d - %s\n' "$PASS" "$1"; }
 t01(){ for f in build.yml push-containers.yml determine-targets.yml; do lacks "$WF/$f" openwrt-21.02; lacks "$WF/$f" hanwckf/immortalwrt-mt798x; done; }
 t02(){ local f="$WF/fingerprint.yml" r="$WF/reusable_build.yml"; for x in CONFIG_DEVEL=y CONFIG_AUTOREMOVE=y CONFIG_CCACHE=y make-defconfig make-tools-install make-toolchain-install make-target-toolchain-compile; do has "$f" "$x"; done; lacks "$f" CONFIG_BUILD_ALL_HOST_TOOLS; has "$f" toolchain-v2; for x in 'make defconfig' 'make tools/install' 'make toolchain/install' 'make target/toolchain/compile' './scripts/ext-tools.sh --refresh'; do has "$r" "$x"; done; }
+t02(){
+  local f="$WF/fingerprint.yml" r="$WF/reusable_build.yml" tools toolchain
+  tools="$(sed -n '/^  tools:/,/^  toolchain:/p' "$f")"
+  toolchain="$(sed -n '/^  toolchain:/,$p' "$f")"
+  [[ -n "$tools" && -n "$toolchain" ]] || { echo 'fingerprint mode sections are missing' >&2; return 1; }
+  for setting in CONFIG_DEVEL=y CONFIG_AUTOREMOVE=y CONFIG_CCACHE=y; do
+    grep -Fq "$setting" <<<"$tools" || { echo "missing Host Tools config: $setting" >&2; return 1; }
+  done
+  ! grep -Fq CONFIG_BUILD_ALL_HOST_TOOLS <<<"$tools" || { echo 'CONFIG_BUILD_ALL_HOST_TOOLS must remain excluded' >&2; return 1; }
+  grep -Fq 'make-defconfig,make-tools-install' <<<"$tools" || { echo 'Host Tools recipe sequence changed' >&2; return 1; }
+  grep -Fq toolchain-v2 <<<"$toolchain" || { echo 'Toolchain recipe version changed' >&2; return 1; }
+  for command in make-defconfig make-tools-install make-toolchain-install make-target-toolchain-compile './scripts/ext-tools.sh --refresh'; do
+    grep -Fq "$command" <<<"$toolchain" || { echo "missing Toolchain recipe command: $command" >&2; return 1; }
+  done
+  for command in 'make defconfig' 'make tools/install' 'make toolchain/install' 'make target/toolchain/compile' './scripts/ext-tools.sh --refresh'; do
+    has "$r" "$command"
+  done
+}
 t03(){
   local r="$WF/reusable_build.yml" t="$WF/reusable_build_tools.yml" keys first second third
   has "$r" 'CCACHE_TAG="$TARGET-$SUBTARGET-$CONTAINER_TAG"'
