@@ -88,7 +88,7 @@ jobs:
     permissions: {contents: read, packages: read}
     outputs:
       tools_required: ${{ steps.check.outputs.tools_required }}
-      checked_image: ${{ steps.check.outputs.checked_image }}
+      tools_image: ${{ steps.check.outputs.tools_image }}
     steps:
       - id: check
         env:
@@ -109,7 +109,7 @@ jobs:
             200) echo "tools_required=false" >> "$GITHUB_OUTPUT" ;;
             *) echo "tools_required=true" >> "$GITHUB_OUTPUT" ;;
           esac
-          echo "checked_image=tools:$TAG" >> "$GITHUB_OUTPUT"
+          echo "tools_image=ghcr.io/$OWNER_LC/tools:$TAG" >> "$GITHUB_OUTPUT"
 
   build_tools_container:
     name: Build and Push tools container (only when missing)
@@ -143,12 +143,9 @@ jobs:
     steps:
       - id: image
         env:
-          OWNER: ${{ github.repository_owner }}
-          CHECKED_IMAGE: ${{ needs.check_tools_container.outputs.checked_image }}
+          CHECKED_IMAGE: ${{ needs.check_tools_container.outputs.tools_image }}
         run: |
-          OWNER_LC="$(printf '%s' "$OWNER" | tr '[:upper:]' '[:lower:]')"
-          IMAGE_TAG="$(printf '%s' "$CHECKED_IMAGE" | cut -d: -f2-)"
-          echo "tools_image=ghcr.io/$OWNER_LC/tools:$IMAGE_TAG" >> "$GITHUB_OUTPUT"
+          echo "tools_image=$CHECKED_IMAGE" >> "$GITHUB_OUTPUT"
   toolchain_fingerprint:
     name: Calculate target Toolchain fingerprint
     if: ${{ !cancelled() && needs.tools_ready.result == 'success' && inputs.build_toolchain == true }}
@@ -199,7 +196,7 @@ jobs:
             200) echo "use_toolchain=true" >> "$GITHUB_OUTPUT" ;;
             *) echo "use_toolchain=false" >> "$GITHUB_OUTPUT" ;;
           esac
-          echo "image=toolchain:$TAG" >> "$GITHUB_OUTPUT"
+          echo "image=ghcr.io/$OWNER_LC/toolchain:$TAG" >> "$GITHUB_OUTPUT"
 
   build_firmware:
     name: Build firmware
@@ -213,10 +210,8 @@ jobs:
       repo_url: ${{ needs.determine_targets.outputs.repo_url }}
       repo_branch: ${{ needs.determine_targets.outputs.repo_branch }}
       repo_commit: ${{ needs.tools_fingerprint.outputs.source_commit }}
-      tools_fingerprint: ${{ needs.tools_fingerprint.outputs.tools_fingerprint }}
-      toolchain_fingerprint: ${{ needs.toolchain_fingerprint.outputs.toolchain_fingerprint }}
       author: ${{ needs.determine_targets.outputs.author }}
-      container_name: ${{ (inputs.build_toolchain == true && needs.check_toolchain_container.outputs.use_toolchain == 'true') && 'toolchain' || 'tools' }}
+      container_image: ${{ needs.check_toolchain_container.outputs.use_toolchain == 'true' && needs.check_toolchain_container.outputs.image || needs.tools_ready.outputs.tools_image }}
       build_kernel: ${{ inputs.build_kernel == true }}
       build_full: ${{ github.event_name == 'repository_dispatch' || inputs.build_full == true }}
       build_toolchain: ${{ inputs.build_toolchain == true && needs.check_toolchain_container.outputs.use_toolchain != 'true' }}
