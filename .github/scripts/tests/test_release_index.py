@@ -148,7 +148,7 @@ class ReleaseIndexVerifierTests(unittest.TestCase):
                 "$(INSTALL_DATA) $(PKG_BUILD_DIR)/usign/467a35c14d7fbc5c $(1)/etc/opkg/keys/\n",
                 encoding="utf-8",
             )
-            keyring, commit = self._create_keyring_checkout(
+            keyring, _ = self._create_keyring_checkout(
                 root,
                 "https://github.com/immortalwrt/keyring.git",
                 {"usign/467a35c14d7fbc5c": "official public usign key\n"},
@@ -161,7 +161,8 @@ class ReleaseIndexVerifierTests(unittest.TestCase):
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
             self.assertEqual(result.stdout.strip(), str(keyring / "usign/467a35c14d7fbc5c"))
             values = dict(line.split("=", 1) for line in github_env.read_text(encoding="utf-8").splitlines())
-            self.assertEqual(values["KEYRING_COMMIT"], commit)
+            self.assertNotIn("KEYRING_COMMIT", values)
+            self.assertNotIn("KEYRING_DIR", values)
             self.assertEqual(values["KEYRING_USIGN_KEY"], str(keyring / "usign/467a35c14d7fbc5c"))
             self.assertEqual(values["KEYRING_GPG_DIR"], "")
 
