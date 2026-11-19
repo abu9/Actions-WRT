@@ -137,7 +137,7 @@ jobs:
       contents: read
       packages: read
     name: Compute generic host-tools fingerprint
-    if: ${{ !cancelled() && (needs.determine_targets.result == 'success' || inputs.target != '') && (inputs.build_tools == true || inputs.build_toolchain == true) && inputs.tools_fingerprint == '' }}
+    if: ${{ !cancelled() && (needs.determine_targets.result == 'success' || inputs.target != '') && (inputs.build_tools == true || inputs.build_toolchain == true) && (inputs.tools_fingerprint == '' || inputs.source_commit == '') }}
     needs: determine_targets
     uses: ./.github/workflows/fingerprint.yml
     with:
