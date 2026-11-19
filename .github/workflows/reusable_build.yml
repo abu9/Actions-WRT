@@ -664,8 +664,8 @@ jobs:
               ;;
           esac
           {
-            printf 'KEYRING_USIGN_KEY=%s\\n' "$KEYRING_USIGN_KEY"
-            printf 'KEYRING_GPG_DIR=%s\\n' "$KEYRING_GPG_DIR"
+            printf 'KEYRING_USIGN_KEY=%s\n' "$KEYRING_USIGN_KEY"
+            printf 'KEYRING_GPG_DIR=%s\n' "$KEYRING_GPG_DIR"
           } >> "$GITHUB_ENV"
           echo "Resolved $AUTHOR official keyring commit $KEYRING_COMMIT"
 
@@ -838,11 +838,11 @@ jobs:
               GNUPG_HOME="$(mktemp -d)"
               trap 'rm -rf "$GNUPG_HOME"' EXIT
               chmod 700 "$GNUPG_HOME"
-              gpg --homedir "$GNUPG_HOME" --batch --no-tty --import \\
-                "$KEYRING_GPG_DIR/CD54E82DADB3684D.asc" \\
-                "$KEYRING_GPG_DIR/0x1D53D1877742E911.asc" \\
+              gpg --homedir "$GNUPG_HOME" --batch --no-tty --import \
+                "$KEYRING_GPG_DIR/CD54E82DADB3684D.asc" \
+                "$KEYRING_GPG_DIR/0x1D53D1877742E911.asc" \
                 "$KEYRING_GPG_DIR/626471F1.asc"
-              gpg --homedir "$GNUPG_HOME" --batch --no-tty --with-fingerprint \\
+              gpg --homedir "$GNUPG_HOME" --batch --no-tty --with-fingerprint \
                 --verify "$SIGNATURE_FILE" sha256sums
               ;;
             *)
