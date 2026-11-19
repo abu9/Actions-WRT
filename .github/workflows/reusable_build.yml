@@ -962,7 +962,7 @@ jobs:
           fixture_dir="$(mktemp -d)"
           trap 'rm -rf "$fixture_dir"' EXIT
           mkdir -p "$archive_dir" "$fixture_dir/dummy-toolchain"
-          printf '%s\\n' 'Actions-WRT dummy external toolchain fixture; not a compiler toolchain.' > "$fixture_dir/dummy-toolchain/README.txt"
+          printf '%s\n' 'Actions-WRT dummy external toolchain fixture; not a compiler toolchain.' > "$fixture_dir/dummy-toolchain/README.txt"
           tar -czf "$archive_dir/actions-wrt-dummy-toolchain.tar.gz" -C "$fixture_dir" dummy-toolchain
 
       - name: Setup Debug Session
