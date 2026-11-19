@@ -604,9 +604,70 @@ jobs:
         run: |
           set -eo pipefail
           KEYRING_DIR="$GITHUB_WORKSPACE/.ci-keyring"
-          RELEASE_KEY_MATERIAL="$(bash "$GITHUB_WORKSPACE/.github/scripts/verify-release-index.sh" resolve "$AUTHOR" "$GITHUB_WORKSPACE/openwrt" "$KEYRING_DIR" "$GITHUB_ENV")"
+          case "$AUTHOR" in
+            immortalwrt) EXPECTED_KEYRING_ORIGIN=https://github.com/immortalwrt/keyring ;;
+            openwrt) EXPECTED_KEYRING_ORIGIN=https://github.com/openwrt/keyring ;;
+            *) echo "No trusted signing-keyring repository mapping for '$AUTHOR'." >&2; exit 1 ;;
+          esac
+
+          test -d "$KEYRING_DIR/.git" || {
+            echo "Official $AUTHOR keyring checkout is missing: $KEYRING_DIR" >&2
+            exit 1
+          }
+          ACTUAL_KEYRING_ORIGIN="$(git -C "$KEYRING_DIR" remote get-url origin 2>/dev/null || true)"
+          case "$ACTUAL_KEYRING_ORIGIN" in
+            "$EXPECTED_KEYRING_ORIGIN"|"$EXPECTED_KEYRING_ORIGIN.git") ;;
+            *)
+              echo "Unexpected $AUTHOR keyring origin: ${ACTUAL_KEYRING_ORIGIN:-<missing>}" >&2
+              echo "Expected: $EXPECTED_KEYRING_ORIGIN" >&2
+              exit 1
+              ;;
+          esac
           KEYRING_COMMIT="$(git -C "$KEYRING_DIR" rev-parse HEAD)"
-          echo "Resolved $AUTHOR official keyring commit $KEYRING_COMMIT; release verification material: $RELEASE_KEY_MATERIAL"
+          [[ "$KEYRING_COMMIT" =~ ^[0-9a-f]{40}$ ]] || {
+            echo "Unable to resolve the checked-out $AUTHOR keyring commit." >&2
+            exit 1
+          }
+
+          KEYRING_USIGN_KEY=""
+          KEYRING_GPG_DIR=""
+          case "$AUTHOR" in
+            immortalwrt)
+              KEYRING_MAKEFILE="$GITHUB_WORKSPACE/openwrt/package/system/openwrt-keyring/Makefile"
+              test -f "$KEYRING_MAKEFILE" || {
+                echo "ImmortalWrt openwrt-keyring Makefile is missing: $KEYRING_MAKEFILE" >&2
+                exit 1
+              }
+              mapfile -t USIGN_KEY_IDS < <(
+                grep -oE 'usign/[0-9a-f]{16}' "$KEYRING_MAKEFILE" |
+                  cut -d/ -f2 |
+                  sort -u
+              )
+              [[ ${#USIGN_KEY_IDS[@]} -eq 1 ]] || {
+                echo "Expected exactly one ImmortalWrt usign release key ID in the source keyring Makefile." >&2
+                exit 1
+              }
+              KEYRING_USIGN_KEY="$KEYRING_DIR/usign/${USIGN_KEY_IDS[0]}"
+              test -s "$KEYRING_USIGN_KEY" || {
+                echo "The selected ImmortalWrt key is not present in the official keyring checkout: $KEYRING_USIGN_KEY" >&2
+                exit 1
+              }
+              ;;
+            openwrt)
+              KEYRING_GPG_DIR="$KEYRING_DIR/gpg"
+              for KEY in CD54E82DADB3684D.asc 0x1D53D1877742E911.asc 626471F1.asc; do
+                test -s "$KEYRING_GPG_DIR/$KEY" || {
+                  echo "Required OpenWrt GPG key is missing from the official keyring checkout: $KEYRING_GPG_DIR/$KEY" >&2
+                  exit 1
+                }
+              done
+              ;;
+          esac
+          {
+            printf 'KEYRING_USIGN_KEY=%s\\n' "$KEYRING_USIGN_KEY"
+            printf 'KEYRING_GPG_DIR=%s\\n' "$KEYRING_GPG_DIR"
+          } >> "$GITHUB_ENV"
+          echo "Resolved $AUTHOR official keyring commit $KEYRING_COMMIT"
 
       - name: Fix permission
         run: chown -R buildbot:buildbot .
@@ -749,7 +810,46 @@ jobs:
 
           # Authenticate the complete checksum index first, then use the
           # upstream OpenWrt checksum command to verify the downloaded archive.
-          bash ../.github/scripts/verify-release-index.sh verify "$AUTHOR" staging_dir/host/bin/usign "$KEYRING_USIGN_KEY" "$KEYRING_GPG_DIR" sha256sums "$SIGNATURE_FILE"
+          test -s sha256sums || {
+            echo "Signed checksum index is missing or empty: sha256sums" >&2
+            exit 1
+          }
+          test -s "$SIGNATURE_FILE" || {
+            echo "Checksum index signature is missing or empty: $SIGNATURE_FILE" >&2
+            exit 1
+          }
+          case "$AUTHOR" in
+            immortalwrt)
+              test -x staging_dir/host/bin/usign || {
+                echo "usign verifier is missing or not executable: staging_dir/host/bin/usign" >&2
+                exit 1
+              }
+              test -s "$KEYRING_USIGN_KEY" || {
+                echo "usign public key is missing or empty: $KEYRING_USIGN_KEY" >&2
+                exit 1
+              }
+              staging_dir/host/bin/usign -V -m sha256sums -p "$KEYRING_USIGN_KEY" -x "$SIGNATURE_FILE"
+              ;;
+            openwrt)
+              test -d "$KEYRING_GPG_DIR" || {
+                echo "OpenWrt GPG keyring directory is missing: $KEYRING_GPG_DIR" >&2
+                exit 1
+              }
+              GNUPG_HOME="$(mktemp -d)"
+              trap 'rm -rf "$GNUPG_HOME"' EXIT
+              chmod 700 "$GNUPG_HOME"
+              gpg --homedir "$GNUPG_HOME" --batch --no-tty --import \\
+                "$KEYRING_GPG_DIR/CD54E82DADB3684D.asc" \\
+                "$KEYRING_GPG_DIR/0x1D53D1877742E911.asc" \\
+                "$KEYRING_GPG_DIR/626471F1.asc"
+              gpg --homedir "$GNUPG_HOME" --batch --no-tty --with-fingerprint \\
+                --verify "$SIGNATURE_FILE" sha256sums
+              ;;
+            *)
+              echo "No release signature verifier for '$AUTHOR'." >&2
+              exit 1
+              ;;
+          esac
           CHECKSUM_OUTPUT="$(sha256sum --check --ignore-missing sha256sums)"
           printf '%s\n' "$CHECKSUM_OUTPUT"
           if ! grep -Fq "$TOOLCHAIN_ARCHIVE: OK" <<<"$CHECKSUM_OUTPUT"; then
