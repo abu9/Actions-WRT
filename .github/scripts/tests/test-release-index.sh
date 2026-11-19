@@ -48,6 +48,7 @@ test_signature_format_and_order(){
   assert_has "$WORKFLOW" 'repository: openwrt/keyring'
   assert_has "$WORKFLOW" 'repository: immortalwrt/keyring'
   assert_has "$WORKFLOW" 'AUTHOR: ${{ inputs.author }}'
+  assert_has "$WORKFLOW" "if: inputs.author == 'immortalwrt' && inputs.build_toolchain == false"
   assert_lacks "$WORKFLOW" 'source-pinned release signing keyring'
   assert_lacks "$WORKFLOW" 'CHECKSUM="$(awk'
   assert_has "$WORKFLOW" 'immortalwrt) SIGNATURE_FILE=sha256sums.sig'
