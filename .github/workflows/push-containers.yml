@@ -49,7 +49,7 @@ on:
         description: 'Resolved target Toolchain fingerprint'
         value: ${{ jobs.compute-toolchain-fingerprint.outputs.toolchain_fingerprint }}
       source_commit:
-        description: 'Exact upstream source commit resolved for this test run'
+        description: 'Exact upstream source commit used for this container build'
         value: ${{ jobs.compute-tools-fingerprint.outputs.source_commit || jobs.determine_container_info.outputs.source_commit || jobs.determine_targets.outputs.source_commit }}
     inputs:
       source_branch:
