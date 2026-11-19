@@ -210,7 +210,7 @@ t15(){
   has "$b" 'TAG="$TARGET-$SUBTARGET-$AUTHOR"_"$REPO_BRANCH-${FINGERPRINT:0:32}"'
   has "$b" 'image=ghcr.io/$OWNER_LC/toolchain:$TAG'
   has "$b" 'container_image: ${{ needs.check_toolchain_container.outputs.use_toolchain == '\''true'\'' && needs.check_toolchain_container.outputs.image || needs.tools_ready.outputs.tools_image }}'
-  has "$p" 'container_image: ghcr.io/openwrt/buildbot/buildworker-v3.11.8:v23'
+  has "$p" 'container_image: ${{ needs.tools-ready.outputs.tools_image }}'
   has "$r" 'container: ${{ inputs.container_image }}'
   has "$r" 'CCACHE_TAG="${TARGET}-${SUBTARGET}-${AUTHOR}_${REPO_BRANCH}"'
   lacks "$r" 'inputs.tools_fingerprint'
