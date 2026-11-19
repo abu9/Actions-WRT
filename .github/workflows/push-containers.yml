@@ -91,7 +91,7 @@ permissions:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}-${{ inputs.source_branch }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   determine_targets:
@@ -164,6 +164,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           OWNER_LC: ${{ needs.determine_container_info.outputs.owner_lc }}
           IMAGE_TAG: ${{ needs.determine_container_info.outputs.container_tag }}-${{ inputs.tools_fingerprint || needs.compute-tools-fingerprint.outputs.tools_fingerprint }}
+          BUILD_TOOLS: ${{ inputs.build_tools }}
         shell: bash
         run: |
           set -eo pipefail
@@ -175,6 +176,10 @@ jobs:
             echo "tools_exists=true" >> "$GITHUB_OUTPUT"
           else
             echo "tools_exists=false" >> "$GITHUB_OUTPUT"
+            if [ "$BUILD_TOOLS" != "true" ]; then
+              echo "Required Host Tools image is missing: ghcr.io/$OWNER_LC/tools:$IMAGE_TAG" >&2
+              exit 1
+            fi
           fi
           echo "tools_image=ghcr.io/$OWNER_LC/tools:$IMAGE_TAG" >> "$GITHUB_OUTPUT"
   build-linux-buildbot:
