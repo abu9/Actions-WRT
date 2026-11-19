@@ -226,24 +226,24 @@ t16(){
   local p="$WF/push-containers.yml" f="$WF/fingerprint.yml" r="$WF/reusable_build.yml" rb="$WF/reusable_build_tools.yml" d="$ROOT/.github/dockerfiles/Dockerfile.toolchain" block
   block="$(job_section "$p" compute-toolchain-fingerprint build-target-toolchain)"
   has <(printf '%s\n' "$block") "needs.tools-ready.result == 'success'"
-  has <(printf '%s\n' "$block") 'tools_image: \${{ needs.tools-ready.outputs.tools_image }}'
+  has <(printf '%s\n' "$block") 'tools_image: ${{ needs.tools-ready.outputs.tools_image }}'
   lacks <(printf '%s\n' "$block") 'build-linux-buildbot.result'
   lacks <(printf '%s\n' "$block") 'use_prebuilt_tools_artifact'
   block="$(job_section "$p" build-target-toolchain push-target-toolchain)"
-  has <(printf '%s\n' "$block") 'container_image: \${{ needs.tools-ready.outputs.tools_image }}'
+  has <(printf '%s\n' "$block") 'container_image: ${{ needs.tools-ready.outputs.tools_image }}'
   lacks <(printf '%s\n' "$block") 'use_prebuilt_tools_artifact'
   lacks "$p" 'Download prebuilt Host Tools artifact'
   has "$p" 'check-tools-container:'
   has "$p" 'tools_exists=true'
   has "$p" 'tools_exists=false'
   has "$p" 'tools-ready:'
-  has "$p" 'OWNER_LC=\${{ needs.determine_container_info.outputs.owner_lc }}'
-  has "$p" 'CONTAINER_TAG=\${{ needs.determine_container_info.outputs.container_tag }}-'
+  has "$p" 'OWNER_LC=${{ needs.determine_container_info.outputs.owner_lc }}'
+  has "$p" 'CONTAINER_TAG=${{ needs.determine_container_info.outputs.container_tag }}-'
   has "$rb" 'tar -cf tools.tar staging_dir/host build_dir/host'
   has "$rb" 'name: linux-buildbot-prebuilt-tools'
   lacks "$f" 'use_prebuilt_tools_artifact'
   lacks "$f" 'actions/download-artifact@v8.0.2'
-  has "$f" 'container: \${{ inputs.tools_image }}'
+  has "$f" 'container: ${{ inputs.tools_image }}'
   has "$f" 'host-tools:image-inheritance'
   has "$f" 'host_tools_image "$TOOLS_IMAGE"'
   has "$f" 'host_tools_fingerprint "$TOOLS_FINGERPRINT"'
@@ -253,7 +253,7 @@ t16(){
   lacks "$r" 'use_prebuilt_tools_artifact'
   lacks "$r" 'actions/download-artifact@v8.0.2'
   [[ "$(head -n 3 "$d" | tr '\n' ' ')" == 'ARG OWNER_LC ARG CONTAINER_TAG ' ]]
-  has "$d" 'FROM ghcr.io/\${OWNER_LC}/tools:\${CONTAINER_TAG}'
+  has "$d" 'FROM ghcr.io/${OWNER_LC}/tools:${CONTAINER_TAG}'
   has "$d" 'io.abu9.actions-wrt.tools-fingerprint='
   has "$d" 'io.abu9.actions-wrt.tools-source-commit='
   has "$d" 'io.abu9.actions-wrt.toolchain-fingerprint='
