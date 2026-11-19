@@ -663,11 +663,17 @@ jobs:
               done
               ;;
           esac
+          case "$AUTHOR" in
+            immortalwrt) RELEASE_KEY_MATERIAL="$KEYRING_USIGN_KEY" ;;
+            openwrt) RELEASE_KEY_MATERIAL="$KEYRING_GPG_DIR" ;;
+          esac
           {
+            printf 'KEYRING_DIR=%s\n' "$KEYRING_DIR"
+            printf 'KEYRING_COMMIT=%s\n' "$KEYRING_COMMIT"
             printf 'KEYRING_USIGN_KEY=%s\n' "$KEYRING_USIGN_KEY"
             printf 'KEYRING_GPG_DIR=%s\n' "$KEYRING_GPG_DIR"
           } >> "$GITHUB_ENV"
-          echo "Resolved $AUTHOR official keyring commit $KEYRING_COMMIT"
+          echo "Resolved $AUTHOR official keyring commit $KEYRING_COMMIT; release verification material: $RELEASE_KEY_MATERIAL"
 
       - name: Fix permission
         run: chown -R buildbot:buildbot .
