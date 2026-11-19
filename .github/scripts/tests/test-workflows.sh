@@ -40,6 +40,7 @@ t14(){ local f="$WF/reusable_build.yml"; has "$f" 'git diff --name-only -z'; has
 t15(){ local b="$WF/build.yml" p="$WF/push-containers.yml"; has "$b" EXPECTED_FINGERPRINT; has "$b" FINGERPRINT:0:32; has "$p" tools_fingerprint; has "$p" toolchain_cache_key; }
 t16(){ local p="$WF/push-containers.yml" f="$WF/fingerprint.yml" r="$WF/reusable_build.yml" d="$ROOT/.github/dockerfiles/Dockerfile.toolchain"; has "$p" build-linux-buildbot; has "$p" use_prebuilt_tools_artifact; has "$d" /prebuilt_tools/staging_dir/host; has "$d" /prebuilt_tools/build_dir/host; has "$r" use_prebuilt_tools_artifact; has "$f" use_prebuilt_tools_artifact; }
 
+
 restore_keys_exact(){
   awk -v wanted="$2" '
     $0 ~ "name: " wanted "$" { found=1; next }
@@ -56,20 +57,22 @@ job_section(){
   ' "$1"
 }
 t03(){
-  local r="$WF/reusable_build.yml" t="$WF/reusable_build_tools.yml" actual expected
+  local r="$WF/reusable_build.yml" t="$WF/reusable_build_tools.yml" actual expected d='$'
   has "$r" 'CCACHE_TAG="$TARGET-$SUBTARGET-$CONTAINER_TAG"'
   lacks "$r" 'CCACHE_TAG="$CONTAINER_TAG"'
   actual="$(restore_keys_exact "$r" 'Restore ccache cache')"
-  expected='\${{ needs.setup_build.outputs.ccache_name }}-
-ccache-\${{ inputs.ccache_type }}-\${{ inputs.target }}-\${{ inputs.subtarget }}-
-ccache-\${{ inputs.ccache_type }}-'
+  expected='${ needs.setup_build.outputs.ccache_name }}-
+ccache-${ inputs.ccache_type }}-${ inputs.target }}-${ inputs.subtarget }}-
+ccache-${ inputs.ccache_type }}-'
+  expected="${expected//${/${d}{"
   [[ "$actual" == "$expected" ]] || { diff -u <(printf '%s\n' "$expected") <(printf '%s\n' "$actual"); return 1; }
-  has "$r" "key: ccache-kernel-\${{ needs.setup_build.outputs.ccache_tag}}-\${{ hashFiles('openwrt/include/kernel-**') }}"
+  has "$r" "key: ccache-kernel-${d}{{ needs.setup_build.outputs.ccache_tag}}-${d}{{ hashFiles('openwrt/include/kernel-**') }}"
   ! grep -Fq 'ccache-kernel-' <<<"$actual"
-  has "$t" 'key: ccache-host-tools-buildworker-v23-\${{ runner.os }}-\${{ runner.arch }}-\${{ inputs.ccache_tag }}'
+  has "$t" 'key: ccache-host-tools-buildworker-v23-${ runner.os }}-${ runner.arch }}-${ inputs.ccache_tag }}'
   actual="$(restore_keys_exact "$t" 'Restore Host Tools ccache')"
-  expected='ccache-host-tools-buildworker-v23-\${{ runner.os }}-\${{ runner.arch }}-
-ccache-host-tools-\${{ inputs.ccache_tag }}-buildworker-v23-\${{ runner.os }}-\${{ runner.arch }}'
+  expected='ccache-host-tools-buildworker-v23-${ runner.os }}-${ runner.arch }}-
+ccache-host-tools-${ inputs.ccache_tag }}-buildworker-v23-${ runner.os }}-${ runner.arch }}'
+  expected="${expected//${/${d}{"
   [[ "$actual" == "$expected" ]] || { diff -u <(printf '%s\n' "$expected") <(printf '%s\n' "$actual"); return 1; }
 }
 t04(){
@@ -96,20 +99,20 @@ t05(){
   lacks "$r" 'io.abu9.actions-wrt.toolchain-fingerprint='
 }
 t06(){
-  local b="$WF/build.yml" p="$WF/push-containers.yml"
-  has "$p" "if: ${{ inputs.target == '' }}"
+  local b="$WF/build.yml" p="$WF/push-containers.yml" d='$'
+  has "$p" "if: ${d}{{ inputs.target == '' }}"
   has "$p" 'inputs.tools_fingerprint == '''
   has "$p" 'inputs.target || needs.determine_targets.outputs.target'
   has "$p" 'inputs.repo_url || needs.determine_targets.outputs.repo_url'
   has "$p" 'inputs.tools_fingerprint || needs.compute-tools-fingerprint.outputs.tools_fingerprint'
-  has "$b" 'target: ${{ needs.determine_targets.outputs.target }}'
-  has "$b" 'tools_fingerprint: ${{ needs.tools_fingerprint.outputs.tools_fingerprint }}'
-  has "$p" 'source_commit: ${{ steps.info.outputs.source_commit }}'
-  has "$p" 'SOURCE_COMMIT: ${{ inputs.source_commit || needs.determine_targets.outputs.source_commit }}'
+  has "$b" 'target: ${ needs.determine_targets.outputs.target }}'
+  has "$b" 'tools_fingerprint: ${ needs.tools_fingerprint.outputs.tools_fingerprint }}'
+  has "$p" 'source_commit: ${ steps.info.outputs.source_commit }}'
+  has "$p" 'SOURCE_COMMIT: ${ inputs.source_commit || needs.determine_targets.outputs.source_commit }}'
   has "$p" 'jobs.determine_container_info.outputs.source_commit'
 }
 t07(){
-  local b="$WF/build.yml" d="$WF/dummy-build-integration-test.yml" r="$WF/reusable_build.yml"
+  local b="$WF/build.yml" d="$WF/dummy-build-integration-test.yml" r="$WF/reusable_build.yml" dollar='$'
   has "$b" 'TAG="$AUTHOR"_"$REPO_BRANCH-$EXPECTED_FINGERPRINT"'
   has "$d" 'TOOLS_TAG="${AUTHOR}_${REPO_BRANCH}-${TOOLS_FINGERPRINT}-dummy-${GITHUB_RUN_ID}"'
   has "$b" 'TAG="$TARGET-$SUBTARGET-$AUTHOR"_"$REPO_BRANCH-${FINGERPRINT:0:32}"'
@@ -118,35 +121,36 @@ t07(){
   has "$d" '200) TOOLS_REQUIRED=false'; has "$d" '*) TOOLS_REQUIRED=true'
   has "$b" '200) echo "use_toolchain=true"'; has "$b" '*) echo "use_toolchain=false"'
   has "$d" '200) USE_TOOLCHAIN=true'; has "$d" '*) USE_TOOLCHAIN=false'
-  has "$d" 'container_name: ${{ needs.verify_fixture_cache_hit.outputs.selected_container }}'
+  has "$d" 'container_name: ${ needs.verify_fixture_cache_hit.outputs.selected_container }}'
   has "$d" 'dummy_toolchain_image_consumer:'
-  has "$b" "container_name: ${{ (inputs.build_toolchain == true && needs.check_toolchain_container.outputs.use_toolchain == 'true') && 'toolchain' || 'tools' }}"
+  has "$b" "container_name: ${dollar}{{ (inputs.build_toolchain == true && needs.check_toolchain_container.outputs.use_toolchain == 'true') && 'toolchain' || 'tools' }}"
   has "$d" 'build_toolchain: true'
   has "$r" 'CONTAINER_TAG="${CONTAINER_TAG}-dummy-${GITHUB_RUN_ID}"'
 }
 t08(){
   local b="$WF/build.yml" p="$WF/push-containers.yml" s
   s="$(job_section "$b" tools_ready toolchain_fingerprint)"
-  grep -Fq 'tools_image: ${{ steps.image.outputs.tools_image }}' <<<"$s"
+  has <(printf '%s\n' "$s") 'tools_image: ${ steps.image.outputs.tools_image }}'
   ! grep -Fq 'curl ' <<<"$s"
-  lacks "$s" 'Verify selected image'
+  lacks <(printf '%s\n' "$s") 'Verify selected image'
   has "$p" 'Verify published Host Tools image'
   has "$p" 'if [ "$HTTP_STATUS" = "200" ]; then'
 }
 t10(){
-  local s
+  local s expected
   s="$(sed -n '/- name: Get Commit Hash/,/- name: Compare Commit Hash/p' "$WF/update-checker.yml")"
   grep -Fq 'set -e' <<<"$s"
   grep -Fq 'COMMIT_HASH="$(git rev-parse HEAD)"' <<<"$s"
-  grep -Fq 'printf '\''commitHash=%s\n'\'' "$COMMIT_HASH"' <<<"$s"
+  expected='printf '\''commitHash=%s\n'\'' "$COMMIT_HASH"'
+  grep -Fq "$expected" <<<"$s"
   ! grep -Fq 'echo "commitHash=$(git rev-parse HEAD)"' <<<"$s"
 }
 t11(){
   has "$WF/determine-targets.yml" '[[ ! "$value" =~ ^[[:alnum:]][[:alnum:]_-]*$ ]]'
   has "$WF/determine-targets.yml" 'Invalid $value_name value in resolved .config'
   has "$WF/reusable_build.yml" 'Invalid $value_name workflow input'
-  lacks "$WF/reusable_build.yml" 'CONFIG_TARGET_${{ inputs.target }}'
-  lacks "$WF/reusable_build.yml" 'targets/${{ inputs.target }}/${{ inputs.subtarget }}'
+  lacks "$WF/reusable_build.yml" 'CONFIG_TARGET_${ inputs.target }}'
+  lacks "$WF/reusable_build.yml" 'targets/${ inputs.target }}/${ inputs.subtarget }}'
   has "$WF/reusable_build.yml" 'CONFIG_TARGET_${TARGET}'
   has "$WF/reusable_build.yml" '--config "$TARGET/$SUBTARGET"'
 }
@@ -161,21 +165,21 @@ t12(){
 }
 t13(){
   local f="$WF/reusable_build.yml"
-  has "$f" 'CHECK_PACKAGES_LIST: ${{ inputs.check_packages_list }}'
+  has "$f" 'CHECK_PACKAGES_LIST: ${ inputs.check_packages_list }}'
   has "$f" 'read -r -a packages <<< "$CHECK_PACKAGES_LIST"'
-  lacks "$f" 'for package in ${{ inputs.check_packages_list }}'
-  has "$f" 'COVERITY_API_TOKEN: ${{ secrets.coverity_api_token }}'
+  lacks "$f" 'for package in ${ inputs.check_packages_list }}'
+  has "$f" 'COVERITY_API_TOKEN: ${ secrets.coverity_api_token }}'
   has "$f" 'read -r -a compiler_templates <<< "$COVERITY_COMPILER_TEMPLATE_LIST"'
   has "$f" 'read -r -a coverity_check_packages <<< "$COVERITY_CHECK_PACKAGES"'
-  lacks "$f" 'coverity_check_packages=(${{ inputs.coverity_check_packages }})'
-  lacks "$f" 'for template in ${{ inputs.coverity_compiler_template_list }}'
+  lacks "$f" 'coverity_check_packages=(${ inputs.coverity_check_packages }})'
+  lacks "$f" 'for template in ${ inputs.coverity_compiler_template_list }}'
 }
 t15(){
   local b="$WF/build.yml" p="$WF/push-containers.yml"
   has "$b" 'TAG="$AUTHOR"_"$REPO_BRANCH-$EXPECTED_FINGERPRINT"'
   has "$b" 'TAG="$TARGET-$SUBTARGET-$AUTHOR"_"$REPO_BRANCH-${FINGERPRINT:0:32}"'
-  has "$p" 'tools:${{ needs.determine_container_info.outputs.container_tag }}-${{ inputs.tools_fingerprint || needs.compute-tools-fingerprint.outputs.tools_fingerprint }}'
-  has "$p" 'toolchain:${{ inputs.target || needs.determine_targets.outputs.target }}-${{ inputs.subtarget || needs.determine_targets.outputs.subtarget }}-${{ needs.determine_container_info.outputs.container_tag }}-${{ needs.compute-toolchain-fingerprint.outputs.toolchain_cache_key }}'
+  has "$p" 'tools:${ needs.determine_container_info.outputs.container_tag }}-${ inputs.tools_fingerprint || needs.compute-tools-fingerprint.outputs.tools_fingerprint }}'
+  has "$p" 'toolchain:${ inputs.target || needs.determine_targets.outputs.target }}-${ inputs.subtarget || needs.determine_targets.outputs.subtarget }}-${ needs.determine_container_info.outputs.container_tag }}-${ needs.compute-toolchain-fingerprint.outputs.toolchain_cache_key }}'
 }
 t16(){
   local p="$WF/push-containers.yml" f="$WF/fingerprint.yml" r="$WF/reusable_build.yml" d="$ROOT/.github/dockerfiles/Dockerfile.toolchain" block
