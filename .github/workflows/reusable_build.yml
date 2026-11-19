@@ -602,7 +602,7 @@ jobs:
           AUTHOR: ${{ inputs.author }}
         shell: bash
         run: |
-          set -eo pipefail
+          set -euo pipefail
           KEYRING_DIR="$GITHUB_WORKSPACE/.ci-keyring"
           case "$AUTHOR" in
             immortalwrt) EXPECTED_KEYRING_ORIGIN=https://github.com/immortalwrt/keyring ;;
@@ -795,7 +795,7 @@ jobs:
         shell: su buildbot -c "bash --noprofile --norc -eo pipefail {0}"
         working-directory: openwrt
         run: |
-          set -eo pipefail
+          set -euo pipefail
 
           TARGET_PATH="$DOWNLOADSERVER/$TOOLCHAIN_PATH/targets/$TARGET/$SUBTARGET"
           curl --fail --silent --show-error --location --retry 3 "$TARGET_PATH/$TOOLCHAIN_ARCHIVE" -o "$TOOLCHAIN_ARCHIVE"
