@@ -176,7 +176,7 @@ jobs:
           echo "tools_image=ghcr.io/$OWNER_LC/tools:$IMAGE_TAG" >> "$GITHUB_OUTPUT"
   toolchain_fingerprint:
     name: Calculate target Toolchain fingerprint
-    if: ${{ inputs.build_toolchain == true || github.event_name == 'push' }}
+    if: ${{ !cancelled() && (inputs.build_toolchain == true || github.event_name == 'push') }}
     needs: [determine_targets, tools_fingerprint, tools_ready]
     permissions:
       contents: read
@@ -196,7 +196,7 @@ jobs:
   check_toolchain_container:
     name: Check target Toolchain image
     needs: [determine_targets, tools_fingerprint, tools_ready, toolchain_fingerprint]
-    if: ${{ inputs.build_toolchain == true || github.event_name == 'push' }}
+    if: ${{ !cancelled() && (inputs.build_toolchain == true || github.event_name == 'push') }}
     runs-on: ubuntu-24.04
     permissions: {contents: read, packages: read}
     outputs:
