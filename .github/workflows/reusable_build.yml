@@ -1220,10 +1220,10 @@ jobs:
           fixture_dir="bin/targets/$TARGET/$SUBTARGET"
           mkdir -p "$fixture_dir"
           fixture_file="$fixture_dir/ACTIONS-WRT-DUMMY-NOT-FLASHABLE.txt"
-          printf '%s\\n' \\
-            'TEST FIXTURE ONLY: this is not a firmware image and must never be flashed.' \\
-            "Target: $TARGET/$SUBTARGET" \\
-            "Device: $DEVICE_NAME" \\
+          printf '%s\n' \
+            'TEST FIXTURE ONLY: this is not a firmware image and must never be flashed.' \
+            "Target: $TARGET/$SUBTARGET" \
+            "Device: $DEVICE_NAME" \
             "Source commit: $SOURCE_COMMIT" > "$fixture_file"
           test -s "$fixture_file"
 
