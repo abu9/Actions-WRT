@@ -87,8 +87,10 @@ jobs:
           cmake --build "$RUNNER_TEMP/usign/build" --parallel 2
           test -x "$RUNNER_TEMP/usign/build/usign"
           echo "USIGN_BIN=$RUNNER_TEMP/usign/build/usign" >> "$GITHUB_ENV"
-      - name: Run fingerprint tests
-        run: python3 -m unittest discover -s .github/scripts/tests -p 'test_*.py' -v
+      - name: Run workflow shell regression tests
+        run: bash .github/scripts/tests/test-workflows.sh
+      - name: Run release-index shell regression tests
+        run: bash .github/scripts/tests/test-release-index.sh
 
   tools_fingerprint:
     name: Calculate generic host-tools fingerprint
