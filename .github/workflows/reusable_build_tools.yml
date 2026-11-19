@@ -16,6 +16,10 @@ on:
         description: 'Branch-scoped namespace for the persistent Host Tools ccache'
         required: true
         type: string
+      dummy_mode:
+        description: 'Generate fixture Host Tools directories instead of compiling'
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -76,6 +80,7 @@ jobs:
           make defconfig
 
       - name: Restore Host Tools ccache
+        if: inputs.dummy_mode != true
         id: restore-ccache-cache
         uses: actions/cache/restore@v6.1.0
         with:
@@ -89,6 +94,7 @@ jobs:
             ccache-host-tools-${{ inputs.ccache_tag }}-buildworker-v23-${{ runner.os }}-${{ runner.arch }}
 
       - name: Configure Host Tools ccache
+        if: inputs.dummy_mode != true
         working-directory: openwrt
         env:
           CCACHE_DIR: ${{ github.workspace }}/openwrt/.ccache
@@ -105,6 +111,7 @@ jobs:
           chown -R buildbot:buildbot .ccache staging_dir/host/etc/ccache.conf
 
       - name: Build tools
+        if: inputs.dummy_mode != true
         working-directory: openwrt
         env:
           CCACHE_DIR: ${{ github.workspace }}/openwrt/.ccache
@@ -117,8 +124,17 @@ jobs:
             exit "$ret"
           }
 
+      - name: Create dummy Host Tools fixture
+        if: inputs.dummy_mode == true
+        working-directory: openwrt
+        shell: su buildbot -c "sh -e {0}"
+        run: |
+          mkdir -p staging_dir/host/etc build_dir/host
+          printf '%s\\n' 'Actions-WRT dummy Host Tools fixture; not compiled binaries.' > staging_dir/host/etc/actions-wrt-dummy-fixture.txt
+          printf '%s\\n' 'Dummy build_dir/host payload for workflow integration testing.' > build_dir/host/actions-wrt-dummy-fixture.txt
+
       - name: Show Host Tools ccache statistics
-        if: always()
+        if: always() && inputs.dummy_mode != true
         working-directory: openwrt
         env:
           CCACHE_DIR: ${{ github.workspace }}/openwrt/.ccache
@@ -133,7 +149,7 @@ jobs:
           fi
 
       - name: Delete existing Host Tools ccache entry
-        if: steps.restore-ccache-cache.outputs.cache-hit == 'true'
+        if: inputs.dummy_mode != true && steps.restore-ccache-cache.outputs.cache-hit == 'true'
         uses: octokit/request-action@b91aabaa861c777dcdb14e2387e30eddf04619ae # v3.0.0
         with:
           route: DELETE /repos/{repository}/actions/caches?key={key}
@@ -143,7 +159,7 @@ jobs:
           INPUT_KEY: ${{ steps.restore-ccache-cache.outputs.cache-primary-key }}
 
       - name: Save Host Tools ccache
-        if: success()
+        if: success() && inputs.dummy_mode != true
         uses: actions/cache/save@v6.1.0
         with:
           path: openwrt/.ccache
