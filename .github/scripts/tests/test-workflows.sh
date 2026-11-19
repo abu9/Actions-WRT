@@ -193,7 +193,7 @@ t16(){
   has "$p" 'name: linux-buildbot-prebuilt-tools'
   has "$f" use_prebuilt_tools_artifact; has "$f" 'actions/download-artifact@v8.0.2'
   has "$r" use_prebuilt_tools_artifact; has "$r" 'actions/download-artifact@v8.0.2'
-  has "$r" 'container=ghcr.io/openwrt/buildbot/buildworker-v3.11.8:v23'
+  has "$r" 'container=openwrt/buildbot/buildworker-v3.11.8:v23'
   [[ "$(head -n 1 "$d")" == 'FROM ghcr.io/openwrt/buildbot/buildworker-v3.11.8:v23' ]]
   has "$d" 'COPY --chown=buildbot staging_dir/host /prebuilt_tools/staging_dir/host'
   has "$d" 'COPY --chown=buildbot build_dir/host /prebuilt_tools/build_dir/host'
