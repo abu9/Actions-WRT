@@ -75,3 +75,75 @@ jobs:
       check: false
       use_prebuilt_tools_artifact: true
       dummy_mode: true
+
+  dummy_external_toolchain_release:
+    name: Verify fixed-release external Toolchain without building firmware
+    needs: [dummy_containers]
+    permissions:
+      contents: read
+      packages: read
+      actions: write
+    uses: ./.github/workflows/reusable_build.yml
+    with:
+      target: mediatek
+      subtarget: filogic
+      repo_url: immortalwrt/immortalwrt
+      repo_branch: v25.12.2
+      repo_commit: 4fc16f2985a358bd43bb522e43f05395fcbd6ed5
+      tools_fingerprint: ${{ needs.dummy_containers.outputs.tools_fingerprint }}
+      toolchain_fingerprint: ""
+      author: immortalwrt
+      config_name: ""
+      container_name: tools
+      build_toolchain: false
+      build_full: false
+      build_kernel: false
+      build_all_modules: false
+      build_all_kmods: false
+      build_dtb: false
+      build_all_boards: false
+      build_external_toolchain: false
+      upload_external_toolchain: false
+      use_ccache_cache: false
+      upload_ccache_cache: false
+      check: false
+      check_packages_list: ""
+      use_prebuilt_tools_artifact: true
+      dummy_mode: true
+      test_expected_toolchain_type: external_toolchain
+
+  dummy_external_sdk_release:
+    name: Verify fixed-release external SDK without building firmware
+    needs: [dummy_containers]
+    permissions:
+      contents: read
+      packages: read
+      actions: write
+    uses: ./.github/workflows/reusable_build.yml
+    with:
+      target: mediatek
+      subtarget: filogic
+      repo_url: immortalwrt/immortalwrt
+      repo_branch: v25.12.2
+      repo_commit: 4fc16f2985a358bd43bb522e43f05395fcbd6ed5
+      tools_fingerprint: ${{ needs.dummy_containers.outputs.tools_fingerprint }}
+      toolchain_fingerprint: ""
+      author: immortalwrt
+      config_name: ""
+      container_name: tools
+      build_toolchain: false
+      build_full: false
+      build_kernel: false
+      build_all_modules: false
+      build_all_kmods: false
+      build_dtb: false
+      build_all_boards: false
+      build_external_toolchain: false
+      upload_external_toolchain: false
+      use_ccache_cache: false
+      upload_ccache_cache: false
+      check: false
+      check_packages_list: ""
+      use_prebuilt_tools_artifact: true
+      dummy_mode: true
+      test_expected_toolchain_type: external_sdk
