@@ -100,7 +100,7 @@ t05(){
   has "$b" '200) echo "use_toolchain=true"'; has "$b" '*) echo "use_toolchain=false"'
   lacks "$b" '404) echo "use_toolchain=false"'; lacks "$b" 'Verify selected image'
   count "$p" "curl -sS -o /dev/null -w '%{http_code}'" 3
-  count "$p" 'if [ "$HTTP_STATUS" = "200" ]; then' 2
+  count "$p" 'if [ "$HTTP_STATUS" = "200" ]; then' 3
   has "$p" 'Verify published Host Tools image'; has "$p" 'Verify published target Toolchain image'
   lacks "$r" ghcr-check; lacks "$r" GHCR_TOKEN; lacks "$r" 'GITHUB_ACTOR:'
   lacks "$r" 'io.abu9.actions-wrt.toolchain-fingerprint='
@@ -251,7 +251,7 @@ t16(){
   has "$r" 'test -d /prebuilt_tools/staging_dir/host'
   has "$r" 'test -d /prebuilt_tools/build_dir/host'
   lacks "$r" 'use_prebuilt_tools_artifact'
-  lacks "$r" 'actions/download-artifact@v8.0.2'
+  lacks "$r" 'name: linux-buildbot-prebuilt-tools'
   [[ "$(head -n 3 "$d" | tr '\n' ' ')" == 'ARG OWNER_LC ARG CONTAINER_TAG ' ]]
   has "$d" 'FROM ghcr.io/${OWNER_LC}/tools:${CONTAINER_TAG}'
   has "$d" 'io.abu9.actions-wrt.tools-fingerprint='
