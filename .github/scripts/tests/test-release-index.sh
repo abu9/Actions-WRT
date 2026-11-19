@@ -54,6 +54,7 @@ test_signature_format_and_order(){
   assert_has "$WORKFLOW" 'openwrt) SIGNATURE_FILE=sha256sums.asc'
   assert_has "$WORKFLOW" 'CHECKSUM_OUTPUT="$(sha256sum --check --ignore-missing sha256sums)"'
   assert_has "$WORKFLOW" 'grep -Fq "$TOOLCHAIN_ARCHIVE: OK" <<<"$CHECKSUM_OUTPUT"'
+  assert_has "$WORKFLOW" 'staging_dir/host/bin/usign -V -m sha256sums -p "$KEYRING_USIGN_KEY" -x "$SIGNATURE_FILE"'
   local v c x
   local g
   v="$(grep -n 'staging_dir/host/bin/usign -V' "$WORKFLOW" | head -n1 | cut -d: -f1)"
@@ -76,7 +77,7 @@ test_resolve_openwrt_keyring(){
   make_keyring "$k" https://github.com/openwrt/keyring
   expected_commit="$(git -C "$k" rev-parse HEAD)"
   resolve_output="$(GITHUB_WORKSPACE="$TEST_ROOT" GITHUB_ENV="$envfile" AUTHOR=openwrt bash -euo pipefail -c "$RESOLVE_CODE")"
-  grep -Fq "$k/gpg" <<<"$resolve_output" || fail 'OpenWrt release verification material path missing from output'
+  [[ "$resolve_output" == "Resolved openwrt official keyring commit $expected_commit; release verification material: $k/gpg" ]] || fail 'OpenWrt resolution output changed'
   grep -Fxq "KEYRING_DIR=$k" "$envfile" || fail 'OpenWrt keyring directory output incorrect'
   grep -Fxq "KEYRING_COMMIT=$expected_commit" "$envfile" || fail 'OpenWrt keyring commit output incorrect'
   grep -Fxq "KEYRING_GPG_DIR=$k/gpg" "$envfile" || fail 'OpenWrt GPG output incorrect'
@@ -91,7 +92,7 @@ test_resolve_immortalwrt_key(){
   make_keyring "$k" https://github.com/immortalwrt/keyring.git
   expected_commit="$(git -C "$k" rev-parse HEAD)"
   resolve_output="$(GITHUB_WORKSPACE="$TEST_ROOT" GITHUB_ENV="$envfile" AUTHOR=immortalwrt bash -euo pipefail -c "$RESOLVE_CODE")"
-  grep -Fq "$k/usign/467a35c14d7fbc5c" <<<"$resolve_output" || fail 'ImmortalWrt release verification material path missing from output'
+  [[ "$resolve_output" == "Resolved immortalwrt official keyring commit $expected_commit; release verification material: $k/usign/467a35c14d7fbc5c" ]] || fail 'ImmortalWrt resolution output changed'
   grep -Fxq "KEYRING_DIR=$k" "$envfile" || fail 'ImmortalWrt keyring directory output incorrect'
   grep -Fxq "KEYRING_COMMIT=$expected_commit" "$envfile" || fail 'ImmortalWrt keyring commit output incorrect'
   grep -Fxq "KEYRING_USIGN_KEY=$k/usign/467a35c14d7fbc5c" "$envfile" || fail 'selected usign key output incorrect'
