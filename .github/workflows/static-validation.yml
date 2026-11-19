@@ -45,7 +45,7 @@ jobs:
             awk -v wanted="$1" '
               $0 == "      - name: " wanted { found = 1; next }
               found && /^      - name: / { exit }
-              found && /^        run: \\|$/ { in_run = 1; next }
+              found && /^        run: [|]$/ { in_run = 1; next }
               in_run && /^          / { sub(/^          /, ""); print; next }
               in_run && /^[[:space:]]*$/ { print ""; next }
               in_run { exit }
@@ -54,7 +54,6 @@ jobs:
 
           while IFS=: read -r step_name script_name; do
             script_path="$workspace/$script_name"
-            marker="$workspace/$script_name.workspace"
             cat > "$script_path" <<'FIXTURE'
           #!/usr/bin/env bash
           set -euo pipefail
@@ -71,7 +70,7 @@ jobs:
             )
 
             test "$(cat "$workspace/observed-workspace")" = "$workspace"
-            mv "$workspace/observed-workspace" "$marker"
+            rm "$workspace/observed-workspace"
           done <<'CASES'
           Load pre-custom script:diy-part1.sh
           Load post-custom script:diy-part2.sh
