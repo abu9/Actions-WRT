@@ -201,6 +201,50 @@ class WorkflowIntegrationTests(unittest.TestCase):
             push,
         )
 
+    def test_fixture_cache_hit_uses_build_workflow_tag_and_selection_rules(self) -> None:
+        workflows = Path(__file__).resolve().parents[2] / "workflows"
+        build = (workflows / "build.yml").read_text(encoding="utf-8")
+        reusable = (workflows / "reusable_build.yml").read_text(encoding="utf-8")
+        dummy = (workflows / "dummy-build-integration-test.yml").read_text(
+            encoding="utf-8"
+        )
+
+        # The dummy run suffix isolates the fixture, while the tag prefix
+        # remains identical to the production content-addressed tag.
+        self.assertIn('TAG="$AUTHOR"_"$REPO_BRANCH-$EXPECTED_FINGERPRINT"', build)
+        self.assertIn(
+            'TOOLS_TAG="${AUTHOR}_${REPO_BRANCH}-${TOOLS_FINGERPRINT}-dummy-${GITHUB_RUN_ID}"',
+            dummy,
+        )
+        self.assertIn(
+            'TAG="$TARGET-$SUBTARGET-$AUTHOR"_"$REPO_BRANCH-${FINGERPRINT:0:32}"',
+            build,
+        )
+        self.assertIn(
+            'TOOLCHAIN_TAG="${TARGET}-${SUBTARGET}-${AUTHOR}_${REPO_BRANCH}-${TOOLCHAIN_FINGERPRINT:0:32}-dummy-${GITHUB_RUN_ID}"',
+            dummy,
+        )
+
+        # Both workflows classify exact HTTP 200 as a hit and all other
+        # HTTP status codes as a miss.
+        self.assertIn('200) echo "tools_required=false"', build)
+        self.assertIn('*) echo "tools_required=true"', build)
+        self.assertIn("200) TOOLS_REQUIRED=false", dummy)
+        self.assertIn("*) TOOLS_REQUIRED=true", dummy)
+        self.assertIn('200) echo "use_toolchain=true"', build)
+        self.assertIn('*) echo "use_toolchain=false"', build)
+        self.assertIn("200) USE_TOOLCHAIN=true", dummy)
+        self.assertIn("*) USE_TOOLCHAIN=false", dummy)
+
+        # A fixture hit is consumed by the same reusable build workflow
+        # that receives the selected production container in Build WRT.
+        self.assertIn(
+            "container_name: ${{ needs.verify_fixture_cache_hit.outputs.selected_container }}",
+            dummy,
+        )
+        self.assertIn("dummy_toolchain_image_consumer:", dummy)
+        self.assertIn("CONTAINER_TAG=\"${CONTAINER_TAG}-dummy-${GITHUB_RUN_ID}\"", reusable)
+
     def test_host_tools_ready_uses_publisher_verification_without_duplicate_head(self) -> None:
         workflows = Path(__file__).resolve().parents[2] / "workflows"
         build = (workflows / "build.yml").read_text(encoding="utf-8")
