@@ -43,6 +43,73 @@ jobs:
       build_toolchain: true
       dummy_mode: true
 
+  verify_fixture_cache_hit:
+    name: Verify isolated GHCR cache hit and Toolchain selection
+    needs: [determine_target, dummy_containers]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      packages: read
+    outputs:
+      tools_required: ${{ steps.lookup.outputs.tools_required }}
+      use_toolchain: ${{ steps.lookup.outputs.use_toolchain }}
+      selected_container: ${{ steps.lookup.outputs.selected_container }}
+      selected_image: ${{ steps.lookup.outputs.selected_image }}
+    steps:
+      - name: Check published fixture tags and resolve container selection
+        id: lookup
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          OWNER: ${{ github.repository_owner }}
+          AUTHOR: ${{ needs.determine_target.outputs.author }}
+          REPO_BRANCH: openwrt-25.12
+          TARGET: ${{ needs.determine_target.outputs.target }}
+          SUBTARGET: ${{ needs.determine_target.outputs.subtarget }}
+          TOOLS_FINGERPRINT: ${{ needs.dummy_containers.outputs.tools_fingerprint }}
+          TOOLCHAIN_FINGERPRINT: ${{ needs.dummy_containers.outputs.toolchain_fingerprint }}
+          BUILD_TOOLCHAIN: "true"
+        shell: bash
+        run: |
+          set -e
+          OWNER_LC="${OWNER,,}"
+          TOOLS_TAG="${AUTHOR}_${REPO_BRANCH}-${TOOLS_FINGERPRINT}-dummy-${GITHUB_RUN_ID}"
+          TOOLCHAIN_TAG="${TARGET}-${SUBTARGET}-${AUTHOR}_${REPO_BRANCH}-${TOOLCHAIN_FINGERPRINT:0:32}-dummy-${GITHUB_RUN_ID}"
+          GHCR_TOKEN="$(printf '%s' "$GITHUB_TOKEN" | base64 -w0)"
+          GHCR_HEADER="Authorization: Bearer $GHCR_TOKEN"
+
+          TOOLS_STATUS="$(curl -sS -o /dev/null -w '%{http_code}' -H "$GHCR_HEADER" -I "https://ghcr.io/v2/$OWNER_LC/tools/manifests/$TOOLS_TAG")"
+          TOOLCHAIN_STATUS="$(curl -sS -o /dev/null -w '%{http_code}' -H "$GHCR_HEADER" -I "https://ghcr.io/v2/$OWNER_LC/toolchain/manifests/$TOOLCHAIN_TAG")"
+
+          case "$TOOLS_STATUS" in
+            200) TOOLS_REQUIRED=false ;;
+            *) TOOLS_REQUIRED=true ;;
+          esac
+          case "$TOOLCHAIN_STATUS" in
+            200) USE_TOOLCHAIN=true ;;
+            *) USE_TOOLCHAIN=false ;;
+          esac
+
+          echo "Host Tools fixture lookup: HTTP $TOOLS_STATUS"
+          echo "Toolchain fixture lookup: HTTP $TOOLCHAIN_STATUS"
+          test "$TOOLS_REQUIRED" = false
+          test "$USE_TOOLCHAIN" = true
+
+          if [ "$BUILD_TOOLCHAIN" = true ] && [ "$USE_TOOLCHAIN" = true ]; then
+            SELECTED_CONTAINER=toolchain
+          else
+            SELECTED_CONTAINER=tools
+          fi
+          SELECTED_IMAGE="ghcr.io/$OWNER_LC/$SELECTED_CONTAINER:$TOOLCHAIN_TAG"
+          test "$SELECTED_CONTAINER" = toolchain
+          test "$SELECTED_IMAGE" = "ghcr.io/$OWNER_LC/toolchain:$TOOLCHAIN_TAG"
+
+          {
+            echo "tools_required=$TOOLS_REQUIRED"
+            echo "use_toolchain=$USE_TOOLCHAIN"
+            echo "selected_container=$SELECTED_CONTAINER"
+            echo "selected_image=$SELECTED_IMAGE"
+          } >> "$GITHUB_OUTPUT"
+
   dummy_firmware_artifact:
     name: Create and upload non-flashable firmware fixture
     needs: [determine_target, dummy_containers]
