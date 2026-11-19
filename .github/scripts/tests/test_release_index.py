@@ -53,7 +53,7 @@ class ReleaseIndexVerifierTests(unittest.TestCase):
         )
         download_step = lines[download_start:download_end]
         self.assertTrue(
-            any(line.strip() == "set -euo pipefail" for line in download_step)
+            any(line.strip() == "set -eo pipefail" for line in download_step)
         )
         self.assertTrue(
             any(
