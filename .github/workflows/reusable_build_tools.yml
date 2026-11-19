@@ -130,8 +130,8 @@ jobs:
         shell: su buildbot -c "sh -e {0}"
         run: |
           mkdir -p staging_dir/host/etc build_dir/host
-          printf '%s\\n' 'Actions-WRT dummy Host Tools fixture; not compiled binaries.' > staging_dir/host/etc/actions-wrt-dummy-fixture.txt
-          printf '%s\\n' 'Dummy build_dir/host payload for workflow integration testing.' > build_dir/host/actions-wrt-dummy-fixture.txt
+          printf '%s\n' 'Actions-WRT dummy Host Tools fixture; not compiled binaries.' > staging_dir/host/etc/actions-wrt-dummy-fixture.txt
+          printf '%s\n' 'Dummy build_dir/host payload for workflow integration testing.' > build_dir/host/actions-wrt-dummy-fixture.txt
 
       - name: Show Host Tools ccache statistics
         if: always() && inputs.dummy_mode != true
