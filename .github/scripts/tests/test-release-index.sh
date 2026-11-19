@@ -65,7 +65,7 @@ test_signature_format_and_order(){
 }
 test_toolchain_stage_is_unconditional(){
   local stage
-  stage="$(sed -n '/- name: Build toolchain/,/- name: Create dummy external toolchain archive/p' "$WORKFLOW")"
+  stage="$(sed -n '/- name: Build toolchain/,/- name: Setup Debug Session/p' "$WORKFLOW")"
   ! grep -Fq 'if:' <<<"$stage" || fail 'Build toolchain step is no longer unconditional'
   grep -Fq 'make toolchain/install' <<<"$stage" || fail 'Build toolchain command missing'
 }
